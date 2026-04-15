@@ -160,6 +160,25 @@ class JobDescription(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     raw_text: Optional[str] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_aliases(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        # role / job_title / title → role_title  (common LLM aliases)
+        for alias in ("role", "job_title", "title", "position"):
+            if alias in data and "role_title" not in data:
+                data["role_title"] = data.pop(alias)
+                break
+        # required_skills → must_have_skills
+        if "required_skills" in data and "must_have_skills" not in data:
+            data["must_have_skills"] = data.pop("required_skills")
+        # preferred_skills → nice_to_have_skills
+        if "preferred_skills" in data and "nice_to_have_skills" not in data:
+            data["nice_to_have_skills"] = data.pop("preferred_skills")
+        return data
+
 
 # ── Gap Analysis models ────────────────────────────────────────────────────────
 
