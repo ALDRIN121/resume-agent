@@ -81,6 +81,9 @@ def get_chat_model(
             model=model_name,
             temperature=temperature,
             base_url=settings.ollama_base_url,
+            # Force JSON output for structured extraction tasks so the model
+            # doesn't return markdown-formatted text instead of a JSON object.
+            format="json" if task == "structured" else None,
         )
 
     raise ValueError(f"Unknown provider: {provider!r}")

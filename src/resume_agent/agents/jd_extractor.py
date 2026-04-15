@@ -19,6 +19,11 @@ Rules:
 - Split responsibilities into individual bullet items
 - If a field is not mentioned, omit it or use an empty list
 - Separate "must have" from "nice to have" / "preferred" skills based on the language used
+
+You MUST respond with a single valid JSON object and nothing else — no markdown, no prose, no code fences.
+Required fields: "company" (string), "role_title" (string).
+Optional fields: "seniority", "location", "remote_policy", "must_have_skills" (list), \
+"nice_to_have_skills" (list), "responsibilities" (list), "keywords" (list).
 """
 
 _HUMAN_TEMPLATE = """\
