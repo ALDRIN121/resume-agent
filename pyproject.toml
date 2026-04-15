@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "resume-agent"
+version = "0.1.0"
+description = "AI-powered multi-agent resume generator — LangGraph + LaTeX + Rich CLI"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    # LangGraph / LangChain
+    "langgraph>=0.3.0",
+    "langgraph-checkpoint-sqlite>=2.0.0",
+    "langchain-core>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "langchain-ollama>=0.3.0",
+    "langchain-google-genai>=2.0.0",
+    # Pydantic
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.7.0",
+    # HTTP + Scraping
+    "httpx>=0.28.0",
+    "beautifulsoup4>=4.13.0",
+    "readability-lxml>=0.8.4",
+    "playwright>=1.50.0",
+    # PDF / LaTeX
+    "pdf2image>=1.17.0",
+    "pypdf>=5.0.0",
+    "jinja2>=3.1.0",
+    # CLI / UI
+    "typer>=0.15.0",
+    "rich>=13.9.0",
+    # Config / Utilities
+    "pyyaml>=6.0.0",
+    "python-slugify>=8.0.0",
+]
+
+[project.scripts]
+resume-agent = "resume_agent.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.22.0",
+    "ruff>=0.8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/resume_agent"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

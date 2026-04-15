@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv lockfile — keep; .uv cache — skip
+.uv/
+
+# Environment / secrets — NEVER commit
+.env
+*.env
+!.env.example
+
+# Resume Agent runtime files
+output/
+*.pdf
+*.aux
+*.log
+*.synctex.gz
+_working/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Tectonic cache
+.tectonic/
+
+# Claude Code local settings
+.claude/

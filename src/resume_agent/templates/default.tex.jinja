@@ -1,0 +1,200 @@
+%% Resume Agent — default.tex.jinja
+%% Jinja2: double-paren for variables, paren-percent for blocks, paren-hash for comments
+%% LaTeX special chars in user data should use the |le filter (e.g. some_var | le)
+\documentclass[10.5pt,letterpaper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[
+  left=0.65in, right=0.65in,
+  top=0.55in,  bottom=0.55in
+]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{fontawesome5}
+\usepackage{parskip}
+
+% ── Colors ────────────────────────────────────────────────────────────────────
+\definecolor{accent}{RGB}{22, 90, 160}
+\definecolor{rulecol}{RGB}{22, 90, 160}
+\definecolor{mutedtext}{RGB}{90, 90, 90}
+
+% ── Section formatting ────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\large\bfseries\color{accent}}{}{0em}{}
+  [\vspace{-4pt}\textcolor{rulecol}{\rule{\linewidth}{0.4pt}}\vspace{-2pt}]
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+
+% ── List formatting ───────────────────────────────────────────────────────────
+\setlist[itemize]{
+  leftmargin=1.4em,
+  topsep=2pt,
+  itemsep=1.5pt,
+  parsep=0pt,
+  label=\textbullet
+}
+
+% ── Hyperlink style ───────────────────────────────────────────────────────────
+\hypersetup{urlcolor=accent}
+
+% ── No page numbers ───────────────────────────────────────────────────────────
+\pagestyle{empty}
+
+\begin{document}
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  HEADER
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{center}
+  {\Huge\bfseries (( personal.full_name | le ))}\\[5pt]
+  \small\color{mutedtext}
+  (% if personal.location %)
+    \faMapMarker*\hspace{2pt}(( personal.location | le ))\enspace\textbar\enspace
+  (% endif %)
+  \faEnvelope\hspace{2pt}\href{mailto:(( personal.email | href ))}{\color{accent}(( personal.email | le ))}
+  (% if personal.phone %)
+    \enspace\textbar\enspace\faPhone\hspace{2pt}(( personal.phone | le ))
+  (% endif %)
+  (% if personal.linkedin %)
+    \enspace\textbar\enspace\faLinkedinIn\hspace{2pt}%
+    \href{https://linkedin.com/in/(( personal.linkedin | href ))}{\color{accent}(( personal.linkedin | le ))}
+  (% endif %)
+  (% if personal.github %)
+    \enspace\textbar\enspace\faGithub\hspace{2pt}%
+    \href{https://github.com/(( personal.github | href ))}{\color{accent}(( personal.github | le ))}
+  (% endif %)
+  (% if personal.website %)
+    \enspace\textbar\enspace\faGlobe\hspace{2pt}%
+    \href{(( personal.website | href ))}{\color{accent}(( personal.website | le ))}
+  (% endif %)
+\end{center}
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  SUMMARY
+% ══════════════════════════════════════════════════════════════════════════════
+(% if summary %)
+\section{Summary}
+\noindent (( summary | le ))
+(% endif %)
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  EXPERIENCE
+% ══════════════════════════════════════════════════════════════════════════════
+(% if experience %)
+\section{Experience}
+(% for role in experience %)
+\noindent
+\begin{tabularx}{\linewidth}{@{}X r@{}}
+  \textbf{(( role.title | le ))} \textbar\ \textit{(( role.company | le ))} &
+  \small\color{mutedtext}(( role.start | le )) -- (( role.end | le if role.end else "Present" )) \\
+  (% if role.location %)
+  \multicolumn{2}{@{}l@{}}{\small\color{mutedtext}(( role.location | le ))}\\
+  (% endif %)
+\end{tabularx}
+(% if role.bullets %)
+\begin{itemize}
+(% for bullet in role.bullets %)
+  \item (( bullet | le ))
+(% endfor %)
+\end{itemize}
+(% endif %)
+(% if role.tech %)
+\noindent\small\textbf{Tech:}\ \textcolor{mutedtext}{(( role.tech | join(', ') | le ))}
+(% endif %)
+\vspace{3pt}
+(% endfor %)
+(% endif %)
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  PROJECTS
+% ══════════════════════════════════════════════════════════════════════════════
+(% if projects %)
+\section{Projects}
+(% for project in projects %)
+\noindent
+\textbf{(( project.name | le ))}%
+(% if project.url %)
+\ \href{(( project.url | href ))}{\footnotesize\faExternalLink*}%
+(% endif %)
+\hfill\small\textcolor{mutedtext}{(( project.tech | join(', ') | le ))}\\
+\textit{\small (( project.description | le ))}
+(% if project.bullets %)
+\begin{itemize}
+(% for bullet in project.bullets %)
+  \item (( bullet | le ))
+(% endfor %)
+\end{itemize}
+(% endif %)
+\vspace{3pt}
+(% endfor %)
+(% endif %)
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  EDUCATION
+% ══════════════════════════════════════════════════════════════════════════════
+(% if education %)
+\section{Education}
+(% for edu in education %)
+\noindent
+\begin{tabularx}{\linewidth}{@{}X r@{}}
+  \textbf{(( edu.institution | le ))} &
+  \small\color{mutedtext}(( edu.graduation | le if edu.graduation else "" )) \\
+  \textit{(( edu.degree | le ))(% if edu.field %),\ (( edu.field | le ))(% endif %)} &
+  (% if edu.gpa %)\small GPA:\ (( edu.gpa | le ))(% endif %) \\
+\end{tabularx}
+(% if edu.notes %)
+\begin{itemize}
+(% for note in edu.notes %)
+  \item (( note | le ))
+(% endfor %)
+\end{itemize}
+(% endif %)
+\vspace{3pt}
+(% endfor %)
+(% endif %)
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  SKILLS
+% ══════════════════════════════════════════════════════════════════════════════
+(% if skills %)
+\section{Skills}
+\begin{tabular}{@{}l @{\hskip 6pt} p{0.82\linewidth}@{}}
+(% for category, items in skills.items() %)
+  \textbf{(( category | le )):} & (( items | join(' \textbullet\  ') | le )) \\[2pt]
+(% endfor %)
+\end{tabular}
+(% endif %)
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  CERTIFICATIONS
+% ══════════════════════════════════════════════════════════════════════════════
+(% if certifications %)
+\section{Certifications}
+\begin{itemize}
+(% for cert in certifications %)
+  \item \textbf{(( cert.name | le ))}%
+  (% if cert.issuer %)\textbf{\ ---}\ (( cert.issuer | le ))(% endif %)%
+  (% if cert.date %)\  \small\color{mutedtext}((  cert.date | le ))(% endif %)
+(% endfor %)
+\end{itemize}
+(% endif %)
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  PUBLICATIONS
+% ══════════════════════════════════════════════════════════════════════════════
+(% if publications %)
+\section{Publications}
+\begin{itemize}
+(% for pub in publications %)
+  \item (( pub | le ))
+(% endfor %)
+\end{itemize}
+(% endif %)
+
+\end{document}

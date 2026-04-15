@@ -1,0 +1,45 @@
+Senior Software Engineer — TechCorp
+
+About TechCorp:
+TechCorp builds cloud-native data infrastructure used by Fortune 500 companies.
+Our platform processes over 10 billion events per day with sub-millisecond latency.
+
+Role: Senior Software Engineer, Platform Team
+Location: San Francisco, CA (Hybrid)
+Seniority: Senior (5+ years)
+
+About the Role:
+You will design, build, and scale the core distributed data pipeline that powers
+TechCorp's real-time analytics product. You'll work closely with product, data science,
+and infrastructure teams to deliver high-quality, reliable systems.
+
+Responsibilities:
+- Design and implement distributed microservices in Python and Go
+- Build and maintain high-throughput data pipelines using Apache Kafka
+- Drive technical decisions and mentor junior engineers
+- Own system reliability, participate in on-call rotations
+- Collaborate with cross-functional teams to define system architecture
+- Write comprehensive tests (unit, integration, load) and documentation
+- Contribute to infrastructure-as-code using Terraform and Kubernetes
+
+Must-Have Skills:
+- 5+ years of software engineering experience
+- Strong proficiency in Python (asyncio, FastAPI, or similar)
+- Experience with distributed systems and microservices architecture
+- Hands-on experience with Kubernetes and Docker
+- Familiarity with cloud platforms (AWS preferred: EKS, S3, SQS, RDS)
+- Strong understanding of data structures, algorithms, and system design
+
+Nice-to-Have:
+- Experience with Apache Kafka or similar message brokers
+- Go (Golang) experience
+- Terraform or other IaC tools
+- Prior experience with observability tooling (Prometheus, Grafana, OpenTelemetry)
+
+What We Offer:
+- Competitive salary ($170K–$220K base) + equity
+- Fully remote-friendly hybrid schedule
+- Top-tier health benefits + learning budget
+- Small team, high impact
+
+Apply at: https://jobs.techcorp.io/senior-engineer

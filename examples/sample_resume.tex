@@ -1,0 +1,68 @@
+%% Sample base resume — used by: resume-agent init --source examples/sample_resume.tex
+\documentclass[10.5pt,letterpaper]{article}
+\usepackage[left=0.65in,right=0.65in,top=0.6in,bottom=0.6in]{geometry}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\pagestyle{empty}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\textbf{Jane Doe}}\\[4pt]
+  jane@example.com \textbar\ +1-555-010-0101 \textbar\ San Francisco, CA \\
+  linkedin.com/in/janedoe \textbar\ github.com/janedoe
+\end{center}
+
+\section*{Summary}
+Backend engineer with 6 years building scalable distributed systems. Passionate about
+developer tooling, data pipelines, and clean API design. Led teams of up to 4 engineers
+and shipped products serving millions of users.
+
+\section*{Experience}
+
+\textbf{Software Engineer II} \hfill Acme Corp, Jan 2022 -- Present\\
+San Francisco, CA
+\begin{itemize}
+  \item Built a Python-based microservices platform handling 2M requests/day
+  \item Reduced API p99 latency from 450ms to 90ms via caching and query optimization
+  \item Migrated monolith to Docker containers, enabling 10x faster deployments
+  \item Mentored 2 junior engineers through code review and pair programming
+\end{itemize}
+\textit{Tech: Python, FastAPI, PostgreSQL, Docker, AWS ECS, Redis}
+
+\medskip
+\textbf{Software Engineer} \hfill StartupXYZ, Mar 2019 -- Dec 2021\\
+Remote
+\begin{itemize}
+  \item Designed and implemented a real-time event processing pipeline using Python
+  \item Built CI/CD pipelines with GitHub Actions, cutting deployment time by 60\%
+  \item Owned the data ingestion API used by 50+ enterprise customers
+  \item Collaborated with data science team to productionize ML model serving
+\end{itemize}
+\textit{Tech: Python, Flask, Celery, MySQL, Redis, Terraform, GitHub Actions}
+
+\section*{Projects}
+
+\textbf{pystream} (github.com/janedoe/pystream) --- Python, Kafka, asyncio\\
+Open-source library for building event-driven microservices in Python.
+\begin{itemize}
+  \item 800+ GitHub stars; used in production by 3 companies
+  \item Implemented backpressure handling and exactly-once delivery semantics
+\end{itemize}
+
+\section*{Education}
+
+\textbf{University of California, Berkeley}\\
+B.S. Computer Science, May 2019 \hfill GPA: 3.7
+
+\section*{Skills}
+
+\begin{tabular}{ll}
+  Languages: & Python, SQL, Go (learning), Bash \\
+  Frameworks: & FastAPI, Flask, SQLAlchemy, Celery \\
+  Infrastructure: & Docker, Kubernetes, Terraform, AWS (ECS, S3, RDS, SQS) \\
+  Databases: & PostgreSQL, MySQL, Redis, MongoDB \\
+  Tools: & Git, GitHub Actions, Jenkins, Prometheus, Grafana \\
+\end{tabular}
+
+\end{document}
