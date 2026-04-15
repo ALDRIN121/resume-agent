@@ -68,7 +68,7 @@ Input (text / URL)
 | [uv](https://docs.astral.sh/uv/) | Package manager | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | [Tectonic](https://tectonic-typesetting.github.io/) | LaTeX → PDF | `cargo install tectonic` or download binary |
 | [Poppler](https://poppler.freedesktop.org/) | PDF → images | `brew install poppler` / `sudo apt install poppler-utils` |
-| API key | LLM provider | Anthropic, OpenAI, or local Ollama |
+| API key | LLM provider | Anthropic, OpenAI, Google Gemini, or local Ollama |
 
 Playwright (for JS-heavy job sites like LinkedIn) is optional — installed automatically by `uv sync` but requires `playwright install chromium` separately.
 
@@ -78,8 +78,8 @@ Playwright (for JS-heavy job sites like LinkedIn) is optional — installed auto
 
 ```bash
 # 1. Clone and install
-git clone <repo>
-cd "Resume Generator"
+git clone https://github.com/ALDRIN121/resume-agent
+cd resume-agent
 uv sync
 
 # 2. Set your API key
@@ -125,7 +125,7 @@ resume-agent doctor                            # Check tools + API keys
 Config lives at `~/.resume_agent/config.yaml` (auto-created on first run):
 
 ```yaml
-provider: anthropic          # anthropic | openai | ollama
+provider: anthropic          # anthropic | openai | google | ollama
 model:
   default: claude-sonnet-4-6
   vision:  claude-opus-4-6   # Used for PDF layout validation
@@ -142,6 +142,7 @@ retries:
 API keys are read from environment variables or a `.env` file:
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
+- `GOOGLE_API_KEY`
 - `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
 
 ---
