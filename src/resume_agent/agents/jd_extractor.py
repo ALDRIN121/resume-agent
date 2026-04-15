@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
-
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers.json import parse_json_markdown
+from langchain_core.utils.json import parse_json_markdown
 
 from ..config import MAX_JD_STORAGE_CHARS, MAX_JD_TEXT_CHARS, ResumeAgentSettings
 from ..llm import get_chat_model
@@ -84,7 +82,8 @@ def jd_extractor_node(state: ResumeGenState) -> dict:
             try:
                 plain_llm = get_chat_model(settings, task="structured")
                 raw_msg = plain_llm.invoke(messages)
-                raw_text = raw_msg.content if hasattr(raw_msg, "content") else str(raw_msg)
+                content = raw_msg.content if hasattr(raw_msg, "content") else str(raw_msg)
+                raw_text = content if isinstance(content, str) else str(content)
                 data = parse_json_markdown(raw_text)
                 jd = JobDescription.model_validate(data)
                 jd = jd.model_copy(update={"raw_text": text[:MAX_JD_STORAGE_CHARS]})
