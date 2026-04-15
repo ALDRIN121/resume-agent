@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..config import CONFIG_DIR, ResumeAgentSettings
 from ..state import ResumeGenState
-from ..tools.tectonic_compile import compile_latex
+from ..tools.tectonic_compile import check_tectonic_available, compile_latex
 from ..ui.panels import print_info, print_warning
 
 # Stable working directory — reused/overwritten on each run, never fills /tmp
@@ -25,6 +25,17 @@ def pdf_compiler_node(state: ResumeGenState) -> dict:
 
     if not latex_source:
         return {"pdf_errors": ["No LaTeX source to compile"]}
+
+    # Fail fast on missing tool — retrying generation won't fix a missing binary.
+    if not check_tectonic_available(settings.latex.tectonic_path):
+        raise RuntimeError(
+            f"Tectonic not found at '{settings.latex.tectonic_path}'.\n"
+            "Install it first, then retry:\n"
+            "  • macOS/Linux binary: https://tectonic-typesetting.github.io/\n"
+            "  • Via cargo:          cargo install tectonic\n"
+            "  • Via conda:          conda install -c conda-forge tectonic\n\n"
+            "After installing, run:  resume-agent doctor"
+        )
 
     print_info("Compiling PDF with Tectonic…")
 
