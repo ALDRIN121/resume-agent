@@ -187,6 +187,24 @@ class Question(BaseModel):
     prompt: str           # The question to ask the user
     why_asking: str       # Brief rationale shown to user
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_aliases(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        # question / text / content → prompt  (common LLM aliases)
+        for alias in ("question", "text", "content", "question_text"):
+            if alias in data and "prompt" not in data:
+                data["prompt"] = data.pop(alias)
+                break
+        # reason / rationale → why_asking
+        for alias in ("reason", "rationale", "explanation"):
+            if alias in data and "why_asking" not in data:
+                data["why_asking"] = data.pop(alias)
+                break
+        return data
+
 
 class Suggestion(BaseModel):
     id: str               # e.g. "s1", "s2"
@@ -195,6 +213,29 @@ class Suggestion(BaseModel):
     before: str           # Original text
     after: str            # Suggested improved text
     rationale: str        # 1-line reason
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_aliases(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        # original / original_text / current → before
+        for alias in ("original", "original_text", "current", "current_text", "old"):
+            if alias in data and "before" not in data:
+                data["before"] = data.pop(alias)
+                break
+        # suggested / suggested_text / updated / new → after
+        for alias in ("suggested", "suggested_text", "updated", "updated_text", "new", "replacement"):
+            if alias in data and "after" not in data:
+                data["after"] = data.pop(alias)
+                break
+        # reason / explanation → rationale
+        for alias in ("reason", "explanation", "why"):
+            if alias in data and "rationale" not in data:
+                data["rationale"] = data.pop(alias)
+                break
+        return data
 
 
 class GapAnalysis(BaseModel):
