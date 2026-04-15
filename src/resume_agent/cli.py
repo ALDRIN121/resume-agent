@@ -143,23 +143,34 @@ def _interactive_generate(settings: ResumeAgentSettings) -> None:
     """Ask for JD input and run the full generation pipeline."""
     print_section("Generate Resume")
     console.print(
-        "[muted]Paste a job URL — or paste the description text, then press Enter on a blank line.[/muted]"
+        "[muted]Paste a job URL — or paste the description text, "
+        "then press [bold]Enter twice[/bold] on two blank lines to finish.[/muted]"
     )
     console.print()
 
-    # Collect input: single line for URL, multi-line for pasted text
+    # Collect input: single line for URL, multi-line for pasted text.
+    # Two consecutive blank lines (or one blank line after a URL) signals end of input,
+    # so that JDs with internal blank lines between sections are captured correctly.
     lines: list[str] = []
+    consecutive_blanks = 0
     prompt_label = "  [accent]Job URL or text[/accent]"
     while True:
         line = Prompt.ask(prompt_label, console=console, default="")
         if not line.strip():
-            if lines:
-                break
-            continue
-        lines.append(line)
-        if lines[0].strip().startswith(("http://", "https://")):
-            break  # URL — one line is enough
-        prompt_label = "  [muted](continue, blank line to finish)[/muted]"
+            if not lines:
+                continue  # haven't started yet — ignore leading blanks
+            consecutive_blanks += 1
+            if lines[0].strip().startswith(("http://", "https://")):
+                break  # URL — any blank line finishes
+            if consecutive_blanks >= 2:
+                break   # two blank lines in a row → done
+            lines.append("")   # preserve internal blank line
+        else:
+            consecutive_blanks = 0
+            lines.append(line)
+            if lines[0].strip().startswith(("http://", "https://")):
+                break  # URL — one line is enough
+            prompt_label = "  [muted](continue, two blank lines to finish)[/muted]"
 
     jd_input = "\n".join(lines).strip()
     if not jd_input:
@@ -286,6 +297,10 @@ def generate(
     jd_url: Optional[str] = typer.Option(
         None, "--jd-url", help="URL of the job posting to scrape"
     ),
+    jd_file: Optional[Path] = typer.Option(
+        None, "--jd-file", help="Path to a text file containing the job description",
+        exists=True, file_okay=True, dir_okay=False, resolve_path=True,
+    ),
     provider: Optional[str] = typer.Option(
         None, "--provider", "-p", help="LLM provider: anthropic | openai | ollama | gemini"
     ),
@@ -297,10 +312,13 @@ def generate(
     ),
 ) -> None:
     """Generate a tailored resume PDF for a target job."""
+    if jd_file:
+        jd_text = jd_file.read_text(encoding="utf-8").strip()
+
     if not jd_text and not jd_url:
         print_error(
-            "Provide either --jd-text or --jd-url.",
-            hint="Example: resume-agent generate --jd-url https://jobs.example.com/...",
+            "Provide --jd-text, --jd-file, or --jd-url.",
+            hint="Example: resume-agent generate --jd-file job.txt",
         )
         raise typer.Exit(1)
 
