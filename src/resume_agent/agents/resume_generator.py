@@ -95,6 +95,14 @@ def resume_generator_node(state: ResumeGenState) -> dict:
     if retries > 0 and existing_latex:
         print_agent_step("Resume Writer", f"Self-correcting LaTeX (attempt {retries + 1})…")
         all_errors = latex_errors + pdf_errors
+        if all_errors or validation_feedback:
+            print_warning("Issues to address:")
+            for err in all_errors:
+                print_info(f"  • {err}")
+            if validation_feedback:
+                for line in validation_feedback.split("\n"):
+                    if line.strip():
+                        print_info(f"  • {line}")
         latex_source = _fix_latex(
             existing_latex,
             errors=all_errors,

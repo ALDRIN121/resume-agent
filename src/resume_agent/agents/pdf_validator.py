@@ -77,6 +77,9 @@ def pdf_validator_node(state: ResumeGenState) -> dict:
 
     combined = "\n".join(all_feedback)
     print_warning(f"Layout issues found on {len(all_feedback)} page(s).")
+    # Print detailed feedback so Resume Writer can address specific issues
+    for line in all_feedback:
+        print_info(f"  → {line}")
     return {"validation_passed": False, "validation_feedback": combined}
 
 
