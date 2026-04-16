@@ -9,7 +9,7 @@ from ..config import MAX_JD_STORAGE_CHARS, MAX_JD_TEXT_CHARS, ResumeAgentSetting
 from ..llm import get_chat_model
 from ..schemas import JobDescription
 from ..state import ResumeGenState
-from ..ui.panels import print_info, print_warning
+from ..ui.panels import print_agent_step, print_info, print_warning
 
 _MAX_RETRIES = 3
 
@@ -57,7 +57,7 @@ def jd_extractor_node(state: ResumeGenState) -> dict:
     if len(text) < 100:
         print_warning(f"JD text is very short ({len(text)} chars) — extraction may be incomplete.")
 
-    print_info("Extracting job description structure…")
+    print_agent_step("JD Extractor", "Analyzing job requirements & extracting key skills…")
 
     last_exc: Exception | None = None
     for attempt in range(1, _MAX_RETRIES + 1):

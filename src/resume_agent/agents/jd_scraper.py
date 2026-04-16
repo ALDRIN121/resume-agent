@@ -7,7 +7,7 @@ import asyncio
 from ..config import ResumeAgentSettings
 from ..state import ResumeGenState
 from ..tools.scrape import scrape_url
-from ..ui.panels import print_info, print_warning
+from ..ui.panels import print_agent_step, print_info, print_warning
 
 
 def jd_scraper_node(state: ResumeGenState) -> dict:
@@ -18,7 +18,8 @@ def jd_scraper_node(state: ResumeGenState) -> dict:
     settings = ResumeAgentSettings.load()
     url = state["raw_input"]
 
-    print_info(f"Scraping: {url}")
+    print_agent_step("JD Scraper", "Fetching job posting from the web…")
+    print_info(f"URL: {url}")
 
     result = asyncio.run(
         scrape_url(

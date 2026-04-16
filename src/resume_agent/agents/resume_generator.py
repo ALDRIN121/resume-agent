@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from ..config import TEMPLATES_DIR, ResumeAgentSettings
 from ..llm import get_chat_model
 from ..state import ResumeGenState
-from ..ui.panels import print_info, print_warning
+from ..ui.panels import print_agent_step, print_info, print_warning
 
 # Commands that must never appear in LLM-generated LaTeX.
 # \write18 / \immediate\write18 enable shell execution.
@@ -93,7 +93,7 @@ def resume_generator_node(state: ResumeGenState) -> dict:
     validation_feedback = state.get("validation_feedback", "")
 
     if retries > 0 and existing_latex:
-        print_warning(f"Regenerating LaTeX (attempt {retries + 1})…")
+        print_agent_step("Resume Writer", f"Self-correcting LaTeX (attempt {retries + 1})…")
         all_errors = latex_errors + pdf_errors
         latex_source = _fix_latex(
             existing_latex,
@@ -102,7 +102,7 @@ def resume_generator_node(state: ResumeGenState) -> dict:
             settings=settings,
         )
     else:
-        print_info("Generating LaTeX resume…")
+        print_agent_step("Resume Writer", "Writing your tailored LaTeX resume…")
         # ── First run: render template then polish ─────────────────────────────
         draft = _render_template(resume)
         keywords = ", ".join(jd.keywords[:20]) if jd else ""

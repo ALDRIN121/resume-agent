@@ -13,10 +13,24 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+import questionary
+from questionary import Choice, Style as QStyle
+
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
 from rich.table import Table
+
+_Q_STYLE = QStyle([
+    ("qmark",        "fg:cyan bold"),
+    ("question",     "bold"),
+    ("answer",       "fg:cyan bold"),
+    ("pointer",      "fg:cyan bold"),
+    ("highlighted",  "fg:cyan bold"),
+    ("selected",     "fg:cyan"),
+    ("separator",    "fg:grey"),
+    ("instruction",  "fg:grey italic"),
+])
 
 from ..config import (
     CONFIG_DIR,
@@ -112,36 +126,29 @@ def run_setup_wizard(existing: Optional[ResumeAgentSettings] = None) -> ResumeAg
 # ── Step helpers ───────────────────────────────────────────────────────────────
 
 def _ask_provider(existing: Optional[ResumeAgentSettings]) -> tuple[str, bool]:
-    """Show provider menu, return (provider_id, is_remote_ollama)."""
-    t = Table(show_header=False, box=None, padding=(0, 2))
-    t.add_column("num",  style="bold cyan", width=4)
-    t.add_column("name", style="bold")
-    t.add_column("desc", style="dim")
-    for i, (_, label, desc, _) in enumerate(_PROVIDERS, 1):
-        t.add_row(str(i), label, desc)
-    console.print(t)
-    console.print()
-
-    # Pre-select current provider as default
-    default_idx = "1"
+    """Arrow-key provider selection. Returns (provider_id, is_remote_ollama)."""
+    default_idx = 0
     if existing:
-        for i, (pid, _, _, is_r) in enumerate(_PROVIDERS, 1):
+        for i, (pid, _, _, _) in enumerate(_PROVIDERS):
             if pid == existing.provider:
-                default_idx = str(i)
+                default_idx = i
                 break
 
-    raw = Prompt.ask(
-        "  [accent]Choose provider[/accent]",
-        console=console,
-        default=default_idx,
-    )
-    try:
-        idx = int(raw.strip()) - 1
-        if not (0 <= idx < len(_PROVIDERS)):
-            raise ValueError
-    except ValueError:
-        print_warning("Invalid choice, defaulting to Gemini.")
-        idx = 0
+    choices = [
+        Choice(title=f"{label:<22} {desc}", value=i)
+        for i, (_, label, desc, _) in enumerate(_PROVIDERS)
+    ]
+
+    idx = questionary.select(
+        "Choose LLM provider",
+        choices=choices,
+        default=choices[default_idx],
+        instruction="(↑ ↓ to navigate, Enter to select)",
+        style=_Q_STYLE,
+    ).ask()
+
+    if idx is None:
+        raise SystemExit(0)
 
     pid, label, _, is_remote = _PROVIDERS[idx]
     print_success(f"Provider: [bold]{label}[/bold]")
@@ -233,7 +240,7 @@ def _ask_model(
     fallback: Optional[str],
     base_url: str = "http://localhost:11434",
 ) -> str:
-    """Show numbered model list, return the chosen model name."""
+    """Arrow-key model selection, returns the chosen model name."""
     console.print()
 
     if provider == "ollama":
@@ -241,37 +248,33 @@ def _ask_model(
         if live:
             candidates = live
 
-    menu = list(candidates) + ["[enter custom name]"]
+    _CUSTOM = "__custom__"
+    choices = [
+        Choice(title=f"{name}  (recommended)" if i == 0 else name, value=name)
+        for i, name in enumerate(candidates)
+    ] + [Choice(title="Enter a custom model name…", value=_CUSTOM)]
 
-    t = Table(show_header=False, box=None, padding=(0, 2))
-    t.add_column("num",  style="bold cyan", width=4)
-    t.add_column("name", style="bold")
-    for i, name in enumerate(menu, 1):
-        suffix = "  [muted](recommended)[/muted]" if i == 1 else ""
-        t.add_row(str(i), f"{name}{suffix}")
-    console.print(t)
-    console.print()
-
-    default_idx = "1"
+    default_choice = choices[0]
     if fallback and fallback in candidates:
-        default_idx = str(candidates.index(fallback) + 1)
+        default_choice = choices[candidates.index(fallback)]
 
-    raw = Prompt.ask(
-        f"  [accent]{label}[/accent]",
-        console=console,
-        default=default_idx,
-    ).strip()
+    result = questionary.select(
+        label,
+        choices=choices,
+        default=default_choice,
+        instruction="(↑ ↓ to navigate, Enter to select)",
+        style=_Q_STYLE,
+    ).ask()
 
-    try:
-        idx = int(raw) - 1
-        if idx == len(menu) - 1:           # "enter custom name"
-            model = Prompt.ask("  [accent]Model name[/accent]", console=console).strip()
-        elif 0 <= idx < len(candidates):
-            model = candidates[idx]
-        else:
-            raise ValueError
-    except ValueError:
-        model = raw if raw else (candidates[0] if candidates else "default")
+    if result is None:
+        raise SystemExit(0)
+
+    if result == _CUSTOM:
+        model = Prompt.ask("  [accent]Model name[/accent]", console=console).strip()
+        if not model:
+            model = candidates[0] if candidates else "default"
+    else:
+        model = result
 
     print_success(f"Model: [bold]{model}[/bold]")
     return model

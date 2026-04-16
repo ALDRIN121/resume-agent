@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
@@ -135,9 +135,5 @@ def prompt_resume_feedback() -> str:
 
 
 def confirm(message: str, default: bool = True) -> bool:
-    """Simple yes/no confirmation."""
-    suffix = "[Y/n]" if default else "[y/N]"
-    answer = Prompt.ask(f"  {message} {suffix}", console=console, default="").strip().lower()
-    if answer == "":
-        return default
-    return answer in {"y", "yes"}
+    """Yes/no confirmation using Rich Confirm (shows [Y/n] or [y/N] clearly)."""
+    return Confirm.ask(f"  [accent]{message}[/accent]", console=console, default=default)

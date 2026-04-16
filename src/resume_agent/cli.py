@@ -13,11 +13,20 @@ Commands:
 
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 import uuid
+import warnings
 from pathlib import Path
 from typing import Optional
+
+# Silence LangGraph's noisy "Deserializing unregistered type" messages.
+# These fire every time a checkpoint is loaded and are not actionable.
+warnings.filterwarnings("ignore", message=".*Deserializing unregistered type.*")
+for _lg in ("langgraph", "langgraph.checkpoint", "langgraph.checkpoint.serde",
+            "langgraph.checkpoint.serde.msgpack"):
+    logging.getLogger(_lg).setLevel(logging.ERROR)
 
 import typer
 import yaml
@@ -29,6 +38,7 @@ from .checkpoint import get_checkpointer
 from .config import (
     BASE_RESUME_FILE,
     CONFIG_FILE,
+    SOURCE_DIR,
     ResumeAgentSettings,
 )
 from .graph import HITL_MISSING_NODE, HITL_NODES, HITL_SUGGESTIONS_NODE, build_graph
@@ -103,6 +113,9 @@ def run_interactive() -> None:
             print_error("Cannot generate without a base resume.")
             raise typer.Exit(1)
 
+    # ── Pre-flight: check tools before first generation ───────────────────────
+    _preflight_checks(settings)
+
     # ── Generation loop ────────────────────────────────────────────────────────
     while True:
         _interactive_generate(settings)
@@ -116,63 +129,154 @@ def run_interactive() -> None:
 def _interactive_init_resume(settings: ResumeAgentSettings) -> None:
     """Ask for a resume file path and parse it."""
     from .agents.base_resume_loader import parse_and_save_resume
-    from .ui.progress import phase_spinner
 
-    console.print()
-    raw = Prompt.ask(
-        "  [accent]Path to your resume[/accent] [muted](.tex or .pdf)[/muted]",
-        console=console,
-    ).strip().strip('"').strip("'")
-    source = Path(raw).expanduser().resolve()
+    SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
-    if not source.exists():
-        print_error(f"File not found: {source}")
+    # Auto-detect from the source folder first
+    candidates = sorted(SOURCE_DIR.glob("*.pdf")) + sorted(SOURCE_DIR.glob("*.tex"))
+    if candidates:
+        source = candidates[0]
+        if len(candidates) > 1:
+            names = ", ".join(c.name for c in candidates)
+            print_warning(f"Multiple files in source/: {names}. Using: {source.name}")
+        print_info(f"Found resume in source/: {source.name}")
+    else:
+        # No file in source/ — prompt with validation loop until a valid file is given
+        console.print()
+        console.print(
+            Panel(
+                f"[bold]No resume found.[/bold]\n\n"
+                f"  Option 1: Drop your PDF/TEX into  [bold]{SOURCE_DIR}/[/bold]\n"
+                f"            then press Enter to re-check.\n\n"
+                f"  Option 2: Enter the full path to your resume file below.",
+                border_style="yellow",
+                padding=(0, 2),
+            )
+        )
+        source = _prompt_for_resume_file()
+        if source is None:
+            return   # user aborted
+
+    try:
+        resume = parse_and_save_resume(source)
+    except (ValueError, RuntimeError) as exc:
+        print_error_panel("Parsing Failed", str(exc))
         return
 
-    with phase_spinner("Parsing resume"):
-        try:
-            resume = parse_and_save_resume(source)
-        except (ValueError, RuntimeError) as exc:
-            print_error_panel("Parsing Failed", str(exc))
-            return
-
     print_success(f"Base resume saved for: [bold]{resume.personal.full_name}[/bold]")
+
+
+def _prompt_for_resume_file() -> Optional[Path]:
+    """
+    Interactive loop: keep prompting until the user provides a valid .pdf/.tex file.
+    Returns the resolved Path, or None if the user types 'q' to abort.
+    """
+    from rich.markup import escape as _esc
+
+    _VALID_EXTS = {".pdf", ".tex"}
+    # All quote variants a user might wrap a path in (regular + curly + backtick)
+    _QUOTES = '"\'`\u2018\u2019\u201c\u201d'
+
+    while True:
+        # Re-check source folder on each iteration (user may have just dropped a file in)
+        candidates = sorted(SOURCE_DIR.glob("*.pdf")) + sorted(SOURCE_DIR.glob("*.tex"))
+        if candidates:
+            source = candidates[0]
+            print_success(f"Found in source/: {source.name}")
+            return source
+
+        raw = Prompt.ask(
+            "  [accent]Resume path[/accent] "
+            "[muted](.pdf or .tex — or press Enter to re-check source/, q to quit)[/muted]",
+            console=console,
+            default="",
+        )
+
+        # Strip whitespace then all quote variants from both ends
+        raw = raw.strip().strip(_QUOTES).strip()
+
+        if raw.lower() in ("q", "quit", "exit"):
+            print_warning("Aborted.")
+            return None
+
+        if not raw:
+            # Re-check source folder silently on next loop iteration
+            continue
+
+        path = Path(raw).expanduser().resolve()
+
+        if not path.exists():
+            # Escape path for Rich so special chars don't corrupt the output
+            console.print(f"[error]✗[/error] File not found: {_esc(str(path))}")
+            console.print(f"  [muted]→ Check the path and try again, or drop the file into {_esc(str(SOURCE_DIR))}/[/muted]")
+            continue
+
+        if path.suffix.lower() not in _VALID_EXTS:
+            console.print(f"[error]✗[/error] Unsupported format [bold]{_esc(path.suffix)}[/bold] — only .pdf and .tex are accepted.")
+            continue
+
+        return path
+
+
+def _read_jd_input() -> str:
+    """
+    Read a job description from stdin without reprinting a label per line.
+
+    Shows a single `▶` prompt, then reads every line silently with plain
+    input() so pasted multi-line text flows through naturally — no
+    "(continue…)" interrupt after every pasted sentence.
+
+    Termination:
+      • URL   — ends after the first non-blank line
+      • Text  — ends on three consecutive blank lines, or Ctrl+D / Ctrl+C
+    """
+    # Print a single, styled caret — cursor lands right after it.
+    # All subsequent pasted/typed lines appear below without re-printing any label.
+    console.print("  [bold blue]▶[/bold blue]  ", end="")
+
+    lines: list[str] = []
+    consecutive_blanks = 0
+
+    try:
+        while True:
+            line = input()  # reads one line; terminal echoes it naturally
+            if not line.strip():
+                if not lines:
+                    continue  # ignore leading blank lines before any content
+                consecutive_blanks += 1
+                if lines[0].strip().startswith(("http://", "https://")):
+                    break  # URL — any blank line finishes
+                if consecutive_blanks >= 3:
+                    break  # three blank lines → done
+                lines.append("")  # preserve internal blank lines
+            else:
+                consecutive_blanks = 0
+                lines.append(line)
+                if lines[0].strip().startswith(("http://", "https://")):
+                    break  # URL — single line is enough
+    except (EOFError, KeyboardInterrupt):
+        pass  # Ctrl+D / Ctrl+C — use whatever was collected
+
+    return "\n".join(lines).strip()
 
 
 def _interactive_generate(settings: ResumeAgentSettings) -> None:
     """Ask for JD input and run the full generation pipeline."""
     print_section("Generate Resume")
     console.print(
-        "[muted]Paste a job URL — or paste the description text, "
-        "then press [bold]Enter twice[/bold] on two blank lines to finish.[/muted]"
+        Panel(
+            "[bold]Paste a job URL or the full job description below.[/bold]\n\n"
+            "  [accent]URL[/accent]   — paste the link and press [bold]Enter[/bold]\n"
+            "  [accent]Text[/accent]  — paste the description, then press [bold]Enter[/bold] "
+            "three times on an empty line to finish",
+            border_style="blue",
+            padding=(0, 2),
+        )
     )
     console.print()
 
-    # Collect input: single line for URL, multi-line for pasted text.
-    # Two consecutive blank lines (or one blank line after a URL) signals end of input,
-    # so that JDs with internal blank lines between sections are captured correctly.
-    lines: list[str] = []
-    consecutive_blanks = 0
-    prompt_label = "  [accent]Job URL or text[/accent]"
-    while True:
-        line = Prompt.ask(prompt_label, console=console, default="")
-        if not line.strip():
-            if not lines:
-                continue  # haven't started yet — ignore leading blanks
-            consecutive_blanks += 1
-            if lines[0].strip().startswith(("http://", "https://")):
-                break  # URL — any blank line finishes
-            if consecutive_blanks >= 2:
-                break   # two blank lines in a row → done
-            lines.append("")   # preserve internal blank line
-        else:
-            consecutive_blanks = 0
-            lines.append(line)
-            if lines[0].strip().startswith(("http://", "https://")):
-                break  # URL — one line is enough
-            prompt_label = "  [muted](continue, two blank lines to finish)[/muted]"
+    jd_input = _read_jd_input()
 
-    jd_input = "\n".join(lines).strip()
     if not jd_input:
         print_warning("No input — skipping.")
         return
@@ -247,38 +351,73 @@ def setup() -> None:
 
 @app.command()
 def init(
-    source: Path = typer.Option(
-        ...,
+    source: Optional[Path] = typer.Option(
+        None,
         "--source",
         "-s",
-        help="Path to your current resume (.tex or .pdf)",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
+        help=(
+            "Path to your resume (.tex or .pdf). "
+            f"If omitted, auto-detects from ~/.resume_agent/source/"
+        ),
     ),
-    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing base resume"),
 ) -> None:
-    """Parse your existing resume and save it as the base (source of truth)."""
+    """Parse your resume and save it as the base (source of truth).
+
+    Drop your PDF into ~/.resume_agent/source/ and run this command with no
+    arguments, or pass --source to specify a file explicitly.
+    Any previously parsed base resume is replaced automatically.
+    """
+    from .agents.base_resume_loader import parse_and_save_resume
+
     settings = _load_settings_or_exit()
     print_banner(provider=settings.provider, model=settings.model.default)
 
-    if BASE_RESUME_FILE.exists() and not force:
-        print_warning(
-            f"Base resume already exists at {BASE_RESUME_FILE}. "
-            "Use --force to overwrite."
-        )
-        raise typer.Exit(0)
-
-    from .agents.base_resume_loader import parse_and_save_resume
-    from .ui.progress import phase_spinner
-
-    with phase_spinner("Parsing resume"):
-        try:
-            resume = parse_and_save_resume(source)
-        except (ValueError, RuntimeError) as e:
-            print_error_panel("Parsing Failed", str(e))
+    # ── Resolve source file ────────────────────────────────────────────────────
+    if source is None:
+        SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+        candidates = sorted(SOURCE_DIR.glob("*.pdf")) + sorted(SOURCE_DIR.glob("*.tex"))
+        if not candidates:
+            console.print(
+                Panel(
+                    f"[bold]No resume found in source folder.[/bold]\n\n"
+                    f"  Option 1: Drop your PDF/TEX into  [bold]{SOURCE_DIR}/[/bold]\n"
+                    f"            then press Enter to re-check.\n\n"
+                    f"  Option 2: Enter the full path to your resume file below.",
+                    border_style="yellow",
+                    padding=(0, 2),
+                )
+            )
+            resolved = _prompt_for_resume_file()
+            if resolved is None:
+                raise typer.Exit(1)
+            source = resolved
+        else:
+            if len(candidates) > 1:
+                names = ", ".join(c.name for c in candidates)
+                print_warning(f"Multiple files in source/: {names}. Using: {candidates[0].name}")
+            source = candidates[0]
+    else:
+        source = Path(source).expanduser().resolve()
+        if not source.suffix.lower() in {".pdf", ".tex"}:
+            print_error(f"Unsupported format '{source.suffix}'. Only .pdf and .tex are accepted.")
             raise typer.Exit(1)
+        if not source.exists():
+            print_error(f"File not found: {source}")
+            raise typer.Exit(1)
+
+    print_info(f"Source: {source}")
+
+    # ── Remove stale base resume so a fresh parse always wins ─────────────────
+    if BASE_RESUME_FILE.exists():
+        BASE_RESUME_FILE.unlink()
+        print_info("Removed previous base resume — re-parsing from source…")
+
+    # ── Parse ──────────────────────────────────────────────────────────────────
+    try:
+        resume = parse_and_save_resume(source)
+    except (ValueError, RuntimeError) as e:
+        print_error_panel("Parsing Failed", str(e))
+        raise typer.Exit(1)
 
     print_success(f"Base resume saved for: [bold]{resume.personal.full_name}[/bold]")
     print_info(f"File: {BASE_RESUME_FILE}")
@@ -569,7 +708,7 @@ def doctor() -> None:
     checks.append((
         "Base resume (source of truth)",
         resume_ok,
-        "Run: resume-agent init --source <your_resume.tex>",
+        f"Drop your PDF into {SOURCE_DIR}/ then run: resume-agent init",
     ))
 
     table = Table(show_header=False, box=None, padding=(0, 2))
@@ -591,7 +730,93 @@ def doctor() -> None:
         print_success("All checks passed. Ready to generate resumes!")
     else:
         print_warning("Some checks failed. See hints above.")
+        if not tectonic_ok or not poppler_ok:
+            console.print(
+                "\n[muted]Run [bold]resume-agent install-deps[/bold] to install missing tools automatically.[/muted]"
+            )
         raise typer.Exit(2)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  install-deps
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.command("install-deps")
+def install_deps() -> None:
+    """Auto-install Tectonic and Poppler using the system package manager."""
+    import platform
+    import subprocess as _sp
+
+    settings = _load_settings_gracefully()
+    print_banner(provider=settings.provider)
+    print_section("Installing Dependencies")
+
+    system = platform.system()
+
+    # ── Detect package manager ────────────────────────────────────────────────
+    has_brew = shutil.which("brew") is not None
+    has_apt  = shutil.which("apt-get") is not None
+    has_dnf  = shutil.which("dnf") is not None
+    has_cargo = shutil.which("cargo") is not None
+
+    def _run(cmd: list[str], label: str) -> bool:
+        console.print(f"[muted]  $ {' '.join(cmd)}[/muted]")
+        try:
+            _sp.run(cmd, check=True)
+            print_success(f"{label} installed.")
+            return True
+        except _sp.CalledProcessError as exc:
+            print_error(f"{label} installation failed (exit {exc.returncode}).")
+            return False
+
+    # ── Tectonic ──────────────────────────────────────────────────────────────
+    tectonic_ok = shutil.which(settings.latex.tectonic_path) is not None
+    if tectonic_ok:
+        print_success("Tectonic already installed — skipping.")
+    else:
+        console.print("[bold]Installing Tectonic…[/bold]")
+        if has_brew:
+            tectonic_ok = _run(["brew", "install", "tectonic"], "Tectonic")
+        elif has_apt:
+            _sp.run(["sudo", "apt-get", "update", "-qq"], check=False)
+            tectonic_ok = _run(["sudo", "apt-get", "install", "-y", "tectonic"], "Tectonic")
+        elif has_dnf:
+            tectonic_ok = _run(["sudo", "dnf", "install", "-y", "tectonic"], "Tectonic")
+        elif has_cargo:
+            tectonic_ok = _run(["cargo", "install", "tectonic"], "Tectonic")
+        else:
+            print_error(
+                "No supported package manager found (brew / apt-get / dnf / cargo).\n"
+                "Install Tectonic manually: https://tectonic-typesetting.github.io/"
+            )
+
+    # ── Poppler ───────────────────────────────────────────────────────────────
+    poppler_ok = shutil.which("pdftoppm") is not None or shutil.which("pdfinfo") is not None
+    if poppler_ok:
+        print_success("Poppler already installed — skipping.")
+    else:
+        console.print("[bold]Installing Poppler…[/bold]")
+        if has_brew:
+            poppler_ok = _run(["brew", "install", "poppler"], "Poppler")
+        elif has_apt:
+            _sp.run(["sudo", "apt-get", "update", "-qq"], check=False)
+            poppler_ok = _run(["sudo", "apt-get", "install", "-y", "poppler-utils"], "Poppler")
+        elif has_dnf:
+            poppler_ok = _run(["sudo", "dnf", "install", "-y", "poppler-utils"], "Poppler")
+        else:
+            print_error(
+                "No supported package manager found (brew / apt-get / dnf).\n"
+                "Install Poppler manually:\n"
+                "  macOS:  brew install poppler\n"
+                "  Ubuntu: sudo apt install poppler-utils"
+            )
+
+    console.print()
+    if tectonic_ok and poppler_ok:
+        print_success("All dependencies installed. Run [bold]resume-agent doctor[/bold] to verify.")
+    else:
+        print_warning("Some dependencies could not be installed automatically. See hints above.")
+        raise typer.Exit(1)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -632,7 +857,10 @@ def _run_with_hitl(graph, initial_input, config: dict) -> dict | None:
     max_hitl_rounds = 10
 
     for _ in range(max_hitl_rounds):
-        graph.invoke(current_input, config=config)
+        try:
+            graph.invoke(current_input, config=config)
+        except Exception as exc:
+            _handle_graph_error(exc)
         state = graph.get_state(config)
 
         if not state.next:
@@ -656,6 +884,52 @@ def _run_with_hitl(graph, initial_input, config: dict) -> dict | None:
     return graph.get_state(config).values
 
 
+def _handle_graph_error(exc: Exception) -> None:
+    """
+    Translate known LLM/provider errors into friendly panels, then exit.
+    Re-raises for anything we don't recognise so the normal traceback appears.
+    """
+    exc_type = type(exc).__name__
+    exc_msg = str(exc)
+
+    # ── Ollama: server returned 401 Unauthorized ───────────────────────────────
+    if exc_type == "ResponseError" and "401" in exc_msg:
+        print_error_panel(
+            "Ollama: Unauthorized (401)",
+            "The Ollama server rejected the request with HTTP 401.\n\n"
+            "Possible causes:\n"
+            "  • The server was started with OLLAMA_API_KEY set\n"
+            "  • A reverse-proxy in front of Ollama requires authentication\n\n"
+            "Fix: export OLLAMA_API_KEY=<your-key> before running resume-agent,\n"
+            "or restart Ollama without the API-key requirement.",
+            hint="Check: ollama serve  (no extra auth flags)",
+        )
+        raise typer.Exit(1)
+
+    # ── Ollama: other server-side errors ───────────────────────────────────────
+    if exc_type == "ResponseError":
+        print_error_panel(
+            "Ollama Server Error",
+            f"Ollama returned an unexpected error:\n\n  {exc_msg}",
+            hint="Ensure Ollama is running: ollama serve",
+        )
+        raise typer.Exit(1)
+
+    # ── Anthropic / OpenAI / Gemini auth failures ──────────────────────────────
+    if "AuthenticationError" in exc_type or (
+        "401" in exc_msg and any(p in exc_msg.lower() for p in ("api key", "apikey", "authentication", "unauthorized"))
+    ):
+        print_error_panel(
+            "Authentication Failed",
+            f"The API request was rejected (invalid or missing API key).\n\n{exc_msg}",
+            hint="Run: resume-agent setup  — to re-enter your API key",
+        )
+        raise typer.Exit(1)
+
+    # ── Unknown error — let Python show the full traceback ────────────────────
+    raise exc
+
+
 def _load_settings_or_exit() -> ResumeAgentSettings:
     """Load settings, exiting gracefully on config file errors."""
     try:
@@ -671,6 +945,39 @@ def _load_settings_gracefully() -> ResumeAgentSettings:
         return ResumeAgentSettings.load()
     except Exception:
         return ResumeAgentSettings()
+
+
+def _preflight_checks(settings: ResumeAgentSettings) -> None:
+    """
+    Warn and offer to install Tectonic / Poppler if they're missing.
+    Called once at the start of the generation loop — non-fatal so the user
+    can still proceed (maybe they want to fix it mid-session).
+    """
+    tectonic_ok = shutil.which(settings.latex.tectonic_path) is not None
+    poppler_ok = shutil.which("pdftoppm") is not None or shutil.which("pdfinfo") is not None
+
+    missing = []
+    if not tectonic_ok:
+        missing.append("Tectonic (LaTeX → PDF compiler)")
+    if not poppler_ok:
+        missing.append("Poppler  (PDF → image renderer)")
+
+    if not missing:
+        return
+
+    names = "\n".join(f"  • {m}" for m in missing)
+    console.print(
+        Panel(
+            f"[bold]Required tools not found:[/bold]\n\n{names}\n\n"
+            "Generation will fail without these.\n"
+            "Run [bold]resume-agent install-deps[/bold] to install automatically.",
+            title="[error]Missing Dependencies[/error]",
+            border_style="red",
+            padding=(1, 2),
+        )
+    )
+    if confirm("Install missing dependencies now?", default=True):
+        install_deps()
 
 
 def _check_base_resume_or_exit() -> None:

@@ -18,7 +18,7 @@ from ..config import MAX_RESUME_JSON_CHARS, ResumeAgentSettings
 from ..llm import get_chat_model
 from ..schemas import GapAnalysis
 from ..state import ResumeGenState
-from ..ui.panels import print_info
+from ..ui.panels import print_agent_step, print_info
 
 _SYSTEM = """\
 You are a senior technical recruiter and resume coach.
@@ -64,7 +64,7 @@ def gap_analyzer_node(state: ResumeGenState) -> dict:
     resume = state["base_resume"]
     jd = state["jd"]
 
-    print_info(f"Analyzing gaps for {jd.role_title} at {jd.company}…")
+    print_agent_step("Gap Analyzer", f"Thinking: comparing your profile to {jd.role_title} at {jd.company}…")
 
     # Build a concise JSON representation of the resume for the prompt
     resume_summary = {

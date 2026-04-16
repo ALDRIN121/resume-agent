@@ -32,6 +32,7 @@ dependencies = [
     # CLI / UI
     "typer>=0.15.0",
     "rich>=13.9.0",
+    "questionary>=2.0.0",
     # Config / Utilities
     "pyyaml>=6.0.0",
     "python-slugify>=8.0.0",

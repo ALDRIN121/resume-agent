@@ -139,6 +139,12 @@ class UserResume(BaseModel):
         # contact_information → personal  (common LLM alias)
         if "contact_information" in data and "personal" not in data:
             data["personal"] = data.pop("contact_information")
+        # Certifications may arrive as plain strings → wrap as {"name": str}
+        if "certifications" in data and isinstance(data["certifications"], list):
+            data["certifications"] = [
+                {"name": c} if isinstance(c, str) else c
+                for c in data["certifications"]
+            ]
         return data
 
     def all_skill_strings(self) -> list[str]:

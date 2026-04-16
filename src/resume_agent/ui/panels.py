@@ -33,6 +33,19 @@ def print_info(message: str) -> None:
     console.print(f"[info]·[/info] {message}")
 
 
+def print_agent_step(agent_name: str, description: str) -> None:
+    """
+    Print a visual announcement at the start of each agent node.
+
+    Example:
+      ◆  Gap Analyzer  │  Thinking: comparing your skills to the role...
+    """
+    console.print(
+        f"\n  [bold blue]◆[/bold blue]  [bold]{agent_name}[/bold]  "
+        f"[dim]│[/dim]  [phase]{description}[/phase]"
+    )
+
+
 def print_phase(phase: str, status: str = "running") -> None:
     """Print a phase status update."""
     icons = {"running": "⏳", "done": "✓", "fail": "✗", "skip": "–"}

@@ -67,22 +67,30 @@ def parse_and_save_resume(source_path: Path) -> UserResume:
     """
     One-time parsing: read .tex or .pdf → LLM → UserResume → save YAML.
     Called by `resume-agent init`, not from the graph.
+
+    Shows three distinct progress phases so the user can see what's happening
+    during the (potentially long) LLM call.
     """
+    from ..ui.progress import phase_spinner
+
     settings = ResumeAgentSettings.load()
     suffix = source_path.suffix.lower()
 
-    if suffix == ".tex":
-        text = source_path.read_text(encoding="utf-8")
-    elif suffix == ".pdf":
-        text = _extract_pdf_text(source_path)
-    else:
-        raise ValueError(f"Unsupported format: {suffix}. Use .tex or .pdf")
+    # ── Step 1: Extract text ───────────────────────────────────────────────────
+    with phase_spinner(f"Extracting text from {source_path.name}"):
+        if suffix == ".tex":
+            text = source_path.read_text(encoding="utf-8")
+        elif suffix == ".pdf":
+            text = _extract_pdf_text(source_path)
+        else:
+            raise ValueError(f"Unsupported format: {suffix}. Use .tex or .pdf")
 
-    if not text.strip():
-        raise ValueError("Could not extract any text from the provided file.")
+        if not text.strip():
+            raise ValueError("Could not extract any text from the provided file.")
 
-    print_info(f"Parsing resume from {source_path.name} ({len(text)} chars)…")
+    print_info(f"Extracted {len(text):,} characters from resume.")
 
+    # ── Step 2: LLM parsing (slow — can take 1–2 min) ─────────────────────────
     llm = get_chat_model(settings, task="structured")
     structured_llm = llm.with_structured_output(UserResume)
 
@@ -91,15 +99,17 @@ def parse_and_save_resume(source_path: Path) -> UserResume:
         HumanMessage(content=_HUMAN_TEMPLATE.format(text=text[:MAX_RESUME_PARSE_CHARS])),
     ]
 
-    resume: UserResume = structured_llm.invoke(messages)
+    with phase_spinner("Parsing with AI  (may take 1–2 min)"):
+        resume: UserResume = structured_llm.invoke(messages)
 
-    # Persist to YAML
-    BASE_RESUME_FILE.parent.mkdir(parents=True, exist_ok=True)
-    BASE_RESUME_FILE.write_text(
-        yaml.dump(resume.model_dump(), default_flow_style=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-    print_info(f"Saved base resume to {BASE_RESUME_FILE}")
+    # ── Step 3: Save YAML ─────────────────────────────────────────────────────
+    with phase_spinner("Saving parsed resume"):
+        BASE_RESUME_FILE.parent.mkdir(parents=True, exist_ok=True)
+        BASE_RESUME_FILE.write_text(
+            yaml.dump(resume.model_dump(), default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
     return resume
 
 

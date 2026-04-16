@@ -22,6 +22,7 @@ MAX_LLM_OUTPUT_TOKENS: int = 4_096   # max_tokens for all LLM calls
 CONFIG_DIR = Path.home() / ".resume_agent"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 SECRETS_FILE = CONFIG_DIR / ".env"        # API keys stored here (chmod 600)
+SOURCE_DIR = CONFIG_DIR / "source"        # Drop your .pdf / .tex here
 BASE_RESUME_FILE = CONFIG_DIR / "base_resume.yaml"
 STATE_DB = CONFIG_DIR / "state.sqlite"
 TEMPLATES_DIR = Path(__file__).parent / "templates"
