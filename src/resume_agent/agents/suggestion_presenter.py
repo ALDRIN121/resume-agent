@@ -28,8 +28,13 @@ def suggestion_presenter_node(state: ResumeGenState) -> dict:
     # Use tailored_resume if HITL already enriched it, else base_resume
     source_resume: UserResume = state.get("tailored_resume") or state.get("base_resume")
 
-    if not approved_ids or not suggestions:
-        print_info("No suggestions applied — proceeding with current resume content.")
+    # Debug: log what we received
+    if not suggestions:
+        print_info("No suggestions available to apply.")
+        return {"tailored_resume": source_resume}
+
+    if not approved_ids:
+        print_info(f"No suggestions approved — skipping {len(suggestions)} available suggestion(s).")
         return {"tailored_resume": source_resume}
 
     approved_set = set(approved_ids)

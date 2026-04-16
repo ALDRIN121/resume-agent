@@ -829,6 +829,7 @@ def _handle_hitl_missing(state_values: dict) -> tuple[dict, str]:
     if questions:
         print_section("Human Input Needed")
         answers = prompt_hitl_questions(questions)
+        print_info(f"Recorded answers for {len(answers)} question(s).")
     else:
         answers = {}
     return {"hitl_answers": answers}, HITL_MISSING_NODE
@@ -837,8 +838,13 @@ def _handle_hitl_missing(state_values: dict) -> tuple[dict, str]:
 def _handle_hitl_suggestions(state_values: dict) -> tuple[dict, str]:
     gap = state_values.get("gap_analysis")
     suggestions = gap.tailoring_ideas if gap else []
-    print_section("Tailoring Suggestions")
-    approved_ids = prompt_suggestions(suggestions)
+    if suggestions:
+        print_section("Tailoring Suggestions")
+        print_info(f"Found {len(suggestions)} suggestion(s) to review.")
+        approved_ids = prompt_suggestions(suggestions)
+    else:
+        print_info("No tailoring suggestions available.")
+        approved_ids = []
     return {"approved_suggestion_ids": approved_ids}, HITL_SUGGESTIONS_NODE
 
 
