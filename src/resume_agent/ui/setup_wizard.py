@@ -48,6 +48,7 @@ from .panels import print_error, print_info, print_success, print_warning
 # (provider_id, display_label, description, is_remote_ollama)
 _PROVIDERS: list[tuple[str, str, str, bool]] = [
     ("gemini",    "Gemini (Google)",   "Free tier · aistudio.google.com/apikey",  False),
+    ("nvidia",    "NVIDIA NIM",        "Free tier · build.nvidia.com",            False),
     ("ollama",    "Ollama — local",    "Free, no internet required",              False),
     ("ollama",    "Ollama — remote",   "Self-hosted server or cloud endpoint",    True),
     ("anthropic", "Anthropic Claude",  "Paid · console.anthropic.com",            False),
@@ -56,6 +57,7 @@ _PROVIDERS: list[tuple[str, str, str, bool]] = [
 
 _MODELS: dict[str, list[str]] = {
     "gemini":    ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash"],
+    "nvidia":    ["meta/llama-3.1-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "meta/llama-3.3-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
     "anthropic": ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
     "openai":    ["gpt-4o", "gpt-4o-mini", "o1-mini", "gpt-3.5-turbo"],
     "ollama":    ["llama3.2", "gemma2", "mistral", "qwen2.5", "phi3", "codellama"],
@@ -63,6 +65,7 @@ _MODELS: dict[str, list[str]] = {
 
 _VISION: dict[str, list[str]] = {
     "gemini":    ["gemini-2.0-flash", "gemini-1.5-pro"],
+    "nvidia":    ["meta/llama-3.2-11b-vision-instruct", "microsoft/phi-3.5-vision-instruct"],
     "anthropic": ["claude-opus-4-6", "claude-sonnet-4-6"],
     "openai":    ["gpt-4o"],
     "ollama":    ["llava", "llava:13b", "llava:34b"],
@@ -70,12 +73,14 @@ _VISION: dict[str, list[str]] = {
 
 _KEY_ENV: dict[str, str] = {
     "gemini":    "GOOGLE_API_KEY",
+    "nvidia":    "NVIDIA_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "openai":    "OPENAI_API_KEY",
 }
 
 _KEY_URL: dict[str, str] = {
     "gemini":    "aistudio.google.com/apikey",
+    "nvidia":    "build.nvidia.com",
     "anthropic": "console.anthropic.com",
     "openai":    "platform.openai.com/api-keys",
 }
@@ -176,6 +181,7 @@ def _ask_credentials(
         existing_key = (
             os.environ.get(env_var)
             or (existing.gemini_api_key    if provider == "gemini"    and existing else None)
+            or (existing.nvidia_api_key    if provider == "nvidia"    and existing else None)
             or (existing.anthropic_api_key if provider == "anthropic" and existing else None)
             or (existing.openai_api_key    if provider == "openai"    and existing else None)
         )
@@ -336,7 +342,7 @@ def _apply_and_save(
     base: dict = {}
     if existing:
         base = existing.model_dump(
-            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key"}
+            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key"}
         )
     base.update({
         "provider": provider,
@@ -348,6 +354,8 @@ def _apply_and_save(
     # Inject the API key into the in-process object so _test_llm can use it
     if provider == "gemini" and api_key:
         settings = settings.model_copy(update={"gemini_api_key": api_key})
+    elif provider == "nvidia" and api_key:
+        settings = settings.model_copy(update={"nvidia_api_key": api_key})
     elif provider == "anthropic" and api_key:
         settings = settings.model_copy(update={"anthropic_api_key": api_key})
     elif provider == "openai" and api_key:

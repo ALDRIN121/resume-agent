@@ -42,7 +42,7 @@ Input (text / URL)
     ▼
 [LaTeX Validator]  — brace/env balance + optional chktex
     │
-    ├── (fail) ──► loop back to Generator (max 3 retries)
+    ├── (fail) ──► loop back to Generator (max 5 retries)
     ▼
 [PDF Compiler]     — Tectonic (self-contained, auto-fetches packages)
     │
@@ -111,6 +111,9 @@ resume-agent generate --jd-url <url>           # Generate from scraped URL
 resume-agent generate --jd-url <url> \
                       --provider openai \
                       --model gpt-4o           # Override provider/model
+resume-agent generate --jd-url <url> \
+                      --provider nvidia \
+                      --model meta/llama-3.1-70b-instruct
 resume-agent resume   <thread-id>              # Resume a paused HITL session
 resume-agent config show                       # View current config
 resume-agent config set provider openai        # Change provider
@@ -125,9 +128,9 @@ resume-agent doctor                            # Check tools + API keys
 Config lives at `~/.resume_agent/config.yaml` (auto-created on first run):
 
 ```yaml
-provider: anthropic          # anthropic | openai | google | ollama
+provider: ollama             # anthropic | openai | gemini | nvidia | ollama
 model:
-  default: claude-sonnet-4-6
+  default: gemma4:31b-cloud
   vision:  claude-opus-4-6   # Used for PDF layout validation
 scraping:
   playwright_fallback: true
@@ -136,14 +139,16 @@ latex:
 output:
   base_dir: ./output
 retries:
-  generator_max: 3
+  generator_max: 5
 ```
 
 API keys are read from environment variables or a `.env` file:
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - `GOOGLE_API_KEY`
+- `NVIDIA_API_KEY` (starts with `nvapi-` — get one at build.nvidia.com)
 - `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
+- `NVIDIA_BASE_URL` (optional — leave blank to use NVIDIA cloud; set to NIM endpoint for self-hosted)
 
 ---
 
@@ -203,7 +208,7 @@ To add a new LaTeX template, copy `src/resume_agent/templates/default.tex.jinja`
 | Component | Technology |
 |-----------|-----------|
 | Agent graph | [LangGraph](https://github.com/langchain-ai/langgraph) StateGraph |
-| LLM | Claude (Anthropic) / GPT-4o (OpenAI) / Ollama |
+| LLM | Claude (Anthropic) / GPT-4o (OpenAI) / NVIDIA NIM / Ollama |
 | Structured output | Pydantic v2 + `llm.with_structured_output()` |
 | Scraping | httpx + readability-lxml → Playwright fallback |
 | LaTeX → PDF | [Tectonic](https://tectonic-typesetting.github.io/) |

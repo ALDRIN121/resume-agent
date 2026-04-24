@@ -18,6 +18,7 @@ import shutil
 import time
 import uuid
 import warnings
+import webbrowser
 from pathlib import Path
 from typing import Optional
 
@@ -314,6 +315,7 @@ def _interactive_generate(settings: ResumeAgentSettings) -> None:
 
     if final_pdf:
         jd = final_state.get("jd")
+        final_pdf = _prompt_save_and_open(final_pdf)
         print_final_summary(
             company=jd.company if jd else "Unknown",
             role=jd.role_title if jd else "Unknown",
@@ -441,7 +443,7 @@ def generate(
         exists=True, file_okay=True, dir_okay=False, resolve_path=True,
     ),
     provider: Optional[str] = typer.Option(
-        None, "--provider", "-p", help="LLM provider: anthropic | openai | ollama | gemini"
+        None, "--provider", "-p", help="LLM provider: anthropic | openai | ollama | gemini | nvidia"
     ),
     model_name: Optional[str] = typer.Option(
         None, "--model", "-m", help="Override model name"
@@ -508,6 +510,7 @@ def generate(
     if final_pdf:
         jd = final_state.get("jd")
         resume = final_state.get("tailored_resume") or final_state.get("base_resume")
+        final_pdf = _prompt_save_and_open(final_pdf)
         print_final_summary(
             company=jd.company if jd else "Unknown",
             role=jd.role_title if jd else "Unknown",
@@ -577,6 +580,7 @@ def resume_session(
 
     if final_pdf:
         jd = final_state.get("jd")
+        final_pdf = _prompt_save_and_open(final_pdf)
         print_final_summary(
             company=jd.company if jd else "Unknown",
             role=jd.role_title if jd else "Unknown",
@@ -600,7 +604,7 @@ app.add_typer(config_app, name="config")
 def config_show() -> None:
     """Show current configuration."""
     settings = ResumeAgentSettings.load()
-    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key"})
+    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key"})
     console.print(Panel(yaml.dump(data, default_flow_style=False), title="[accent]Config[/accent]"))
     console.print(f"[muted]Config file: {CONFIG_FILE}[/muted]")
     console.print(f"[muted]Base resume: {BASE_RESUME_FILE}[/muted]")
@@ -611,7 +615,7 @@ def config_set(key: str = typer.Argument(...), value: str = typer.Argument(...))
     """Set a configuration value. Example: config set provider openai"""
     settings = ResumeAgentSettings.load()
     parts = key.split(".")
-    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key"})
+    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key"})
 
     target = data
     for part in parts[:-1]:
@@ -695,6 +699,9 @@ def doctor() -> None:
             or os.environ.get("GEMINI_API_KEY")
         )
         checks.append(("GOOGLE_API_KEY", key_ok, "Run: resume-agent setup  or  export GOOGLE_API_KEY=..."))
+    elif provider == "nvidia":
+        key_ok = bool(settings.nvidia_api_key or os.environ.get("NVIDIA_API_KEY"))
+        checks.append(("NVIDIA_API_KEY", key_ok, "Set in .env or export NVIDIA_API_KEY=nvapi-..."))
     elif provider == "ollama":
         try:
             import httpx
@@ -836,8 +843,10 @@ def _handle_hitl_missing(state_values: dict) -> tuple[dict, str]:
 
 
 def _handle_hitl_suggestions(state_values: dict) -> tuple[dict, str]:
-    gap = state_values.get("gap_analysis")
-    suggestions = gap.tailoring_ideas if gap else []
+    # Read from state["suggestions"] (same key suggestion_presenter_node uses).
+    # gap_analysis.tailoring_ideas is the same data but may fail to reconstruct
+    # after SQLite checkpoint round-trips, producing an empty list.
+    suggestions = state_values.get("suggestions") or []
     if suggestions:
         print_section("Tailoring Suggestions")
         print_info(f"Found {len(suggestions)} suggestion(s) to review.")
@@ -996,6 +1005,38 @@ def _check_base_resume_or_exit() -> None:
         raise typer.Exit(1)
 
 
+def _prompt_save_and_open(suggested_path: str) -> str:
+    """
+    Prompt the user for a final save location (default = suggested_path).
+    If they enter a different path the file is moved there.
+    The PDF is then opened in the system default viewer.
+    Returns the path where the file actually ended up.
+    """
+    console.print()
+    entered = Prompt.ask(
+        "  [accent]Save PDF to[/accent]",
+        console=console,
+        default=suggested_path,
+    ).strip()
+
+    final_path = suggested_path
+    if entered and entered != suggested_path:
+        dest = Path(entered).expanduser()
+        if dest.is_dir():
+            dest = dest / Path(suggested_path).name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(suggested_path, str(dest))
+        final_path = str(dest)
+        print_success(f"PDF moved → [cyan]{final_path}[/cyan]")
+
+    try:
+        webbrowser.open(Path(final_path).as_uri())
+    except Exception:
+        pass
+
+    return final_path
+
+
 def _check_api_key_or_exit(settings: ResumeAgentSettings) -> None:
     import os
 
@@ -1016,6 +1057,9 @@ def _check_api_key_or_exit(settings: ResumeAgentSettings) -> None:
             or os.environ.get("GEMINI_API_KEY")
         )
         hint = "export GOOGLE_API_KEY=...  or run: resume-agent setup"
+    elif provider == "nvidia":
+        missing = not (settings.nvidia_api_key or os.environ.get("NVIDIA_API_KEY"))
+        hint = "export NVIDIA_API_KEY=nvapi-...  or run: resume-agent setup"
 
     if missing:
         print_error_panel(

@@ -86,6 +86,20 @@ def get_chat_model(
             format="json" if task == "structured" else None,
         )
 
+    if provider == "nvidia":
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+
+        api_key = settings.nvidia_api_key or os.environ.get("NVIDIA_API_KEY")
+        kwargs: dict = dict(
+            model=model_name,
+            temperature=temperature,
+            max_tokens=MAX_LLM_OUTPUT_TOKENS,
+            nvidia_api_key=api_key,
+        )
+        if settings.nvidia_base_url:
+            kwargs["base_url"] = settings.nvidia_base_url
+        return ChatNVIDIA(**kwargs)  # type: ignore[arg-type]
+
     raise ValueError(f"Unknown provider: {provider!r}")
 
 
