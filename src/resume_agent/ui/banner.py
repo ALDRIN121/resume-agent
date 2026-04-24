@@ -57,7 +57,7 @@ def print_banner(
     if source_pdf:
         left.append(f"  ◆  {source_pdf}\n", style="dim white")
     else:
-        left.append("  ◆  No resume  →  resume-agent init\n", style="dim yellow")
+        left.append("  ◆  No resume  →  resume-generator init\n", style="dim yellow")
 
     if last_updated:
         left.append(f"  ◆  Last updated: {last_updated}\n", style="dim white")

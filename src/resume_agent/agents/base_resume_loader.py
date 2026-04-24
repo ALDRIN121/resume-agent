@@ -1,7 +1,7 @@
 """
 Base Resume Loader — loads the user's source-of-truth resume.
 
-On first run (via `resume-agent init`), parses .tex or .pdf into a YAML cache.
+On first run (via `resume-generator init`), parses .tex or .pdf into a YAML cache.
 On subsequent `generate` runs, loads the YAML directly (no LLM cost).
 """
 
@@ -51,7 +51,7 @@ def load_base_resume_node(_state: ResumeGenState) -> dict:
         return {
             "scrape_error": (
                 f"Base resume not found at {BASE_RESUME_FILE}. "
-                "Run: resume-agent init --source <your_resume.tex|.pdf>"
+                "Run: resume-generator init --source <your_resume.tex|.pdf>"
             )
         }
 
@@ -66,7 +66,7 @@ def load_base_resume_node(_state: ResumeGenState) -> dict:
 def parse_and_save_resume(source_path: Path) -> UserResume:
     """
     One-time parsing: read .tex or .pdf → LLM → UserResume → save YAML.
-    Called by `resume-agent init`, not from the graph.
+    Called by `resume-generator init`, not from the graph.
 
     Shows three distinct progress phases so the user can see what's happening
     during the (potentially long) LLM call.

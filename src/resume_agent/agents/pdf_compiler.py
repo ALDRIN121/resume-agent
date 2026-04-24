@@ -17,7 +17,7 @@ def pdf_compiler_node(state: ResumeGenState) -> dict:
     On success: sets pdf_path, clears pdf_errors.
     On failure: sets pdf_errors for the retry loop.
 
-    Uses a stable working directory (~/.resume_agent/_working/) so the PDF
+    Uses a stable working directory (~/.resume_generator/_working/) so the PDF
     path remains valid for downstream nodes without leaking temp directories.
     """
     settings = ResumeAgentSettings.load()
@@ -34,7 +34,7 @@ def pdf_compiler_node(state: ResumeGenState) -> dict:
             "  • macOS/Linux binary: https://tectonic-typesetting.github.io/\n"
             "  • Via cargo:          cargo install tectonic\n"
             "  • Via conda:          conda install -c conda-forge tectonic\n\n"
-            "After installing, run:  resume-agent doctor"
+            "After installing, run:  resume-generator doctor"
         )
 
     print_info("Compiling PDF with Tectonic…")

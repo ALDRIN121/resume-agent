@@ -58,11 +58,11 @@ from .ui.panels import (
 from .ui.prompts import confirm, prompt_hitl_questions, prompt_suggestions
 
 app = typer.Typer(
-    name="resume-agent",
+    name="resume-generator",
     help="AI-powered multi-agent resume generator.",
     add_completion=False,
     rich_markup_mode="rich",
-    no_args_is_help=False,      # bare `resume-agent` → interactive mode
+    no_args_is_help=False,      # bare `resume-generator` → interactive mode
     invoke_without_command=True,
 )
 
@@ -73,14 +73,14 @@ app = typer.Typer(
 
 @app.callback(invoke_without_command=True)
 def _entrypoint(ctx: typer.Context) -> None:
-    """Resume Agent — type resume-agent with no command for an interactive session."""
+    """Resume Generator — type resume-generator with no command for an interactive session."""
     if ctx.invoked_subcommand is None:
         run_interactive()
 
 
 def run_interactive() -> None:
     """
-    Interactive session: triggered by `resume-agent` alone.
+    Interactive session: triggered by `resume-generator` alone.
 
     Flow:
       1. Show banner.
@@ -93,11 +93,20 @@ def run_interactive() -> None:
     settings = _load_settings_gracefully()
     print_banner(provider=settings.provider, model=settings.model.default)
 
+    # ── Non-blocking update check ─────────────────────────────────────────────
+    try:
+        from .updater import check_for_update
+        _upd = check_for_update()
+        if _upd:
+            print_warning(_upd)
+    except Exception:
+        pass
+
     # ── First-time setup (only if not already configured) ─────────────────────
     if not settings.is_configured():
         console.print(
             Panel(
-                "[bold]Welcome to Resume Agent![/bold]\n"
+                "[bold]Welcome to Resume Generator![/bold]\n"
                 "[muted]No provider configured yet. Let's set that up first.[/muted]",
                 border_style="blue",
                 padding=(1, 2),
@@ -302,7 +311,7 @@ def _interactive_generate(settings: ResumeAgentSettings) -> None:
 
     cfg = {"configurable": {"thread_id": t_id}}
     console.print(f"\n[muted]Session: {t_id}[/muted]")
-    console.print(f"[muted](Resume if interrupted: resume-agent resume {t_id})[/muted]\n")
+    console.print(f"[muted](Resume if interrupted: resume-generator resume {t_id})[/muted]\n")
 
     start_time = time.perf_counter()
 
@@ -359,13 +368,13 @@ def init(
         "-s",
         help=(
             "Path to your resume (.tex or .pdf). "
-            f"If omitted, auto-detects from ~/.resume_agent/source/"
+            f"If omitted, auto-detects from ~/.resume_generator/source/"
         ),
     ),
 ) -> None:
     """Parse your resume and save it as the base (source of truth).
 
-    Drop your PDF into ~/.resume_agent/source/ and run this command with no
+    Drop your PDF into ~/.resume_generator/source/ and run this command with no
     arguments, or pass --source to specify a file explicitly.
     Any previously parsed base resume is replaced automatically.
     """
@@ -423,7 +432,7 @@ def init(
 
     print_success(f"Base resume saved for: [bold]{resume.personal.full_name}[/bold]")
     print_info(f"File: {BASE_RESUME_FILE}")
-    print_info("You can now run: [bold]resume-agent generate --jd-url <URL>[/bold]")
+    print_info("You can now run: [bold]resume-generator generate --jd-url <URL>[/bold]")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -459,7 +468,7 @@ def generate(
     if not jd_text and not jd_url:
         print_error(
             "Provide --jd-text, --jd-file, or --jd-url.",
-            hint="Example: resume-agent generate --jd-file job.txt",
+            hint="Example: resume-generator generate --jd-file job.txt",
         )
         raise typer.Exit(1)
 
@@ -495,7 +504,7 @@ def generate(
     config = {"configurable": {"thread_id": t_id}}
     console.print(f"[muted]Session thread ID: {t_id}[/muted]")
     console.print(
-        f"[muted](To resume if interrupted: resume-agent resume {t_id})[/muted]\n"
+        f"[muted](To resume if interrupted: resume-generator resume {t_id})[/muted]\n"
     )
 
     start_time = time.perf_counter()
@@ -554,7 +563,7 @@ def resume_session(
         if not state.values:
             print_error(
                 f"No session found with thread ID: {thread_id}",
-                hint="Run 'resume-agent generate' to start a new session.",
+                hint="Run 'resume-generator generate' to start a new session.",
             )
             raise typer.Exit(1)
 
@@ -562,7 +571,7 @@ def resume_session(
         if stored_version != STATE_SCHEMA_VERSION:
             print_error(
                 f"Checkpoint schema mismatch (stored v{stored_version}, current v{STATE_SCHEMA_VERSION}).",
-                hint="Start a new session: resume-agent generate ...",
+                hint="Start a new session: resume-generator generate ...",
             )
             raise typer.Exit(1)
 
@@ -596,7 +605,7 @@ def resume_session(
 #  config
 # ══════════════════════════════════════════════════════════════════════════════
 
-config_app = typer.Typer(help="Manage resume-agent configuration.")
+config_app = typer.Typer(help="Manage resume-generator configuration.")
 app.add_typer(config_app, name="config")
 
 
@@ -698,7 +707,7 @@ def doctor() -> None:
             or os.environ.get("GOOGLE_API_KEY")
             or os.environ.get("GEMINI_API_KEY")
         )
-        checks.append(("GOOGLE_API_KEY", key_ok, "Run: resume-agent setup  or  export GOOGLE_API_KEY=..."))
+        checks.append(("GOOGLE_API_KEY", key_ok, "Run: resume-generator setup  or  export GOOGLE_API_KEY=..."))
     elif provider == "nvidia":
         key_ok = bool(settings.nvidia_api_key or os.environ.get("NVIDIA_API_KEY"))
         checks.append(("NVIDIA_API_KEY", key_ok, "Set in .env or export NVIDIA_API_KEY=nvapi-..."))
@@ -715,7 +724,7 @@ def doctor() -> None:
     checks.append((
         "Base resume (source of truth)",
         resume_ok,
-        f"Drop your PDF into {SOURCE_DIR}/ then run: resume-agent init",
+        f"Drop your PDF into {SOURCE_DIR}/ then run: resume-generator init",
     ))
 
     table = Table(show_header=False, box=None, padding=(0, 2))
@@ -739,7 +748,7 @@ def doctor() -> None:
         print_warning("Some checks failed. See hints above.")
         if not tectonic_ok or not poppler_ok:
             console.print(
-                "\n[muted]Run [bold]resume-agent install-deps[/bold] to install missing tools automatically.[/muted]"
+                "\n[muted]Run [bold]resume-generator install-deps[/bold] to install missing tools automatically.[/muted]"
             )
         raise typer.Exit(2)
 
@@ -761,10 +770,16 @@ def install_deps() -> None:
     system = platform.system()
 
     # ── Detect package manager ────────────────────────────────────────────────
-    has_brew = shutil.which("brew") is not None
-    has_apt  = shutil.which("apt-get") is not None
-    has_dnf  = shutil.which("dnf") is not None
-    has_cargo = shutil.which("cargo") is not None
+    has_brew   = shutil.which("brew")    is not None
+    has_apt    = shutil.which("apt-get") is not None
+    has_dnf    = shutil.which("dnf")     is not None
+    has_pacman = shutil.which("pacman")  is not None
+    has_yum    = shutil.which("yum")     is not None
+    has_cargo  = shutil.which("cargo")   is not None
+    # Windows package managers
+    has_winget = shutil.which("winget") is not None
+    has_scoop  = shutil.which("scoop")  is not None
+    has_choco  = shutil.which("choco")  is not None
 
     def _run(cmd: list[str], label: str) -> bool:
         console.print(f"[muted]  $ {' '.join(cmd)}[/muted]")
@@ -789,12 +804,26 @@ def install_deps() -> None:
             tectonic_ok = _run(["sudo", "apt-get", "install", "-y", "tectonic"], "Tectonic")
         elif has_dnf:
             tectonic_ok = _run(["sudo", "dnf", "install", "-y", "tectonic"], "Tectonic")
+        elif has_pacman:
+            tectonic_ok = _run(["sudo", "pacman", "-S", "--noconfirm", "tectonic"], "Tectonic")
+        elif has_yum:
+            tectonic_ok = _run(["sudo", "yum", "install", "-y", "tectonic"], "Tectonic")
+        elif has_scoop:
+            tectonic_ok = _run(["scoop", "install", "tectonic"], "Tectonic")
+        elif has_winget:
+            tectonic_ok = _run(["winget", "install", "--id", "TectonicProject.Tectonic", "-e"], "Tectonic")
+        elif has_choco:
+            tectonic_ok = _run(["choco", "install", "tectonic", "-y"], "Tectonic")
         elif has_cargo:
             tectonic_ok = _run(["cargo", "install", "tectonic"], "Tectonic")
         else:
             print_error(
-                "No supported package manager found (brew / apt-get / dnf / cargo).\n"
-                "Install Tectonic manually: https://tectonic-typesetting.github.io/"
+                "No supported package manager found.\n"
+                "Install Tectonic manually: https://tectonic-typesetting.github.io/\n"
+                "  macOS:   brew install tectonic\n"
+                "  Ubuntu:  sudo apt install tectonic\n"
+                "  Arch:    sudo pacman -S tectonic\n"
+                "  Windows: scoop install tectonic  (or winget install TectonicProject.Tectonic)"
             )
 
     # ── Poppler ───────────────────────────────────────────────────────────────
@@ -810,19 +839,64 @@ def install_deps() -> None:
             poppler_ok = _run(["sudo", "apt-get", "install", "-y", "poppler-utils"], "Poppler")
         elif has_dnf:
             poppler_ok = _run(["sudo", "dnf", "install", "-y", "poppler-utils"], "Poppler")
+        elif has_pacman:
+            poppler_ok = _run(["sudo", "pacman", "-S", "--noconfirm", "poppler"], "Poppler")
+        elif has_yum:
+            poppler_ok = _run(["sudo", "yum", "install", "-y", "poppler-utils"], "Poppler")
+        elif has_scoop:
+            poppler_ok = _run(["scoop", "install", "poppler"], "Poppler")
+        elif has_choco:
+            poppler_ok = _run(["choco", "install", "poppler", "-y"], "Poppler")
+        elif has_winget:
+            print_warning(
+                "Poppler isn't available via winget.\n"
+                "Install via Scoop (recommended on Windows): scoop install poppler\n"
+                "Or download a binary from: https://github.com/oschwartz10612/poppler-windows/releases"
+            )
         else:
             print_error(
-                "No supported package manager found (brew / apt-get / dnf).\n"
+                "No supported package manager found.\n"
                 "Install Poppler manually:\n"
-                "  macOS:  brew install poppler\n"
-                "  Ubuntu: sudo apt install poppler-utils"
+                "  macOS:   brew install poppler\n"
+                "  Ubuntu:  sudo apt install poppler-utils\n"
+                "  Arch:    sudo pacman -S poppler\n"
+                "  Windows: scoop install poppler  (install Scoop first from scoop.sh)"
             )
 
     console.print()
     if tectonic_ok and poppler_ok:
-        print_success("All dependencies installed. Run [bold]resume-agent doctor[/bold] to verify.")
+        print_success("All dependencies installed. Run [bold]resume-generator doctor[/bold] to verify.")
     else:
         print_warning("Some dependencies could not be installed automatically. See hints above.")
+        raise typer.Exit(1)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  update
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.command("update")
+def update_cmd() -> None:
+    """Pull the latest changes from GitHub and re-install."""
+    from .updater import perform_update
+
+    settings = _load_settings_gracefully()
+    print_banner(provider=settings.provider)
+    print_section("Updating resume-generator")
+
+    console.print("[muted]Pulling latest changes from GitHub…[/muted]")
+    ok = perform_update()
+    if ok:
+        print_success(
+            "Updated successfully!\n"
+            "Restart [bold]resume-generator[/bold] to use the new version."
+        )
+    else:
+        print_error(
+            "Update failed.\n"
+            "Try manually:\n"
+            "  git pull && uv tool install . --force"
+        )
         raise typer.Exit(1)
 
 
@@ -915,7 +989,7 @@ def _handle_graph_error(exc: Exception) -> None:
             "Possible causes:\n"
             "  • The server was started with OLLAMA_API_KEY set\n"
             "  • A reverse-proxy in front of Ollama requires authentication\n\n"
-            "Fix: export OLLAMA_API_KEY=<your-key> before running resume-agent,\n"
+            "Fix: export OLLAMA_API_KEY=<your-key> before running resume-generator,\n"
             "or restart Ollama without the API-key requirement.",
             hint="Check: ollama serve  (no extra auth flags)",
         )
@@ -937,7 +1011,7 @@ def _handle_graph_error(exc: Exception) -> None:
         print_error_panel(
             "Authentication Failed",
             f"The API request was rejected (invalid or missing API key).\n\n{exc_msg}",
-            hint="Run: resume-agent setup  — to re-enter your API key",
+            hint="Run: resume-generator setup  — to re-enter your API key",
         )
         raise typer.Exit(1)
 
@@ -985,7 +1059,7 @@ def _preflight_checks(settings: ResumeAgentSettings) -> None:
         Panel(
             f"[bold]Required tools not found:[/bold]\n\n{names}\n\n"
             "Generation will fail without these.\n"
-            "Run [bold]resume-agent install-deps[/bold] to install automatically.",
+            "Run [bold]resume-generator install-deps[/bold] to install automatically.",
             title="[error]Missing Dependencies[/error]",
             border_style="red",
             padding=(1, 2),
@@ -1000,7 +1074,7 @@ def _check_base_resume_or_exit() -> None:
         print_error_panel(
             "Base Resume Not Found",
             f"No base resume at: {BASE_RESUME_FILE}",
-            hint="Run first: resume-agent init --source <your_resume.tex|.pdf>",
+            hint="Run first: resume-generator init --source <your_resume.tex|.pdf>",
         )
         raise typer.Exit(1)
 
@@ -1046,20 +1120,20 @@ def _check_api_key_or_exit(settings: ResumeAgentSettings) -> None:
 
     if provider == "anthropic":
         missing = not (settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY"))
-        hint = "export ANTHROPIC_API_KEY=sk-ant-...  or run: resume-agent setup"
+        hint = "export ANTHROPIC_API_KEY=sk-ant-...  or run: resume-generator setup"
     elif provider == "openai":
         missing = not (settings.openai_api_key or os.environ.get("OPENAI_API_KEY"))
-        hint = "export OPENAI_API_KEY=sk-...  or run: resume-agent setup"
+        hint = "export OPENAI_API_KEY=sk-...  or run: resume-generator setup"
     elif provider == "gemini":
         missing = not (
             settings.gemini_api_key
             or os.environ.get("GOOGLE_API_KEY")
             or os.environ.get("GEMINI_API_KEY")
         )
-        hint = "export GOOGLE_API_KEY=...  or run: resume-agent setup"
+        hint = "export GOOGLE_API_KEY=...  or run: resume-generator setup"
     elif provider == "nvidia":
         missing = not (settings.nvidia_api_key or os.environ.get("NVIDIA_API_KEY"))
-        hint = "export NVIDIA_API_KEY=nvapi-...  or run: resume-agent setup"
+        hint = "export NVIDIA_API_KEY=nvapi-...  or run: resume-generator setup"
 
     if missing:
         print_error_panel(

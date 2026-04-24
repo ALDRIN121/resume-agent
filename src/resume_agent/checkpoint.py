@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore", message="Deserializing unregistered type.*")
 def get_checkpointer() -> Generator[SqliteSaver, None, None]:
     """
     Context manager returning a SqliteSaver checkpointer.
-    Creates ~/.resume_agent/ if it doesn't exist.
+    Creates ~/.resume_generator/ if it doesn't exist.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with SqliteSaver.from_conn_string(str(STATE_DB)) as checkpointer:

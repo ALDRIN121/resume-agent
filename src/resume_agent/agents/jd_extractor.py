@@ -96,5 +96,5 @@ def jd_extractor_node(state: ResumeGenState) -> dict:
         f"Failed to extract job description after {_MAX_RETRIES} attempts. "
         f"Last error: {last_exc}\n\n"
         "Tip: Try switching to a stronger model (e.g. anthropic or openai) with:\n"
-        "  resume-agent config set provider anthropic"
+        "  resume-generator config set provider anthropic"
     ) from last_exc

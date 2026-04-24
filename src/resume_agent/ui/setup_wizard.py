@@ -1,8 +1,8 @@
 """
 Interactive first-time configuration wizard.
 
-Called automatically when `resume-agent` is run without a subcommand and
-no config exists. Also callable explicitly via `resume-agent setup`.
+Called automatically when `resume-generator` is run without a subcommand and
+no config exists. Also callable explicitly via `resume-generator setup`.
 
 The wizard is deliberately skipped if the provider is already configured —
 it only fires when config is missing or when the user explicitly asks for it.
@@ -402,7 +402,7 @@ def _fetch_ollama_models(base_url: str) -> list[str]:
 
 
 def _write_secret(key: str, value: str) -> None:
-    """Write/update a KEY=value line in ~/.resume_agent/.env (chmod 600)."""
+    """Write/update a KEY=value line in ~/.resume_generator/.env (chmod 600)."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     lines: dict[str, str] = {}
     if SECRETS_FILE.exists():

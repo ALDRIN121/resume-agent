@@ -76,7 +76,7 @@ def _validate_url(url: str) -> None:
 async def scrape_url(
     url: str,
     *,
-    user_agent: str = "resume-agent/1.0",
+    user_agent: str = "resume-generator/1.0",
     timeout: int = 30,
     playwright_fallback: bool = True,
 ) -> ScrapeResult:

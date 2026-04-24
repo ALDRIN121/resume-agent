@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "resume-agent"
+name = "resume-generator"
 version = "0.1.0"
 description = "AI-powered multi-agent resume generator — LangGraph + LaTeX + Rich CLI"
 readme = "README.md"
@@ -40,7 +40,7 @@ dependencies = [
 ]
 
 [project.scripts]
-resume-agent = "resume_agent.cli:app"
+resume-generator = "resume_agent.cli:app"
 
 [project.optional-dependencies]
 dev = [

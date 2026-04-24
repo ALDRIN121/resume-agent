@@ -1,7 +1,8 @@
-"""Application configuration — loaded from ~/.resume_agent/config.yaml + env vars."""
+"""Application configuration — loaded from ~/.resume_generator/config.yaml + env vars."""
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -19,13 +20,25 @@ MAX_LLM_OUTPUT_TOKENS: int = 4_096   # max_tokens for all LLM calls
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
-CONFIG_DIR = Path.home() / ".resume_agent"
+_OLD_CONFIG_DIR = Path.home() / ".resume_agent"   # pre-rename legacy location
+
+CONFIG_DIR = Path.home() / ".resume_generator"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 SECRETS_FILE = CONFIG_DIR / ".env"        # API keys stored here (chmod 600)
 SOURCE_DIR = CONFIG_DIR / "source"        # Drop your .pdf / .tex here
 BASE_RESUME_FILE = CONFIG_DIR / "base_resume.yaml"
 STATE_DB = CONFIG_DIR / "state.sqlite"
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def migrate_config_dir() -> None:
+    """Move ~/.resume_agent → ~/.resume_generator on first run after rename."""
+    if CONFIG_DIR.exists() or not _OLD_CONFIG_DIR.exists():
+        return
+    try:
+        shutil.copytree(str(_OLD_CONFIG_DIR), str(CONFIG_DIR))
+    except Exception:
+        pass
 
 
 # ── Sub-configs ────────────────────────────────────────────────────────────────
@@ -36,7 +49,7 @@ class ModelConfig(BaseModel):
 
 
 class ScrapingConfig(BaseModel):
-    user_agent: str = "resume-agent/1.0"
+    user_agent: str = "resume-generator/1.0"
     playwright_fallback: bool = True
     timeout_seconds: int = 30
 
@@ -64,7 +77,7 @@ class ResumeAgentSettings(BaseSettings):
     output: OutputConfig = Field(default_factory=OutputConfig)
     retries: RetriesConfig = Field(default_factory=RetriesConfig)
 
-    # Passed via env or ~/.resume_agent/.env
+    # Passed via env or ~/.resume_generator/.env
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     gemini_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
@@ -73,7 +86,7 @@ class ResumeAgentSettings(BaseSettings):
     nvidia_base_url: str = Field(default="", alias="NVIDIA_BASE_URL")
 
     model_config = SettingsConfigDict(
-        env_prefix="RESUME_AGENT_",
+        env_prefix="RESUME_GENERATOR_",
         env_nested_delimiter="__",
         # Load from project .env first, then from the user-level secrets file.
         # Later entries in the list take lower priority (first match wins).
@@ -85,7 +98,8 @@ class ResumeAgentSettings(BaseSettings):
 
     @classmethod
     def load(cls) -> "ResumeAgentSettings":
-        """Load from ~/.resume_agent/config.yaml, overlaid with env vars."""
+        """Load from ~/.resume_generator/config.yaml, overlaid with env vars."""
+        migrate_config_dir()
         file_data: dict = {}
         if CONFIG_FILE.exists():
             raw = CONFIG_FILE.read_text(encoding="utf-8")
@@ -93,7 +107,7 @@ class ResumeAgentSettings(BaseSettings):
         return cls.model_validate(file_data)
 
     def save(self) -> None:
-        """Persist current settings to ~/.resume_agent/config.yaml."""
+        """Persist current settings to ~/.resume_generator/config.yaml."""
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         # Never write secrets into the YAML — they live in SECRETS_FILE
         data = self.model_dump(
