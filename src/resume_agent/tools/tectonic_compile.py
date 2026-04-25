@@ -92,7 +92,18 @@ def compile_latex(
         produced_pdf = tmp_path / "resume.pdf"
 
         if result.returncode != 0 or not produced_pdf.exists():
+            # The TeX .log file contains the real error messages (package errors,
+            # undefined commands, etc.) — stderr only has Tectonic's own notes.
+            tex_log_path = tmp_path / "resume.log"
+            if tex_log_path.exists():
+                try:
+                    tex_log = tex_log_path.read_text(encoding="utf-8", errors="replace")
+                    raw_log = raw_log + "\n=== TeX log ===\n" + tex_log
+                except OSError:
+                    pass
             errors = _parse_tectonic_errors(raw_log)
+            if not errors:
+                errors = ["Tectonic exited with an error but produced no diagnostic output."]
             return CompileResult(ok=False, pdf_path=None, errors=errors, raw_log=raw_log)
 
         # Move PDF to destination

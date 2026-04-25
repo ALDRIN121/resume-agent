@@ -56,9 +56,9 @@ def pdf_compiler_node(state: ResumeGenState) -> dict:
     for err in result.errors[:10]:
         print_warning(f"  {err}")
 
-    # Full raw log for diagnostics (last 30 lines) — helps identify OS/tool issues
+    # Write the full raw log (stderr + TeX .log) to disk for debugging.
     if result.raw_log:
-        raw_tail = "\n".join(result.raw_log.splitlines()[-30:])
-        print_info(f"[dim]── Tectonic raw log (last 30 lines) ──\n{raw_tail}\n── end log ──[/dim]")
+        _WORK_DIR.mkdir(parents=True, exist_ok=True)
+        (_WORK_DIR / "tectonic_raw.log").write_text(result.raw_log, encoding="utf-8", errors="replace")
 
     return {"pdf_path": None, "pdf_errors": result.errors}

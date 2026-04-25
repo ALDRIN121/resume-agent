@@ -7,10 +7,14 @@ so the user can inspect and debug manually.
 
 from __future__ import annotations
 
-from ..config import ResumeAgentSettings
+import shutil
+
+from ..config import CONFIG_DIR, ResumeAgentSettings
 from ..state import ResumeGenState
 from ..tools.fs import build_failed_path
 from ..ui.panels import print_error
+
+_WORK_DIR = CONFIG_DIR / "_working"
 
 
 def terminal_failure_node(state: ResumeGenState) -> dict:
@@ -33,6 +37,11 @@ def terminal_failure_node(state: ResumeGenState) -> dict:
     error_log = "\n".join(all_errors)
     if error_log:
         (failed_dir / "errors.txt").write_text(error_log, encoding="utf-8")
+
+    # Copy the full Tectonic + TeX log if it exists
+    raw_log_src = _WORK_DIR / "tectonic_raw.log"
+    if raw_log_src.exists():
+        shutil.copy2(raw_log_src, failed_dir / "tectonic_raw.log")
 
     print_error(
         f"Generation failed after {state.get('generator_retries', 0)} attempts.",
