@@ -17,18 +17,33 @@ from ..state import ResumeGenState
 from ..ui.panels import print_info
 
 
+def _coerce_suggestions(raw) -> list[Suggestion]:
+    """Convert a mix of Suggestion objects and checkpoint-deserialized dicts."""
+    if not raw:
+        return []
+    out = []
+    for s in raw:
+        if isinstance(s, Suggestion):
+            out.append(s)
+        elif isinstance(s, dict):
+            try:
+                out.append(Suggestion.model_validate(s))
+            except Exception:
+                pass
+    return out
+
+
 def suggestion_presenter_node(state: ResumeGenState) -> dict:
     """
     Apply approved suggestions to the resume.
     The interrupt_before pause happens BEFORE this node runs.
     """
     approved_ids = state.get("approved_suggestion_ids", [])
-    suggestions: list[Suggestion] = state.get("suggestions", [])
+    suggestions: list[Suggestion] = _coerce_suggestions(state.get("suggestions", []))
 
     # Use tailored_resume if HITL already enriched it, else base_resume
     source_resume: UserResume = state.get("tailored_resume") or state.get("base_resume")
 
-    # Debug: log what we received
     if not suggestions:
         print_info("No suggestions available to apply.")
         return {"tailored_resume": source_resume}

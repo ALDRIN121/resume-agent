@@ -109,25 +109,38 @@ def _parse_tectonic_errors(log: str) -> list[str]:
     """
     Extract the most relevant error lines from tectonic output.
     LaTeX errors start with '!' or contain 'error:'.
+    'note:' and 'warning:' lines are informational and skipped.
     """
     errors: list[str] = []
     lines = log.splitlines()
+
+    _NOISE_PREFIXES = ("note:", "warning:", "i searched for")
+
+    def _is_noise(line: str) -> bool:
+        low = line.lower().lstrip()
+        return any(low.startswith(p) for p in _NOISE_PREFIXES)
+
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("!") or "error:" in stripped.lower():
-            # Grab context: the error line plus next 2 lines
+        if stripped.startswith("!") or (
+            "error:" in stripped.lower() and not _is_noise(stripped)
+        ):
             context = [stripped]
-            for j in range(i + 1, min(i + 3, len(lines))):
+            for j in range(i + 1, min(i + 4, len(lines))):
                 ctx = lines[j].strip()
-                if ctx:
+                if ctx and not _is_noise(ctx):
                     context.append(ctx)
             errors.append(" | ".join(context))
-        if len(errors) >= 8:
+        if len(errors) >= 10:
             break
 
     if not errors:
-        # Return last 5 non-empty lines as a fallback
-        errors = [ln.strip() for ln in lines if ln.strip()][-5:]
+        # Fallback: last 15 non-noise, non-empty lines for diagnostics
+        errors = [
+            ln.strip()
+            for ln in lines
+            if ln.strip() and not _is_noise(ln.strip())
+        ][-15:]
 
     return errors
 

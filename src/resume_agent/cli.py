@@ -930,10 +930,7 @@ def _handle_hitl_missing(state_values: dict) -> tuple[dict, str]:
 
 
 def _handle_hitl_suggestions(state_values: dict) -> tuple[dict, str]:
-    # Read from state["suggestions"] (same key suggestion_presenter_node uses).
-    # gap_analysis.tailoring_ideas is the same data but may fail to reconstruct
-    # after SQLite checkpoint round-trips, producing an empty list.
-    suggestions = state_values.get("suggestions") or []
+    suggestions = _read_suggestions_from_state(state_values)
     if suggestions:
         print_section("Tailoring Suggestions")
         print_info(f"Found {len(suggestions)} suggestion(s) to review.")
@@ -942,6 +939,52 @@ def _handle_hitl_suggestions(state_values: dict) -> tuple[dict, str]:
         print_info("No tailoring suggestions available.")
         approved_ids = []
     return {"approved_suggestion_ids": approved_ids}, HITL_SUGGESTIONS_NODE
+
+
+def _read_suggestions_from_state(state_values: dict) -> list:
+    """
+    Extract Suggestion objects from state, robust to checkpoint deserialization.
+
+    LangGraph's SqliteSaver may deserialize Pydantic models as raw dicts
+    (unregistered type fallback), or the suggestions field may be absent from
+    get_state().values even though gap_analyzer set it. We try the suggestions
+    field first, then fall back to gap_analysis.tailoring_ideas.
+    """
+    from .schemas import GapAnalysis, Suggestion
+
+    def _coerce(raw) -> list:
+        if not raw:
+            return []
+        out = []
+        for s in raw:
+            if isinstance(s, dict):
+                try:
+                    out.append(Suggestion.model_validate(s))
+                except Exception:
+                    pass
+            elif hasattr(s, "id") and hasattr(s, "before"):
+                out.append(s)
+        return out
+
+    # Primary: suggestions field
+    result = _coerce(state_values.get("suggestions"))
+    if result:
+        return result
+
+    # Fallback: gap_analysis.tailoring_ideas (survives checkpoint round-trips
+    # better because GapAnalysis is a richer object that LangGraph can fully
+    # reconstruct even when suggestions is lost or empty after deserialization)
+    gap = state_values.get("gap_analysis")
+    if gap is None:
+        return []
+    if isinstance(gap, dict):
+        try:
+            gap = GapAnalysis.model_validate(gap)
+        except Exception:
+            return _coerce(gap.get("tailoring_ideas", []))
+    if hasattr(gap, "tailoring_ideas"):
+        return _coerce(gap.tailoring_ideas)
+    return []
 
 
 # Registry: add a new HITL node by adding one entry here.

@@ -53,7 +53,12 @@ def pdf_compiler_node(state: ResumeGenState) -> dict:
         return {"pdf_path": result.pdf_path, "pdf_errors": []}
 
     print_warning(f"Tectonic compilation failed ({len(result.errors)} error(s)):")
-    for err in result.errors[:5]:
+    for err in result.errors[:10]:
         print_warning(f"  {err}")
+
+    # Full raw log for diagnostics (last 30 lines) — helps identify OS/tool issues
+    if result.raw_log:
+        raw_tail = "\n".join(result.raw_log.splitlines()[-30:])
+        print_info(f"[dim]── Tectonic raw log (last 30 lines) ──\n{raw_tail}\n── end log ──[/dim]")
 
     return {"pdf_path": None, "pdf_errors": result.errors}
