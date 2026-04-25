@@ -896,12 +896,32 @@ def update_cmd() -> None:
 
     console.print(f"[muted]Repo: {repo}[/muted]")
     console.print("[muted]Pulling latest changes from GitHub…[/muted]")
-    ok = perform_update()
+    ok, hint = perform_update()
     if ok:
         print_success(
             "Updated successfully!\n"
             "Restart [bold]resume-generator[/bold] to use the new version."
         )
+    elif hint == "windows_locked":
+        # Windows won't let uv overwrite the running resume-generator.exe.
+        # The git pull already succeeded; only the reinstall step failed.
+        console.print()
+        console.print(
+            Panel(
+                "[bold]Almost there — one manual step needed.[/bold]\n\n"
+                "The code was updated successfully, but Windows won't let the\n"
+                "installer overwrite [bold]resume-generator.exe[/bold] while it is running.\n\n"
+                "[bold]Fix:[/bold] Open a [bold]NEW[/bold] Command Prompt or PowerShell window\n"
+                "(do not use this terminal), then run:\n\n"
+                f"  [cyan]cd \"{repo}\"[/cyan]\n"
+                "  [cyan]uv tool install . --force[/cyan]\n\n"
+                "After that completes, your existing terminals will use the new version.",
+                title="[yellow]Windows: close this terminal first[/yellow]",
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )
+        raise typer.Exit(1)
     else:
         print_error(
             "Update failed.\n"

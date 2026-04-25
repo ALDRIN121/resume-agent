@@ -133,26 +133,29 @@ def check_for_update() -> Optional[str]:
     return None
 
 
-def perform_update() -> bool:
+def perform_update() -> tuple[bool, str]:
     """
     Pull latest changes from GitHub and re-install via uv.
-    Returns True on success.
+    Returns (success, error_hint).  error_hint is "" on success.
     """
     repo = _find_repo_root()
     if not repo:
-        return False
+        return False, ""
 
     r1 = subprocess.run(["git", "-C", str(repo), "pull"], check=False)
     if r1.returncode != 0:
-        return False
+        return False, ""
 
     uv = _find_uv()
-    if uv:
-        r2 = subprocess.run([uv, "tool", "install", ".", "--force"], cwd=repo, check=False)
-        return r2.returncode == 0
+    cmd = [uv, "tool", "install", ".", "--force"] if uv else ["uv", "sync"]
+    r2 = subprocess.run(cmd, cwd=repo, check=False, capture_output=True, text=True)
+    if r2.returncode == 0:
+        return True, ""
 
-    r2 = subprocess.run(["uv", "sync"], cwd=repo, check=False)
-    return r2.returncode == 0
+    stderr = (r2.stderr or "") + (r2.stdout or "")
+    if "access is denied" in stderr.lower() or "os error 5" in stderr.lower():
+        return False, "windows_locked"
+    return False, ""
 
 
 def _find_uv() -> Optional[str]:
