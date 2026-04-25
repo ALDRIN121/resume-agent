@@ -113,6 +113,18 @@ def run_interactive() -> None:
             )
         )
         settings = run_setup_wizard(settings)
+    else:
+        # ── LLM connectivity check (every run) ────────────────────────────────
+        console.print("[muted]Checking LLM connection…[/muted] ", end="")
+        if _check_llm_connection(settings):
+            console.print("[success]✓[/success]")
+        else:
+            console.print()
+            console.print()
+            if confirm("Run setup to reconfigure?", default=True):
+                settings = run_setup_wizard(settings)
+            else:
+                raise typer.Exit(1)
 
     # ── Base resume (only if missing) ─────────────────────────────────────────
     if not BASE_RESUME_FILE.exists():
@@ -1164,3 +1176,15 @@ def _check_api_key_or_exit(settings: ResumeAgentSettings) -> None:
             hint=hint,
         )
         raise typer.Exit(1)
+
+
+def _check_llm_connection(settings: ResumeAgentSettings) -> bool:
+    """Quick LLM ping — returns True if the model responds, False otherwise."""
+    from .llm import get_chat_model
+    try:
+        llm = get_chat_model(settings, task="default", temperature=0.0)
+        llm.invoke("Reply with the single word: OK")
+        return True
+    except Exception as exc:
+        print_error(f"LLM connection failed: {exc}")
+        return False
