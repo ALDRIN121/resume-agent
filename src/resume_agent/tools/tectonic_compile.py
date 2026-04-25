@@ -57,11 +57,18 @@ def compile_latex(
         # Write a minimal empty fontconfig and point FONTCONFIG_FILE at it.
         env = None
         if platform.system() == "Windows" and "FONTCONFIG_FILE" not in os.environ:
+            # Point fontconfig at Windows system fonts so Tectonic's TeX engine
+            # can initialise without "Cannot load default config file" errors.
+            # Use a temp cache dir to avoid permission issues with the system cache.
+            fc_cache = (tmp_path / "fontcache").as_posix()
             fc_file = tmp_path / "fonts.conf"
             fc_file.write_text(
                 '<?xml version="1.0"?>\n'
                 '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
-                "<fontconfig/>\n"
+                '<fontconfig>\n'
+                '  <dir>C:/Windows/Fonts</dir>\n'
+                f'  <cachedir>{fc_cache}</cachedir>\n'
+                '</fontconfig>\n'
             )
             env = {**os.environ, "FONTCONFIG_FILE": str(fc_file)}
 

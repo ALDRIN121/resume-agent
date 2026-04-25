@@ -17,7 +17,6 @@
 \usepackage{titlesec}
 \usepackage{tabularx}
 \usepackage{xcolor}
-\usepackage{fontawesome5}
 \usepackage{parskip}
 
 % ── Colors ────────────────────────────────────────────────────────────────────
@@ -55,22 +54,22 @@
   {\Huge\bfseries (( personal.full_name | le ))}\\[5pt]
   \small\color{mutedtext}
   (% if personal.location %)
-    \faMapMarker*\hspace{2pt}(( personal.location | le ))\enspace\textbar\enspace
+    (( personal.location | le ))\enspace\textbar\enspace
   (% endif %)
-  \faEnvelope\hspace{2pt}\href{mailto:(( personal.email | href ))}{\color{accent}(( personal.email | le ))}
+  \href{mailto:(( personal.email | href ))}{\color{accent}(( personal.email | le ))}
   (% if personal.phone %)
-    \enspace\textbar\enspace\faPhone\hspace{2pt}(( personal.phone | le ))
+    \enspace\textbar\enspace(( personal.phone | le ))
   (% endif %)
   (% if personal.linkedin %)
-    \enspace\textbar\enspace\faLinkedinIn\hspace{2pt}%
+    \enspace\textbar\enspace%
     \href{https://linkedin.com/in/(( personal.linkedin | href ))}{\color{accent}(( personal.linkedin | le ))}
   (% endif %)
   (% if personal.github %)
-    \enspace\textbar\enspace\faGithub\hspace{2pt}%
+    \enspace\textbar\enspace%
     \href{https://github.com/(( personal.github | href ))}{\color{accent}(( personal.github | le ))}
   (% endif %)
   (% if personal.website %)
-    \enspace\textbar\enspace\faGlobe\hspace{2pt}%
+    \enspace\textbar\enspace%
     \href{(( personal.website | href ))}{\color{accent}(( personal.website | le ))}
   (% endif %)
 \end{center}
@@ -120,7 +119,7 @@
 \noindent
 \textbf{(( project.name | le ))}%
 (% if project.url %)
-\ \href{(( project.url | href ))}{\footnotesize\faExternalLink*}%
+\ {\footnotesize\href{(( project.url | href ))}{\color{accent}[link]}}%
 (% endif %)
 \hfill\small\textcolor{mutedtext}{(( project.tech | join(', ') | le ))}\\
 \textit{\small (( project.description | le ))}
