@@ -64,7 +64,7 @@ class OutputConfig(BaseModel):
 
 
 class RetriesConfig(BaseModel):
-    generator_max: int = 5
+    generator_max: int = 2
 
 
 # ── Main Settings ──────────────────────────────────────────────────────────────
