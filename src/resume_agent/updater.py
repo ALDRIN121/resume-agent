@@ -158,6 +158,10 @@ def perform_update(repo: Path) -> tuple[bool, str, str]:
     cmd = [uv, "tool", "install", ".", "--force"] if uv else ["uv", "sync"]
     r2 = subprocess.run(cmd, cwd=repo, check=False, capture_output=True, text=True)
     if r2.returncode == 0:
+        # Sync the cache so the next startup doesn't show "update available" again.
+        new_sha = _get_local_sha()
+        if new_sha:
+            _save_remote_sha(new_sha)
         return True, "", ""
 
     combined = ((r2.stderr or "") + (r2.stdout or "")).strip()
