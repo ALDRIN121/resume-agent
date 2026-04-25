@@ -133,29 +133,46 @@ def check_for_update() -> Optional[str]:
     return None
 
 
-def perform_update() -> tuple[bool, str]:
+def perform_update(repo: Path) -> tuple[bool, str, str]:
     """
     Pull latest changes from GitHub and re-install via uv.
-    Returns (success, error_hint).  error_hint is "" on success.
+    Returns (success, error_hint, captured_output).
+    error_hint is "" on success or "windows_locked" for the Windows file-lock case.
     """
-    repo = _find_repo_root()
-    if not repo:
-        return False, ""
+    r1 = subprocess.run(
+        ["git", "-C", str(repo), "pull"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    # Echo git pull output so the user sees "Already up to date." etc.
+    if r1.stdout:
+        print(r1.stdout, end="", flush=True)
+    if r1.stderr:
+        print(r1.stderr, end="", flush=True)
 
-    r1 = subprocess.run(["git", "-C", str(repo), "pull"], check=False)
     if r1.returncode != 0:
-        return False, ""
+        return False, "", (r1.stderr + r1.stdout).strip()
 
     uv = _find_uv()
     cmd = [uv, "tool", "install", ".", "--force"] if uv else ["uv", "sync"]
     r2 = subprocess.run(cmd, cwd=repo, check=False, capture_output=True, text=True)
     if r2.returncode == 0:
-        return True, ""
+        return True, "", ""
 
-    stderr = (r2.stderr or "") + (r2.stdout or "")
-    if "access is denied" in stderr.lower() or "os error 5" in stderr.lower():
-        return False, "windows_locked"
-    return False, ""
+    combined = ((r2.stderr or "") + (r2.stdout or "")).strip()
+    low = combined.lower()
+    # Windows can't overwrite a running executable — os error 5 (access denied)
+    # or os error 32 (file in use by another process)
+    if (
+        "access is denied" in low
+        or "os error 5" in low
+        or "os error 32" in low
+        or "being used by another process" in low
+        or "cannot access the file" in low
+    ):
+        return False, "windows_locked", combined
+    return False, "", combined
 
 
 def _find_uv() -> Optional[str]:

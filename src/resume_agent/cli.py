@@ -107,12 +107,23 @@ def run_interactive() -> None:
 
     # ── Base resume (only if missing) ─────────────────────────────────────────
     if not BASE_RESUME_FILE.exists():
-        console.print()
-        print_warning("No base resume found.")
+        print_section("Set Up Your Resume")
+        console.print(
+            Panel(
+                "[bold]No base resume found.[/bold]\n\n"
+                "Before generating tailored resumes, the tool needs to read\n"
+                "your existing resume once and save it as a starting point.\n\n"
+                "Drop your PDF or [bold].tex[/bold] file into the [bold]source/[/bold] folder shown below,\n"
+                "or enter the full path when prompted.",
+                border_style="yellow",
+                padding=(0, 2),
+            )
+        )
         _interactive_init_resume(settings)
         if not BASE_RESUME_FILE.exists():
-            print_error("Cannot generate without a base resume.")
+            print_error("Cannot generate without a base resume. Run: resume-generator init")
             raise typer.Exit(1)
+        print_success("Resume ready! Now let's tailor it for a job.")
 
     # ── Pre-flight: check tools before first generation ───────────────────────
     _preflight_checks(settings)
@@ -896,15 +907,13 @@ def update_cmd() -> None:
 
     console.print(f"[muted]Repo: {repo}[/muted]")
     console.print("[muted]Pulling latest changes from GitHub…[/muted]")
-    ok, hint = perform_update()
+    ok, hint, detail = perform_update(repo)
     if ok:
         print_success(
             "Updated successfully!\n"
             "Restart [bold]resume-generator[/bold] to use the new version."
         )
     elif hint == "windows_locked":
-        # Windows won't let uv overwrite the running resume-generator.exe.
-        # The git pull already succeeded; only the reinstall step failed.
         console.print()
         console.print(
             Panel(
@@ -912,24 +921,27 @@ def update_cmd() -> None:
                 "The code was updated successfully, but Windows won't let the\n"
                 "installer overwrite [bold]resume-generator.exe[/bold] while it is running.\n\n"
                 "[bold]Fix:[/bold] Open a [bold]NEW[/bold] Command Prompt or PowerShell window\n"
-                "(do not use this terminal), then run:\n\n"
+                "(not this one), then run:\n\n"
                 f"  [cyan]cd \"{repo}\"[/cyan]\n"
                 "  [cyan]uv tool install . --force[/cyan]\n\n"
                 "After that completes, your existing terminals will use the new version.",
-                title="[yellow]Windows: close this terminal first[/yellow]",
+                title="[yellow]Windows: open a new terminal first[/yellow]",
                 border_style="yellow",
                 padding=(1, 2),
             )
         )
         raise typer.Exit(1)
     else:
-        print_error(
+        msg = (
             "Update failed.\n"
             "Try manually:\n"
             f"  cd \"{repo}\"\n"
             "  git pull\n"
             "  uv tool install . --force"
         )
+        if detail:
+            msg += f"\n\nError detail:\n  {detail[:400]}"
+        print_error(msg)
         raise typer.Exit(1)
 
 
@@ -1209,7 +1221,7 @@ def _ensure_llm_ready(settings: ResumeAgentSettings) -> ResumeAgentSettings:
         )
         return run_setup_wizard(settings)
 
-    console.print("[muted]Checking LLM connection…[/muted] ", end="")
+    console.print("Checking LLM connection… ", end="")
     try:
         from .llm import get_chat_model
         llm = get_chat_model(settings, task="default", temperature=0.0)
