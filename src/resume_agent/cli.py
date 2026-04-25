@@ -102,29 +102,8 @@ def run_interactive() -> None:
     except Exception:
         pass
 
-    # ── First-time setup (only if not already configured) ─────────────────────
-    if not settings.is_configured():
-        console.print(
-            Panel(
-                "[bold]Welcome to Resume Generator![/bold]\n"
-                "[muted]No provider configured yet. Let's set that up first.[/muted]",
-                border_style="blue",
-                padding=(1, 2),
-            )
-        )
-        settings = run_setup_wizard(settings)
-    else:
-        # ── LLM connectivity check (every run) ────────────────────────────────
-        console.print("[muted]Checking LLM connection…[/muted] ", end="")
-        if _check_llm_connection(settings):
-            console.print("[success]✓[/success]")
-        else:
-            console.print()
-            console.print()
-            if confirm("Run setup to reconfigure?", default=True):
-                settings = run_setup_wizard(settings)
-            else:
-                raise typer.Exit(1)
+    # ── Ensure LLM is configured and reachable ────────────────────────────────
+    settings = _ensure_llm_ready(settings)
 
     # ── Base resume (only if missing) ─────────────────────────────────────────
     if not BASE_RESUME_FILE.exists():
@@ -394,6 +373,7 @@ def init(
 
     settings = _load_settings_or_exit()
     print_banner(provider=settings.provider, model=settings.model.default)
+    settings = _ensure_llm_ready(settings)
 
     # ── Resolve source file ────────────────────────────────────────────────────
     if source is None:
@@ -493,9 +473,8 @@ def generate(
         settings = settings.model_copy(update={"model": model_cfg})
 
     _check_base_resume_or_exit()
-    _check_api_key_or_exit(settings)
-
     print_banner(provider=settings.provider, model=settings.model.default)
+    settings = _ensure_llm_ready(settings)
 
     t_id = thread_id or str(uuid.uuid4())
     initial_state: ResumeGenState = {
@@ -560,8 +539,8 @@ def resume_session(
 ) -> None:
     """Resume a paused Human-in-the-Loop session."""
     settings = _load_settings_or_exit()
-    _check_api_key_or_exit(settings)
     print_banner(provider=settings.provider, model=settings.model.default)
+    settings = _ensure_llm_ready(settings)
 
     config = {"configurable": {"thread_id": thread_id}}
     console.print(f"[muted]Resuming session: {thread_id}[/muted]\n")
@@ -1145,46 +1124,39 @@ def _prompt_save_and_open(suggested_path: str) -> str:
     return final_path
 
 
-def _check_api_key_or_exit(settings: ResumeAgentSettings) -> None:
-    import os
+def _ensure_llm_ready(settings: ResumeAgentSettings) -> ResumeAgentSettings:
+    """
+    Ensure LLM is configured and reachable before any command that needs it.
 
-    provider = settings.provider
-    missing = False
-    hint = ""
+    - Not configured → runs setup wizard.
+    - Configured but unreachable → shows error and offers to re-run setup.
 
-    if provider == "anthropic":
-        missing = not (settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY"))
-        hint = "export ANTHROPIC_API_KEY=sk-ant-...  or run: resume-generator setup"
-    elif provider == "openai":
-        missing = not (settings.openai_api_key or os.environ.get("OPENAI_API_KEY"))
-        hint = "export OPENAI_API_KEY=sk-...  or run: resume-generator setup"
-    elif provider == "gemini":
-        missing = not (
-            settings.gemini_api_key
-            or os.environ.get("GOOGLE_API_KEY")
-            or os.environ.get("GEMINI_API_KEY")
+    Returns (possibly updated) settings.
+    """
+    from .ui.setup_wizard import run_setup_wizard
+
+    if not settings.is_configured():
+        console.print(
+            Panel(
+                "[bold]Welcome to Resume Generator![/bold]\n"
+                "[muted]No provider configured yet. Let's set that up first.[/muted]",
+                border_style="blue",
+                padding=(1, 2),
+            )
         )
-        hint = "export GOOGLE_API_KEY=...  or run: resume-generator setup"
-    elif provider == "nvidia":
-        missing = not (settings.nvidia_api_key or os.environ.get("NVIDIA_API_KEY"))
-        hint = "export NVIDIA_API_KEY=nvapi-...  or run: resume-generator setup"
+        return run_setup_wizard(settings)
 
-    if missing:
-        print_error_panel(
-            f"Missing API Key ({provider})",
-            f"No API key configured for provider '{provider}'.",
-            hint=hint,
-        )
-        raise typer.Exit(1)
-
-
-def _check_llm_connection(settings: ResumeAgentSettings) -> bool:
-    """Quick LLM ping — returns True if the model responds, False otherwise."""
-    from .llm import get_chat_model
+    console.print("[muted]Checking LLM connection…[/muted] ", end="")
     try:
+        from .llm import get_chat_model
         llm = get_chat_model(settings, task="default", temperature=0.0)
         llm.invoke("Reply with the single word: OK")
-        return True
+        console.print("[success]✓[/success]")
+        return settings
     except Exception as exc:
+        console.print()
         print_error(f"LLM connection failed: {exc}")
-        return False
+        console.print()
+        if confirm("Run setup to reconfigure?", default=True):
+            return run_setup_wizard(settings)
+        raise typer.Exit(1)
