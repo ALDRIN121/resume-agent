@@ -784,11 +784,17 @@ def install_deps() -> None:
     def _run(cmd: list[str], label: str) -> bool:
         console.print(f"[muted]  $ {' '.join(cmd)}[/muted]")
         try:
-            _sp.run(cmd, check=True)
+            # On Windows, scoop/choco are batch/PowerShell scripts that cannot be
+            # launched by CreateProcess directly — shell=True routes through cmd.exe.
+            use_shell = system == "Windows"
+            _sp.run(cmd, check=True, shell=use_shell)
             print_success(f"{label} installed.")
             return True
         except _sp.CalledProcessError as exc:
             print_error(f"{label} installation failed (exit {exc.returncode}).")
+            return False
+        except (FileNotFoundError, OSError) as exc:
+            print_error(f"{label} installation failed — '{cmd[0]}' could not be launched: {exc}")
             return False
 
     # ── Tectonic ──────────────────────────────────────────────────────────────
@@ -810,10 +816,11 @@ def install_deps() -> None:
             tectonic_ok = _run(["sudo", "yum", "install", "-y", "tectonic"], "Tectonic")
         elif has_scoop:
             tectonic_ok = _run(["scoop", "install", "tectonic"], "Tectonic")
-        elif has_winget:
-            tectonic_ok = _run(["winget", "install", "--id", "TectonicProject.Tectonic", "-e"], "Tectonic")
         elif has_choco:
             tectonic_ok = _run(["choco", "install", "tectonic", "-y"], "Tectonic")
+        elif has_winget:
+            # Tectonic is not reliably available in winget — scoop is preferred on Windows.
+            tectonic_ok = _run(["winget", "install", "--id", "TectonicProject.Tectonic", "-e"], "Tectonic")
         elif has_cargo:
             tectonic_ok = _run(["cargo", "install", "tectonic"], "Tectonic")
         else:
@@ -823,7 +830,7 @@ def install_deps() -> None:
                 "  macOS:   brew install tectonic\n"
                 "  Ubuntu:  sudo apt install tectonic\n"
                 "  Arch:    sudo pacman -S tectonic\n"
-                "  Windows: scoop install tectonic  (or winget install TectonicProject.Tectonic)"
+                "  Windows: scoop install tectonic  (install Scoop from scoop.sh first)"
             )
 
     # ── Poppler ───────────────────────────────────────────────────────────────
@@ -884,6 +891,19 @@ def update_cmd() -> None:
     print_banner(provider=settings.provider)
     print_section("Updating resume-generator")
 
+    from .updater import _find_repo_root
+
+    repo = _find_repo_root()
+    if repo is None:
+        print_error(
+            "Cannot locate the resume-generator git repository.\n"
+            "Re-run the installer to fix this:\n"
+            "  Mac/Linux: curl -sSL https://raw.githubusercontent.com/ALDRIN121/resume-agent/main/install.sh | bash\n"
+            "  Windows:   irm https://raw.githubusercontent.com/ALDRIN121/resume-agent/main/install.ps1 | iex"
+        )
+        raise typer.Exit(1)
+
+    console.print(f"[muted]Repo: {repo}[/muted]")
     console.print("[muted]Pulling latest changes from GitHub…[/muted]")
     ok = perform_update()
     if ok:
@@ -895,7 +915,9 @@ def update_cmd() -> None:
         print_error(
             "Update failed.\n"
             "Try manually:\n"
-            "  git pull && uv tool install . --force"
+            f"  cd \"{repo}\"\n"
+            "  git pull\n"
+            "  uv tool install . --force"
         )
         raise typer.Exit(1)
 

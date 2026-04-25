@@ -11,6 +11,7 @@ it only fires when config is missing or when the user explicitly asks for it.
 from __future__ import annotations
 
 import os
+import urllib.parse
 from typing import Optional
 
 import questionary
@@ -93,39 +94,58 @@ def run_setup_wizard(existing: Optional[ResumeAgentSettings] = None) -> ResumeAg
     Run the interactive provider-setup wizard.
 
     Prompts for: provider → credentials → text model → vision model → saves & tests.
+    Only completes (and saves) when the LLM connection test passes.
     Returns the saved ResumeAgentSettings so the caller can continue with it.
     """
     console.print()
     console.print(Rule("[bold blue]  Provider Setup  [/bold blue]", style="blue"))
     console.print()
 
-    # Step 1 — provider
+    # Step 1 — provider (asked once; the retry loop only re-asks credentials onward)
     provider, is_remote = _ask_provider(existing)
 
-    # Step 2 — credentials (API key or Ollama URL)
-    api_key, base_url = _ask_credentials(provider, is_remote, existing)
+    while True:
+        # Step 2 — credentials (API key or Ollama URL)
+        api_key, base_url = _ask_credentials(provider, is_remote, existing)
 
-    # Step 3 — text / reasoning model
-    default_model = _ask_model(
-        provider,
-        label="text model",
-        candidates=_MODELS.get(provider, []),
-        fallback=existing.model.default if existing else None,
-        base_url=base_url,
-    )
+        # Step 3 — text / reasoning model
+        default_model = _ask_model(
+            provider,
+            label="text model",
+            candidates=_MODELS.get(provider, []),
+            fallback=existing.model.default if existing else None,
+            base_url=base_url,
+            api_key=api_key,
+        )
 
-    # Step 4 — vision model (optional)
-    vision_enabled, vision_model = _ask_vision(provider, default_model, existing)
+        # Step 4 — vision model (optional)
+        vision_enabled, vision_model = _ask_vision(
+            provider, default_model, existing,
+            base_url=base_url, api_key=api_key,
+        )
 
-    # Step 5 — build, test, persist
-    return _apply_and_save(
-        existing=existing,
-        provider=provider,
-        api_key=api_key,
-        base_url=base_url,
-        default_model=default_model,
-        vision_model=vision_model if vision_enabled else default_model,
-    )
+        # Step 5 — build, test, persist
+        result = _apply_and_save(
+            existing=existing,
+            provider=provider,
+            api_key=api_key,
+            base_url=base_url,
+            default_model=default_model,
+            vision_model=vision_model if vision_enabled else default_model,
+        )
+
+        if result is not None:
+            return result
+
+        # LLM test failed — offer retry before giving up
+        console.print()
+        retry = Confirm.ask(
+            "  [accent]Retry with different credentials?[/accent]",
+            console=console,
+            default=True,
+        )
+        if not retry:
+            raise SystemExit(1)
 
 
 # ── Step helpers ───────────────────────────────────────────────────────────────
@@ -221,16 +241,36 @@ def _ask_credentials(
                 default=default_url,
             ).strip().rstrip("/")
 
-            console.print("[muted]API key for this server? (leave blank if none)[/muted]")
-            remote_key = Prompt.ask(
-                "  [accent]API key (optional)[/accent]",
-                console=console,
-                password=True,
-                default="",
-            ).strip()
+            # Determine whether this is a cloud / non-local endpoint
+            _parsed = urllib.parse.urlparse(base_url)
+            _host = (_parsed.hostname or "").lower()
+            _is_local = _host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or _host.endswith(".local")
+
+            if _is_local:
+                console.print("[muted]API key for this server? (leave blank if none)[/muted]")
+                remote_key = Prompt.ask(
+                    "  [accent]API key (optional)[/accent]",
+                    console=console,
+                    password=True,
+                    default="",
+                ).strip()
+            else:
+                # Cloud / remote endpoint — API key is required
+                console.print("[muted]API key required for cloud/remote Ollama endpoints.[/muted]")
+                remote_key = ""
+                while not remote_key:
+                    remote_key = Prompt.ask(
+                        "  [accent]API key[/accent]",
+                        console=console,
+                        password=True,
+                    ).strip()
+                    if not remote_key:
+                        print_error("An API key is required for remote/cloud Ollama endpoints.")
+
             if remote_key:
                 _write_secret("OLLAMA_API_KEY", remote_key)
                 os.environ["OLLAMA_API_KEY"] = remote_key
+                api_key = remote_key
                 print_success("Ollama API key saved.")
         else:
             base_url = existing.ollama_base_url if existing else "http://localhost:11434"
@@ -245,12 +285,13 @@ def _ask_model(
     *,
     fallback: Optional[str],
     base_url: str = "http://localhost:11434",
+    api_key: Optional[str] = None,
 ) -> str:
     """Arrow-key model selection, returns the chosen model name."""
     console.print()
 
     if provider == "ollama":
-        live = _fetch_ollama_models(base_url)
+        live = _fetch_ollama_models(base_url, api_key=api_key)
         if live:
             candidates = live
 
@@ -290,6 +331,9 @@ def _ask_vision(
     provider: str,
     default_model: str,
     existing: Optional[ResumeAgentSettings],
+    *,
+    base_url: str = "http://localhost:11434",
+    api_key: Optional[str] = None,
 ) -> tuple[bool, str]:
     """Ask whether to enable PDF vision validation and choose the model."""
     console.print()
@@ -319,7 +363,8 @@ def _ask_vision(
         label="vision model",
         candidates=vision_candidates,
         fallback=existing_vision,
-        base_url="http://localhost:11434",   # only relevant for ollama
+        base_url=base_url,
+        api_key=api_key,
     )
     return True, vision_model
 
@@ -332,8 +377,12 @@ def _apply_and_save(
     base_url: str,
     default_model: str,
     vision_model: str,
-) -> ResumeAgentSettings:
-    """Build the settings object, run a live LLM test, then persist."""
+) -> Optional[ResumeAgentSettings]:
+    """Build the settings object, run a live LLM test, then persist.
+
+    Returns the saved settings on success, or None if the LLM test fails
+    (in which case nothing is saved so the wizard can retry).
+    """
     console.print()
     console.print(Rule("[dim]Testing connection…[/dim]", style="dim"))
     console.print()
@@ -342,14 +391,14 @@ def _apply_and_save(
     base: dict = {}
     if existing:
         base = existing.model_dump(
-            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key"}
+            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key"}
         )
     base.update({
         "provider": provider,
         "model": {"default": default_model, "vision": vision_model},
         "ollama_base_url": base_url,
     })
-    settings = ResumeAgentSettings.model_validate(base)
+    settings = ResumeAgentSettings(**base)
 
     # Inject the API key into the in-process object so _test_llm can use it
     if provider == "gemini" and api_key:
@@ -360,10 +409,13 @@ def _apply_and_save(
         settings = settings.model_copy(update={"anthropic_api_key": api_key})
     elif provider == "openai" and api_key:
         settings = settings.model_copy(update={"openai_api_key": api_key})
+    elif provider == "ollama" and api_key:
+        settings = settings.model_copy(update={"ollama_api_key": api_key})
 
     ok = _test_llm(settings)
     if not ok:
-        print_warning("Connection test failed. Config saved anyway — check key / server.")
+        print_error("LLM test failed — config not saved. Fix your credentials and try again.")
+        return None
 
     settings.save()
     console.print()
@@ -389,11 +441,12 @@ def _test_llm(settings: ResumeAgentSettings) -> bool:
         return False
 
 
-def _fetch_ollama_models(base_url: str) -> list[str]:
-    """Query Ollama /api/tags to get the list of locally installed models."""
+def _fetch_ollama_models(base_url: str, *, api_key: Optional[str] = None) -> list[str]:
+    """Query Ollama /api/tags to get the list of installed models."""
     try:
         import httpx
-        resp = httpx.get(f"{base_url}/api/tags", timeout=4)
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        resp = httpx.get(f"{base_url}/api/tags", timeout=4, headers=headers)
         if resp.status_code == 200:
             return [m["name"] for m in resp.json().get("models", [])]
     except Exception:

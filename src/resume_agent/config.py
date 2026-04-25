@@ -56,7 +56,7 @@ class ScrapingConfig(BaseModel):
 
 class LatexConfig(BaseModel):
     tectonic_path: str = "tectonic"
-    compile_timeout_seconds: int = 60
+    compile_timeout_seconds: int = 180
 
 
 class OutputConfig(BaseModel):
@@ -82,6 +82,7 @@ class ResumeAgentSettings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     gemini_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
     nvidia_api_key: Optional[str] = Field(default=None, alias="NVIDIA_API_KEY")
+    ollama_api_key: Optional[str] = Field(default=None, alias="OLLAMA_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     nvidia_base_url: str = Field(default="", alias="NVIDIA_BASE_URL")
 
@@ -98,20 +99,22 @@ class ResumeAgentSettings(BaseSettings):
 
     @classmethod
     def load(cls) -> "ResumeAgentSettings":
-        """Load from ~/.resume_generator/config.yaml, overlaid with env vars."""
+        """Load from ~/.resume_generator/config.yaml, overlaid with env vars and SECRETS_FILE."""
         migrate_config_dir()
         file_data: dict = {}
         if CONFIG_FILE.exists():
             raw = CONFIG_FILE.read_text(encoding="utf-8")
             file_data = yaml.safe_load(raw) or {}
-        return cls.model_validate(file_data)
+        # Use cls(**file_data) so pydantic-settings also reads env vars and
+        # SECRETS_FILE (.env) for API keys — model_validate bypasses those sources.
+        return cls(**file_data)
 
     def save(self) -> None:
         """Persist current settings to ~/.resume_generator/config.yaml."""
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         # Never write secrets into the YAML — they live in SECRETS_FILE
         data = self.model_dump(
-            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key"},
+            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key"},
         )
         CONFIG_FILE.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
 

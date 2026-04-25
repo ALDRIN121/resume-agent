@@ -77,6 +77,11 @@ def get_chat_model(
     if provider == "ollama":
         from langchain_ollama import ChatOllama
 
+        api_key = settings.ollama_api_key or os.environ.get("OLLAMA_API_KEY")
+        client_kwargs: dict = {}
+        if api_key:
+            client_kwargs["headers"] = {"Authorization": f"Bearer {api_key}"}
+
         return ChatOllama(
             model=model_name,
             temperature=temperature,
@@ -84,6 +89,7 @@ def get_chat_model(
             # Force JSON output for structured extraction tasks so the model
             # doesn't return markdown-formatted text instead of a JSON object.
             format="json" if task == "structured" else None,
+            client_kwargs=client_kwargs or None,
         )
 
     if provider == "nvidia":

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import platform
 import shutil
 import subprocess
 import tempfile
@@ -49,6 +51,19 @@ def compile_latex(
         tex_file = tmp_path / "resume.tex"
         tex_file.write_text(latex_source, encoding="utf-8")
 
+        # On Windows, fontconfig may not be configured, causing
+        # "Cannot load default config file" errors that abort compilation.
+        # Write a minimal empty fontconfig and point FONTCONFIG_FILE at it.
+        env = None
+        if platform.system() == "Windows" and "FONTCONFIG_FILE" not in os.environ:
+            fc_file = tmp_path / "fonts.conf"
+            fc_file.write_text(
+                '<?xml version="1.0"?>\n'
+                '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+                "<fontconfig/>\n"
+            )
+            env = {**os.environ, "FONTCONFIG_FILE": str(fc_file)}
+
         try:
             result = subprocess.run(
                 [
@@ -63,6 +78,7 @@ def compile_latex(
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             return CompileResult(

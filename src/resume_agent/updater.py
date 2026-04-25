@@ -19,10 +19,39 @@ def _cache_file() -> Path:
 
 
 def _find_repo_root() -> Optional[Path]:
-    """Walk up from this file to find the nearest .git directory."""
+    """
+    Find the git repo root.
+
+    Priority:
+    1. RESUME_GENERATOR_DIR env var (honoured by both install scripts).
+    2. Standard install locations written by install.sh / install.ps1.
+    3. Walk up from __file__ (editable / dev installs where the package IS the repo).
+    """
+    import os
+    import platform as _platform
+
+    env_dir = os.environ.get("RESUME_GENERATOR_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        if (p / ".git").exists():
+            return p
+
+    if _platform.system() == "Windows":
+        local_app = os.environ.get("LOCALAPPDATA", "")
+        if local_app:
+            p = Path(local_app) / "resume-generator"
+            if (p / ".git").exists():
+                return p
+    else:
+        p = Path.home() / ".local" / "share" / "resume-generator"
+        if (p / ".git").exists():
+            return p
+
+    # Fallback: walk up from __file__ for dev / editable installs
     for parent in Path(__file__).resolve().parents:
         if (parent / ".git").exists():
             return parent
+
     return None
 
 

@@ -65,17 +65,13 @@ sudo dnf install tectonic poppler-utils
 # Install Scoop first (if you don't have it):
 irm get.scoop.sh | iex
 
+# Then install both tools:
 scoop install tectonic poppler
 ```
 
-**Windows (via winget + manual):**
-```powershell
-winget install TectonicProject.Tectonic
-# Poppler: download from https://github.com/oschwartz10612/poppler-windows/releases
-# Extract and add the bin/ folder to your PATH
-```
+> **Tip:** `resume-generator install-deps` can install both automatically if Scoop is already on your machine. Tectonic downloads font packages from the internet on its **first run** — this can take 2–5 minutes on Windows, which is normal. Subsequent runs are fast.
 
-> **Don't want to do this manually?** Run `resume-generator install-deps` after installing the tool — it will try to install both automatically using whatever package manager you have.
+> **Note:** `winget install TectonicProject.Tectonic` is not available in the winget catalog — use Scoop instead.
 
 ---
 
@@ -110,7 +106,15 @@ cd resume-agent
 uv tool install .
 ```
 
-After installation, `resume-generator` should be available in your terminal. If not, make sure `~/.local/bin` (Mac/Linux) or `%APPDATA%\Python\Scripts` (Windows) is in your `PATH`.
+After installation, `resume-generator` should be available in your terminal. If not, add the uv tools directory to your PATH:
+
+- **Mac/Linux:** `~/.local/bin`
+- **Windows (PowerShell):**
+  ```powershell
+  $env:PATH += ";$env:APPDATA\uv\bin"
+  [System.Environment]::SetEnvironmentVariable('PATH', "$env:PATH", 'User')
+  ```
+  Then open a new terminal.
 
 ---
 
@@ -147,7 +151,7 @@ The tool needs to call an AI model. Pick one:
 | **NVIDIA NIM** | Free tier available | [build.nvidia.com](https://build.nvidia.com) |
 | **Anthropic Claude** | Paid | [console.anthropic.com](https://console.anthropic.com) |
 | **OpenAI GPT** | Paid | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| **Ollama** | Free, runs locally | [ollama.ai](https://ollama.ai) — no key needed |
+| **Ollama** | Free, runs locally | [ollama.com](https://ollama.com) — no key needed for local |
 
 ### Running the setup wizard
 
@@ -207,6 +211,7 @@ scraping:
   playwright_fallback: true     # Use a full browser for JS-heavy sites (e.g. LinkedIn)
 latex:
   tectonic_path: tectonic
+  compile_timeout_seconds: 180  # Increase if Tectonic times out (first run on Windows can be slow)
 output:
   base_dir: ./output
 retries:
@@ -218,6 +223,7 @@ API keys go in environment variables or `~/.resume_generator/.env`:
 - `OPENAI_API_KEY`
 - `GOOGLE_API_KEY`
 - `NVIDIA_API_KEY`
+- `OLLAMA_API_KEY` (required for remote/cloud Ollama endpoints; optional for local)
 - `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
 - `NVIDIA_BASE_URL` (leave blank for NVIDIA cloud; set for self-hosted NIM)
 
@@ -339,9 +345,10 @@ Input (text / URL)
 ## Troubleshooting
 
 **`resume-generator: command not found`**
-- Make sure `~/.local/bin` (Mac/Linux) or `%APPDATA%\Python\Scripts` (Windows) is in your PATH.
-- Try closing and reopening your terminal.
-- Or run directly: `uv run resume-generator`
+- Mac/Linux: make sure `~/.local/bin` is in your PATH.
+- Windows: make sure `%APPDATA%\uv\bin` is in your PATH (the installer prints the exact command to fix this).
+- Try closing and reopening your terminal after updating PATH.
+- Or run directly: `uvx resume-generator`
 
 **`tectonic: command not found` or `pdftoppm: command not found`**
 - Run `resume-generator install-deps` to install automatically.
@@ -353,7 +360,10 @@ Input (text / URL)
 
 **`Ollama: Unauthorized (401)`**
 - Your Ollama server requires an API key.
-- Run: `export OLLAMA_API_KEY=<your-key>` before running the tool.
+- Run `resume-generator setup` and enter your API key when prompted — it will be saved automatically.
+- Or set it manually before running the tool:
+  - Mac/Linux: `export OLLAMA_API_KEY=<your-key>`
+  - Windows PowerShell: `$env:OLLAMA_API_KEY="<your-key>"`
 
 **`No base resume found`**
 - You haven't run `init` yet.
@@ -377,6 +387,8 @@ resume-generator update
 ```
 
 This pulls the latest code from GitHub and reinstalls the tool. Run `doctor` afterwards to make sure everything still works.
+
+If the update command can't find the repo (e.g., you moved the install folder), re-run the original one-liner installer — it will pull the latest code and reinstall in one step.
 
 ---
 

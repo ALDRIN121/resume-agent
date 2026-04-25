@@ -56,6 +56,8 @@ def print_banner(
 
     if source_pdf:
         left.append(f"  ◆  {source_pdf}\n", style="dim white")
+    elif BASE_RESUME_FILE.exists():
+        left.append("  ◆  Resume parsed and ready\n", style="dim green")
     else:
         left.append("  ◆  No resume  →  resume-generator init\n", style="dim yellow")
 
