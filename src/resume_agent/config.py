@@ -105,6 +105,9 @@ class ResumeAgentSettings(BaseSettings):
         if CONFIG_FILE.exists():
             raw = CONFIG_FILE.read_text(encoding="utf-8")
             file_data = yaml.safe_load(raw) or {}
+        # retries is a code-level default, not user config — drop any stale
+        # value from old config files so the code default always applies.
+        file_data.pop("retries", None)
         # Use cls(**file_data) so pydantic-settings also reads env vars and
         # SECRETS_FILE (.env) for API keys — model_validate bypasses those sources.
         return cls(**file_data)
@@ -114,7 +117,7 @@ class ResumeAgentSettings(BaseSettings):
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         # Never write secrets into the YAML — they live in SECRETS_FILE
         data = self.model_dump(
-            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key"},
+            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key", "retries"},
         )
         CONFIG_FILE.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
 

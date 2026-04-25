@@ -17,6 +17,7 @@ class CompileResult:
     pdf_path: str | None   # absolute path to the produced PDF
     errors: list[str]      # parsed error lines from tectonic's stderr
     raw_log: str           # full stderr for debugging
+    fatal: bool = False    # True = Tectonic env/network issue, retrying won't help
 
 
 def compile_latex(
@@ -102,9 +103,11 @@ def compile_latex(
                 except OSError:
                     pass
             errors = _parse_tectonic_errors(raw_log)
+            fatal = False
             if not errors:
                 errors = ["Tectonic exited with an error but produced no diagnostic output."]
-            return CompileResult(ok=False, pdf_path=None, errors=errors, raw_log=raw_log)
+                fatal = True
+            return CompileResult(ok=False, pdf_path=None, errors=errors, raw_log=raw_log, fatal=fatal)
 
         # Move PDF to destination
         dest_dir = output_dir or tmp_path

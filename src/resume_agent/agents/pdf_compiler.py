@@ -52,13 +52,25 @@ def pdf_compiler_node(state: ResumeGenState) -> dict:
         print_info(f"PDF compiled successfully → {result.pdf_path}")
         return {"pdf_path": result.pdf_path, "pdf_errors": []}
 
-    print_warning(f"Tectonic compilation failed ({len(result.errors)} error(s)):")
-    for err in result.errors[:10]:
-        print_warning(f"  {err}")
-
     # Write the full raw log (stderr + TeX .log) to disk for debugging.
     if result.raw_log:
         _WORK_DIR.mkdir(parents=True, exist_ok=True)
         (_WORK_DIR / "tectonic_raw.log").write_text(result.raw_log, encoding="utf-8", errors="replace")
+
+    if result.fatal:
+        raise RuntimeError(
+            "Tectonic failed without any error output — this is almost always a\n"
+            "network or firewall issue preventing Tectonic from downloading TeX packages.\n\n"
+            "Fix options:\n"
+            "  1. Allow tectonic.exe outbound HTTPS access in your firewall/antivirus.\n"
+            "  2. Pre-download packages by running once in a terminal:\n"
+            "       tectonic -X compile your_file.tex\n"
+            "  3. Use a Tectonic offline bundle:\n"
+            "       https://tectonic-typesetting.github.io/book/latest/faq.html"
+        )
+
+    print_warning(f"Tectonic compilation failed ({len(result.errors)} error(s)):")
+    for err in result.errors[:10]:
+        print_warning(f"  {err}")
 
     return {"pdf_path": None, "pdf_errors": result.errors}
