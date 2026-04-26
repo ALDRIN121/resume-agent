@@ -1,48 +1,74 @@
 %% Resume Agent — default.tex.jinja
 %% Jinja2: double-paren for variables, paren-percent for blocks, paren-hash for comments
 %% LaTeX special chars in user data should use the |le filter (e.g. some_var | le)
-\documentclass[10.5pt,letterpaper]{article}
+\documentclass[10pt,letterpaper]{article}
 
 % ── Packages ──────────────────────────────────────────────────────────────────
-\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage[
-  left=0.65in, right=0.65in,
-  top=0.55in,  bottom=0.55in
-]{geometry}
+\usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{microtype}
-\usepackage[hidelinks]{hyperref}
-\usepackage{enumitem}
+\usepackage[empty]{fullpage}
 \usepackage{titlesec}
-\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
 \usepackage{xcolor}
-\usepackage{parskip}
+\usepackage{tabularx}
 
-% ── Colors ────────────────────────────────────────────────────────────────────
-\definecolor{accent}{RGB}{22, 90, 160}
-\definecolor{rulecol}{RGB}{22, 90, 160}
-\definecolor{mutedtext}{RGB}{90, 90, 90}
+% ── Page geometry ─────────────────────────────────────────────────────────────
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-0.5in}
+\addtolength{\textheight}{1.0in}
 
-% ── Section formatting ────────────────────────────────────────────────────────
-\titleformat{\section}
-  {\large\bfseries\color{accent}}{}{0em}{}
-  [\vspace{-4pt}\textcolor{rulecol}{\rule{\linewidth}{0.4pt}}\vspace{-2pt}]
-\titlespacing*{\section}{0pt}{10pt}{4pt}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
 
-% ── List formatting ───────────────────────────────────────────────────────────
-\setlist[itemize]{
-  leftmargin=1.4em,
-  topsep=2pt,
-  itemsep=1.5pt,
-  parsep=0pt,
-  label=\textbullet
+% ── Section formatting (small-caps with full-width rule) ─────────────────────
+\titleformat{\section}{%
+  \vspace{-10pt}\scshape\raggedright\large\bfseries
+}{}{0em}{}[\color{black}\titlerule\vspace{-5pt}]
+
+% ── Hyperlinks ────────────────────────────────────────────────────────────────
+\definecolor{linkblue}{RGB}{0,0,180}
+\hypersetup{colorlinks=true, urlcolor=linkblue, linkcolor=black}
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  Resume layout commands — DO NOT modify; the generator depends on these.
+%  These macros expand to itemize environments; balance Start/End pairs.
+% ══════════════════════════════════════════════════════════════════════════════
+\newcommand{\resumeItem}[1]{%
+  \item\small{%
+    {#1 \vspace{-2pt}}%
+  }%
 }
 
-% ── Hyperlink style ───────────────────────────────────────────────────────────
-\hypersetup{urlcolor=accent}
+\newcommand{\resumeSubheading}[4]{%
+  \vspace{-1pt}\item
+  \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & #2 \\
+    \textit{\small#3} & \textit{\small #4} \\
+  \end{tabular*}\vspace{-5pt}%
+}
 
-% ── No page numbers ───────────────────────────────────────────────────────────
+\newcommand{\resumeProjectHeading}[2]{%
+  \item
+  \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+    \small#1 & #2 \\
+  \end{tabular*}\vspace{-5pt}%
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
 \pagestyle{empty}
 
 \begin{document}
@@ -51,87 +77,78 @@
 %  HEADER
 % ══════════════════════════════════════════════════════════════════════════════
 \begin{center}
-  {\Huge\bfseries (( personal.full_name | le ))}\\[5pt]
-  \small\color{mutedtext}
-  (% if personal.location %)
-    (( personal.location | le ))\enspace\textbar\enspace
-  (% endif %)
-  \href{mailto:(( personal.email | href ))}{\color{accent}(( personal.email | le ))}
-  (% if personal.phone %)
-    \enspace\textbar\enspace(( personal.phone | le ))
-  (% endif %)
-  (% if personal.linkedin %)
-    \enspace\textbar\enspace%
-    \href{https://linkedin.com/in/(( personal.linkedin | href ))}{\color{accent}(( personal.linkedin | le ))}
-  (% endif %)
-  (% if personal.github %)
-    \enspace\textbar\enspace%
-    \href{https://github.com/(( personal.github | href ))}{\color{accent}(( personal.github | le ))}
-  (% endif %)
-  (% if personal.website %)
-    \enspace\textbar\enspace%
-    \href{(( personal.website | href ))}{\color{accent}(( personal.website | le ))}
-  (% endif %)
+  {\Huge \scshape (( personal.full_name | le ))} \\ \vspace{2pt}
+  \small
+  (% if personal.location %)(( personal.location | le )) $|$ (% endif %)%
+  (% if personal.phone %)(( personal.phone | le )) $|$ (% endif %)%
+  \href{mailto:(( personal.email | href ))}{(( personal.email | le ))}%
+  (% if personal.linkedin %) $|$ \href{https://linkedin.com/in/(( personal.linkedin | href ))}{linkedin.com/in/(( personal.linkedin | le ))}(% endif %)%
+  (% if personal.github %) $|$ \href{https://github.com/(( personal.github | href ))}{github.com/(( personal.github | le ))}(% endif %)%
+  (% if personal.website %) $|$ \href{(( personal.website | href ))}{(( personal.website | le ))}(% endif %)
 \end{center}
 
 % ══════════════════════════════════════════════════════════════════════════════
 %  SUMMARY
 % ══════════════════════════════════════════════════════════════════════════════
 (% if summary %)
-\section{Summary}
-\noindent (( summary | le ))
+\section{Professional Summary}
+\small{(( summary | le ))}
 (% endif %)
 
 % ══════════════════════════════════════════════════════════════════════════════
-%  EXPERIENCE
+%  TECHNICAL SKILLS
+% ══════════════════════════════════════════════════════════════════════════════
+(% if skills %)
+\section{Technical Skills}
+\begin{itemize}[leftmargin=0.15in, label={}]
+  \small{\item{
+  (% for category, items in skills.items() %)
+   \textbf{(( category | le ))}{: (( items | join(', ') | le ))} \\
+  (% endfor %)
+  }}
+\end{itemize}
+(% endif %)
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  PROFESSIONAL EXPERIENCE
 % ══════════════════════════════════════════════════════════════════════════════
 (% if experience %)
-\section{Experience}
+\section{Professional Experience}
+\resumeSubHeadingListStart
 (% for role in experience %)
-\noindent
-\begin{tabularx}{\linewidth}{@{}X r@{}}
-  \textbf{(( role.title | le ))} \textbar\ \textit{(( role.company | le ))} &
-  \small\color{mutedtext}(( role.start | le )) -- (( role.end | le if role.end else "Present" )) \\
-  (% if role.location %)
-  \multicolumn{2}{@{}l@{}}{\small\color{mutedtext}(( role.location | le ))}\\
+  \resumeSubheading
+    {(( role.company | le ))}{(% if role.location %)(( role.location | le ))(% endif %)}
+    {(( role.title | le ))}{(( role.start | le )) -- (% if role.end %)(( role.end | le ))(% else %)Present(% endif %)}
+  (% if role.bullets %)
+  \resumeItemListStart
+  (% for bullet in role.bullets %)
+    \resumeItem{(( bullet | le ))}
+  (% endfor %)
+  \resumeItemListEnd
   (% endif %)
-\end{tabularx}
-(% if role.bullets %)
-\begin{itemize}
-(% for bullet in role.bullets %)
-  \item (( bullet | le ))
 (% endfor %)
-\end{itemize}
-(% endif %)
-(% if role.tech %)
-\noindent\small\textbf{Tech:}\ \textcolor{mutedtext}{(( role.tech | join(', ') | le ))}
-(% endif %)
-\vspace{3pt}
-(% endfor %)
+\resumeSubHeadingListEnd
 (% endif %)
 
 % ══════════════════════════════════════════════════════════════════════════════
-%  PROJECTS
+%  FEATURED PROJECTS
 % ══════════════════════════════════════════════════════════════════════════════
 (% if projects %)
-\section{Projects}
+\section{Featured Projects}
+\resumeSubHeadingListStart
 (% for project in projects %)
-\noindent
-\textbf{(( project.name | le ))}%
-(% if project.url %)
-\ {\footnotesize\href{(( project.url | href ))}{\color{accent}[link]}}%
-(% endif %)
-\hfill\small\textcolor{mutedtext}{(( project.tech | join(', ') | le ))}\\
-\textit{\small (( project.description | le ))}
-(% if project.bullets %)
-\begin{itemize}
-(% for bullet in project.bullets %)
-  \item (( bullet | le ))
+  \resumeProjectHeading
+    {\textbf{(( project.name | le ))}(% if project.tech %) $|$ \emph{(( project.tech | join(', ') | le ))}(% endif %)}{(% if project.url %)\href{(( project.url | href ))}{Link}(% endif %)}
+  \resumeItemListStart
+  (% if project.description %)
+    \resumeItem{(( project.description | le ))}
+  (% endif %)
+  (% for bullet in project.bullets %)
+    \resumeItem{(( bullet | le ))}
+  (% endfor %)
+  \resumeItemListEnd
 (% endfor %)
-\end{itemize}
-(% endif %)
-\vspace{3pt}
-(% endfor %)
+\resumeSubHeadingListEnd
 (% endif %)
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -139,35 +156,20 @@
 % ══════════════════════════════════════════════════════════════════════════════
 (% if education %)
 \section{Education}
+\resumeSubHeadingListStart
 (% for edu in education %)
-\noindent
-\begin{tabularx}{\linewidth}{@{}X r@{}}
-  \textbf{(( edu.institution | le ))} &
-  \small\color{mutedtext}(( edu.graduation | le if edu.graduation else "" )) \\
-  \textit{(( edu.degree | le ))(% if edu.field %),\ (( edu.field | le ))(% endif %)} &
-  (% if edu.gpa %)\small GPA:\ (( edu.gpa | le ))(% endif %) \\
-\end{tabularx}
-(% if edu.notes %)
-\begin{itemize}
-(% for note in edu.notes %)
-  \item (( note | le ))
+  \resumeSubheading
+    {(( edu.institution | le ))}{(% if edu.graduation %)(( edu.graduation | le ))(% endif %)}
+    {(( edu.degree | le ))(% if edu.field %), (( edu.field | le ))(% endif %)}{(% if edu.gpa %)GPA: (( edu.gpa | le ))(% endif %)}
+  (% if edu.notes %)
+  \resumeItemListStart
+  (% for note in edu.notes %)
+    \resumeItem{(( note | le ))}
+  (% endfor %)
+  \resumeItemListEnd
+  (% endif %)
 (% endfor %)
-\end{itemize}
-(% endif %)
-\vspace{3pt}
-(% endfor %)
-(% endif %)
-
-% ══════════════════════════════════════════════════════════════════════════════
-%  SKILLS
-% ══════════════════════════════════════════════════════════════════════════════
-(% if skills %)
-\section{Skills}
-\begin{tabular}{@{}l @{\hskip 6pt} p{0.82\linewidth}@{}}
-(% for category, items in skills.items() %)
-  \textbf{(( category | le )):} & (( items | join(' \textbullet\  ') | le )) \\[2pt]
-(% endfor %)
-\end{tabular}
+\resumeSubHeadingListEnd
 (% endif %)
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -175,12 +177,12 @@
 % ══════════════════════════════════════════════════════════════════════════════
 (% if certifications %)
 \section{Certifications}
-\begin{itemize}
-(% for cert in certifications %)
-  \item \textbf{(( cert.name | le ))}%
-  (% if cert.issuer %)\textbf{\ ---}\ (( cert.issuer | le ))(% endif %)%
-  (% if cert.date %)\  \small\color{mutedtext}((  cert.date | le ))(% endif %)
-(% endfor %)
+\begin{itemize}[leftmargin=0.15in, label={}]
+  \small{\item{
+  (% for cert in certifications %)
+   \textbf{(( cert.name | le ))}(% if cert.issuer %) --- (( cert.issuer | le ))(% endif %)(% if cert.date %) \emph{(( cert.date | le ))}(% endif %) \\
+  (% endfor %)
+  }}
 \end{itemize}
 (% endif %)
 
@@ -189,11 +191,11 @@
 % ══════════════════════════════════════════════════════════════════════════════
 (% if publications %)
 \section{Publications}
-\begin{itemize}
+\resumeSubHeadingListStart
 (% for pub in publications %)
-  \item (( pub | le ))
+  \resumeItem{(( pub | le ))}
 (% endfor %)
-\end{itemize}
+\resumeSubHeadingListEnd
 (% endif %)
 
 \end{document}

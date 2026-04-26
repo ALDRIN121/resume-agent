@@ -1,7 +1,10 @@
 """
-LaTeX syntax validation — two-pass check:
-  1. In-process brace/environment balance check (always runs)
-  2. chktex external tool (optional, only if installed)
+LaTeX syntax validation — multi-pass check:
+  1. Required-document structure (\\documentclass, \\begin{document}, \\end{document})
+  2. In-process brace/environment balance
+  3. Custom resume-macro list-pair balance
+  4. Macro-definition presence for any \\resume* macros used in the body
+  5. chktex external tool (optional, only if installed)
 """
 
 from __future__ import annotations
@@ -18,6 +21,22 @@ class LatexCheckResult:
     errors: list[str]
 
 
+# Custom commands defined by the resume template. If the body uses one of these
+# but the preamble doesn't define it, the LaTeX compile will explode with
+# "Undefined control sequence". Catching it here lets the fix loop see a precise
+# error message instead of a Tectonic stack trace.
+_RESUME_MACROS: tuple[str, ...] = (
+    "resumeItem",
+    "resumeSubItem",
+    "resumeSubheading",
+    "resumeProjectHeading",
+    "resumeItemListStart",
+    "resumeItemListEnd",
+    "resumeSubHeadingListStart",
+    "resumeSubHeadingListEnd",
+)
+
+
 def check_latex(source: str) -> LatexCheckResult:
     """
     Check LaTeX source for syntax errors.
@@ -26,15 +45,70 @@ def check_latex(source: str) -> LatexCheckResult:
     """
     errors: list[str] = []
 
-    # Pass 1: structural balance
-    balance_errors = _check_balance(source)
-    errors.extend(balance_errors)
-
-    # Pass 2: chktex (if available)
-    chktex_errors = _run_chktex(source)
-    errors.extend(chktex_errors)
+    errors.extend(_check_required_structure(source))
+    errors.extend(_check_balance(source))
+    errors.extend(_check_resume_macro_pairs(source))
+    errors.extend(_check_resume_macro_defs(source))
+    errors.extend(_run_chktex(source))
 
     return LatexCheckResult(ok=len(errors) == 0, errors=errors)
+
+
+def _check_required_structure(source: str) -> list[str]:
+    """Document must have \\documentclass and a \\begin{document}/\\end{document} pair."""
+    errors: list[str] = []
+    if r"\documentclass" not in source:
+        errors.append("Missing \\documentclass declaration")
+    if r"\begin{document}" not in source:
+        errors.append("Missing \\begin{document}")
+    if r"\end{document}" not in source:
+        errors.append("Missing \\end{document}")
+    return errors
+
+
+def _check_resume_macro_pairs(source: str) -> list[str]:
+    """
+    Verify the custom \\resume*ListStart / \\resume*ListEnd pairs balance.
+
+    These are macros in the preamble, so the generic \\begin/\\end check does
+    not see them — they expand into itemize at compile time. If unbalanced,
+    Tectonic will fail with a confusing "extra \\end{itemize}" later.
+    """
+    errors: list[str] = []
+    pairs = (
+        ("resumeItemListStart", "resumeItemListEnd"),
+        ("resumeSubHeadingListStart", "resumeSubHeadingListEnd"),
+    )
+    for start, end in pairs:
+        n_start = len(re.findall(rf"\\{start}\b", source))
+        n_end = len(re.findall(rf"\\{end}\b", source))
+        if n_start != n_end:
+            errors.append(
+                f"Unbalanced \\{start}/\\{end}: {n_start} start vs {n_end} end"
+            )
+    return errors
+
+
+def _check_resume_macro_defs(source: str) -> list[str]:
+    """
+    If the body uses a \\resume* macro, the preamble must define it.
+
+    LLM "fixes" sometimes delete macro definitions while keeping their
+    invocations — that compiles to "Undefined control sequence" at every use.
+    Catching it here turns a flood of compile errors into one actionable line.
+    """
+    errors: list[str] = []
+    for macro in _RESUME_MACROS:
+        used = re.search(rf"\\{macro}\b", source) is not None
+        if not used:
+            continue
+        defined = re.search(
+            rf"\\(?:newcommand|renewcommand|providecommand)\s*\*?\s*\{{?\\{macro}\b",
+            source,
+        ) is not None
+        if not defined:
+            errors.append(f"\\{macro} is used but not defined in the preamble")
+    return errors
 
 
 def _check_balance(source: str) -> list[str]:

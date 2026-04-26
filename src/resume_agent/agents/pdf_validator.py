@@ -17,23 +17,61 @@ from ..state import ResumeGenState
 from ..ui.panels import print_info, print_warning
 
 _SYSTEM = """\
-You are a professional resume reviewer inspecting a PDF resume rendered as an image.
+You are a meticulous resume layout reviewer inspecting one rendered PDF page.
 
-Evaluate this page for layout quality. Check for:
-- Text overflow or clipping outside margins
-- Uneven or broken columns
-- Inconsistent spacing between sections
-- Orphaned headers (header at page bottom with content on next page)
-- Widow lines (single bullet dangling at page top)
-- Text overlapping other text
-- Misaligned bullet points or date ranges
-- Font size inconsistencies
+The resume uses a small-caps section heading with a horizontal rule, and custom
+itemize macros (\\resumeSubheading, \\resumeProjectHeading, \\resumeItem) that
+produce a left-aligned title with a right-aligned date/location, followed by
+indented bullet points with $\\bullet$ markers.
 
-If the layout is clean and professional: respond ONLY with the word "PASS"
+EVALUATE THIS PAGE FOR THESE ISSUES SPECIFICALLY:
 
-If there are issues: describe EXACTLY what needs fixing using this format:
-  Page {N} | Section "{name}" | Issue: {precise description} | Fix: {specific instruction}
-List one issue per line. Be precise about location so the LaTeX can be corrected.
+A. Margins & overflow
+   - Any text touching or crossing the left/right page edge
+   - Lines that extend past the right margin (look at section rules — body text
+     should never exceed the rule line's right edge)
+   - Bottom-of-page text running off the page
+
+B. Alignment
+   - Two-column rows in \\resumeSubheading where the right column (dates) is
+     not right-flush, or the left column wraps awkwardly into the right column
+   - Bullet points whose text indentation differs from sibling bullets
+   - Bullet markers ($\\bullet$) not visually aligned in the same column
+
+C. Vertical rhythm
+   - Section headings with their underline rule but no body content beneath
+     (orphaned heading at page bottom)
+   - First or last bullet of an itemize stranded alone on a page (widow/orphan)
+   - Inconsistent gap between sections (one section noticeably tighter or
+     looser than its peers)
+   - Large empty whitespace block in the middle or bottom of the page that
+     suggests a forced page break
+
+D. Typography
+   - Mismatched font sizes inside the same section (e.g. one bullet rendered
+     bigger than its siblings)
+   - Unescaped special characters showing as literal LaTeX (e.g. a literal &
+     instead of \\&, $$ instead of $|$, % truncating the line)
+   - Hyperlinks rendered with stray brace characters or incorrect colour
+   - Header (name + contact line) wrapping onto more than 2 lines
+
+E. Content sanity (visible problems only)
+   - Empty bullet ($\\bullet$ with nothing after it)
+   - Duplicate adjacent bullets
+   - Heading text colliding with the rule above/below it
+
+OUTPUT FORMAT — STRICT.
+
+If everything looks clean: respond with EXACTLY the single word PASS (no
+punctuation, no explanation).
+
+Otherwise list each defect on its own line in this format:
+  Page {N} | Section "{visible heading}" | Issue: {what is wrong, precise} | Fix: {concrete LaTeX-level change}
+
+The Fix must be something a LaTeX-savvy editor can act on, e.g.
+"shorten the third bullet under Acme Corp to under 130 characters" or
+"move the Education section before Certifications to absorb whitespace".
+Vague fixes ("improve spacing") are not acceptable.
 """
 
 _HUMAN_IMAGE = "Please evaluate the layout quality of this resume page."
