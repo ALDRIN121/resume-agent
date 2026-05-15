@@ -413,6 +413,18 @@ class TestPDFValidatorNode:
         assert result["validation_passed"] is False
         assert "unavailable" in result["validation_feedback"].lower()
 
+    def test_underfilled_feedback_routes_back_to_generator(self):
+        """Validation feedback (e.g. underfilled last page) must loop back to
+        generate_latex while the retry budget is unspent."""
+        from resume_agent.graph import _route_after_validation
+
+        state = {
+            "validation_passed": False,
+            "validation_feedback": "Page 2 | Last page underfilled — condense.",
+            "generator_retries": 0,
+        }
+        assert _route_after_validation(state, max_retries=3) == "generate_latex"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Bot-wall test — verify it actually tests the fallback path
