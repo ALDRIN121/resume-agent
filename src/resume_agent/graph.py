@@ -9,12 +9,14 @@ Graph topology:
     → analyze_gaps
     → hitl_ask_missing (interrupt_before, skipped if no questions)
     → present_suggestions (interrupt_before)
-    → generate_latex ←─────────────────────────────────────────┐
-    → validate_latex  ──fail──► (above, retry)                 │
-    → compile_pdf     ──fail──► (above, retry)                 │
-    → render_pages                                             │
-    → validate_alignment ──fail──► (above, retry)             │
-    → save_output (on pass) / terminal_failure (budget gone) ──┘
+    → generate_latex ←──────────────────────────────────────────────────┐
+    → resume_lint    ──hard-fail──► generate_latex (retry, capped)      │
+    → validate_latex ──fail──► generate_latex (retry)                   │
+    → compile_pdf    ──fail──► generate_latex (retry)                   │
+    → render_pages                                                       │
+    → validate_alignment ──fail──► generate_latex (retry)               │
+    → hr_review (optional, flag-gated) ──fail──► generate_latex (retry) │
+    → save_output (on pass) / terminal_failure (budget gone) ───────────┘
     → END
 """
 
@@ -29,6 +31,7 @@ from langgraph.types import RetryPolicy
 from .agents.base_resume_loader import load_base_resume_node
 from .agents.gap_analyzer import gap_analyzer_node
 from .agents.hitl import hitl_node
+from .agents.hr_review import hr_review_node
 from .agents.jd_extractor import jd_extractor_node
 from .agents.jd_scraper import jd_scraper_node
 from .agents.latex_validator import latex_validator_node
@@ -40,6 +43,7 @@ from .agents.resume_generator import resume_generator_node
 from .agents.suggestion_presenter import suggestion_presenter_node
 from .agents.terminal_failure import terminal_failure_node
 from .state import ResumeGenState
+from .tools.resume_lint import lint_resume
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -50,6 +54,37 @@ if TYPE_CHECKING:
 HITL_MISSING_NODE = "hitl_ask_missing"
 HITL_SUGGESTIONS_NODE = "present_suggestions"
 HITL_NODES: frozenset[str] = frozenset([HITL_MISSING_NODE, HITL_SUGGESTIONS_NODE])
+
+
+# ── Inline node: resume lint ──────────────────────────────────────────────────
+
+def resume_lint_node(state: ResumeGenState) -> dict:
+    """
+    Run deterministic lint checks on the tailored/base resume.
+
+    Results are stored in lint_feedback. Hard failures cause the router to send
+    the graph back to generate_latex (up to the retry budget).
+    """
+    from .ui.panels import print_agent_step, print_info, print_warning
+
+    resume = state.get("tailored_resume") or state.get("base_resume")
+    if resume is None:
+        return {"lint_feedback": None}
+
+    print_agent_step("Resume Lint", "Running deterministic quality checks…")
+    result = lint_resume(resume)
+
+    if not result.issues:
+        print_info("Lint: all checks passed.")
+        return {"lint_feedback": None}
+
+    for issue in result.issues:
+        (print_warning if issue.severity == "fail" else print_info)(
+            f"  [{issue.severity.upper()}] {issue.code}: {issue.message}"
+        )
+
+    feedback = result.feedback_text() if result.has_failures else None
+    return {"lint_feedback": feedback}
 
 
 # ── Static routing functions (no settings dependency) ─────────────────────────
@@ -99,11 +134,29 @@ def _route_after_render(state: ResumeGenState, *, max_retries: int = 3) -> str:
     return "validate_alignment"
 
 
+def _route_after_lint(state: ResumeGenState, *, max_retries: int = 3) -> str:
+    """Retry generation on hard lint failures (if budget allows), else validate LaTeX."""
+    if state.get("lint_feedback"):
+        if state.get("generator_retries", 0) >= max_retries:
+            return "validate_latex"  # give up on lint, still attempt validation
+        return "generate_latex"
+    return "validate_latex"
+
+
 def _route_after_validation(state: ResumeGenState, *, max_retries: int = 3) -> str:
-    """Retry generation on alignment issues (if budget allows), else save output."""
+    """Retry generation on alignment issues (if budget allows), else hr_review or save."""
     if not state.get("validation_passed", False):
         if state.get("generator_retries", 0) >= max_retries:
             return "terminal_failure"
+        return "generate_latex"
+    return "hr_review"
+
+
+def _route_after_hr_review(state: ResumeGenState, *, max_retries: int = 3) -> str:
+    """Retry generation if HR review set validation_passed=False, else save."""
+    if not state.get("validation_passed", True):
+        if state.get("generator_retries", 0) >= max_retries:
+            return "save_output"  # HR review failure is advisory, not terminal
         return "generate_latex"
     return "save_output"
 
@@ -130,9 +183,14 @@ def build_graph(
 
     max_retries = settings.retries.generator_max
 
+    enable_hr_review = settings.features.enable_hr_review
+
     # Routing closures capture max_retries once — no disk reads during execution
     def _retry_after_latex(state: ResumeGenState) -> str:
         return _route_after_latex_validation(state, max_retries=max_retries)
+
+    def _retry_after_lint(state: ResumeGenState) -> str:
+        return _route_after_lint(state, max_retries=max_retries)
 
     def _retry_after_compile(state: ResumeGenState) -> str:
         return _route_after_compile(state, max_retries=max_retries)
@@ -141,7 +199,14 @@ def build_graph(
         return _route_after_render(state, max_retries=max_retries)
 
     def _retry_after_validation(state: ResumeGenState) -> str:
-        return _route_after_validation(state, max_retries=max_retries)
+        # When HR review is disabled, go directly to save_output
+        result = _route_after_validation(state, max_retries=max_retries)
+        if result == "hr_review" and not enable_hr_review:
+            return "save_output"
+        return result
+
+    def _retry_after_hr_review(state: ResumeGenState) -> str:
+        return _route_after_hr_review(state, max_retries=max_retries)
 
     builder = StateGraph(ResumeGenState)
     llm_retry_policy = RetryPolicy(max_attempts=2)
@@ -170,12 +235,18 @@ def build_graph(
         partial(resume_generator_node, settings=settings),
         retry_policy=llm_retry_policy,
     )
+    builder.add_node("resume_lint", resume_lint_node)
     builder.add_node("validate_latex", latex_validator_node)
     builder.add_node("compile_pdf", partial(pdf_compiler_node, settings=settings))
     builder.add_node("render_pages", render_pages_node)
     builder.add_node(
         "validate_alignment",
         partial(pdf_validator_node, settings=settings),
+        retry_policy=llm_retry_policy,
+    )
+    builder.add_node(
+        "hr_review",
+        partial(hr_review_node, settings=settings),
         retry_policy=llm_retry_policy,
     )
     builder.add_node("save_output", partial(output_saver_node, settings=settings))
@@ -193,8 +264,13 @@ def build_graph(
     )
     builder.add_edge(HITL_MISSING_NODE, HITL_SUGGESTIONS_NODE)
     builder.add_edge(HITL_SUGGESTIONS_NODE, "generate_latex")
-    builder.add_edge("generate_latex", "validate_latex")
+    builder.add_edge("generate_latex", "resume_lint")
 
+    builder.add_conditional_edges(
+        "resume_lint",
+        _retry_after_lint,
+        ["generate_latex", "validate_latex"],
+    )
     builder.add_conditional_edges(
         "validate_latex",
         _retry_after_latex,
@@ -213,7 +289,12 @@ def build_graph(
     builder.add_conditional_edges(
         "validate_alignment",
         _retry_after_validation,
-        ["generate_latex", "save_output", "terminal_failure"],
+        ["generate_latex", "hr_review", "save_output", "terminal_failure"],
+    )
+    builder.add_conditional_edges(
+        "hr_review",
+        _retry_after_hr_review,
+        ["generate_latex", "save_output"],
     )
 
     builder.add_edge("save_output", END)

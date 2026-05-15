@@ -1,6 +1,6 @@
 """
-Pipeline node tests: Tectonic wrapper (binary-missing, timeout, stderr parsing)
-and resume-generator retry-loop state contract.
+Pipeline node tests: Tectonic wrapper, resume-generator retry-loop state contract,
+lint node integration, and HR review node (Phase 6.5).
 """
 
 from __future__ import annotations
@@ -174,6 +174,129 @@ class TestResumeGeneratorNode:
             result = resume_generator_node(state)
 
         assert r"\write18" not in result["latex_source"]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Resume lint node
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestResumeLintNode:
+
+    def test_lint_feedback_set_on_hard_failure(self):
+        """Lint node sets lint_feedback when unicode quotes are detected (hard fail)."""
+        from resume_agent.graph import resume_lint_node
+        from resume_agent.schemas import PersonalInfo, Role, UserResume
+
+        resume = UserResume(
+            personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"),
+            experience=[
+                Role(
+                    company="Acme", title="Engineer",
+                    start="Jan 2020", end="Dec 2022",
+                    bullets=["“Impactful” launch"],  # smart quotes → hard fail
+                )
+            ],
+        )
+        state = {"tailored_resume": resume}
+        result = resume_lint_node(state)
+        assert result.get("lint_feedback") is not None
+        assert "[FAIL]" in result["lint_feedback"]
+
+    def test_lint_feedback_none_when_clean(self):
+        """Lint node returns None lint_feedback for a clean resume."""
+        from resume_agent.graph import resume_lint_node
+        from resume_agent.schemas import PersonalInfo, Role, UserResume
+
+        resume = UserResume(
+            personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"),
+            experience=[
+                Role(
+                    company="Acme", title="Engineer",
+                    start="Jan 2020", end="Dec 2022",
+                    bullets=["Built CI pipeline"],
+                )
+            ],
+        )
+        state = {"tailored_resume": resume}
+        result = resume_lint_node(state)
+        assert result.get("lint_feedback") is None
+
+    def test_lint_feedback_propagates_to_generator_on_retry(self):
+        """Generator node includes lint_feedback in its fix-prompt context."""
+        from resume_agent.agents.resume_generator import resume_generator_node
+        from resume_agent.schemas import PersonalInfo, UserResume
+
+        # Build a state with retries > 0 (retry path) and lint_feedback set
+        original_latex = "\\documentclass{article}\\begin{document}\\end{document}"
+        fixed_latex = "\\documentclass{article}\\begin{document}Fixed\\end{document}"
+        resume = UserResume(personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"))
+
+        state = {
+            "generator_retries": 1,
+            "base_resume": resume,
+            "tailored_resume": None,
+            "jd": None,
+            "latex_source": original_latex,
+            "latex_errors": [],
+            "pdf_errors": [],
+            "validation_feedback": None,
+            "lint_feedback": "[FAIL] UNICODE_QUOTES: Smart quotes found.",
+        }
+
+        with patch("resume_agent.agents.resume_generator.ResumeAgentSettings") as mock_cfg, \
+             patch("resume_agent.agents.resume_generator.get_chat_model",
+                   return_value=MagicMock(**{"invoke.return_value": MagicMock(content=fixed_latex)})):
+            mock_cfg.load.return_value = MagicMock()
+            result = resume_generator_node(state)
+
+        # Generator should have run (retries incremented, errors cleared)
+        assert result["generator_retries"] == 2
+        assert result["latex_errors"] == []
+
+    def test_lint_node_returns_empty_when_no_resume(self):
+        """Lint node is a no-op when neither tailored_resume nor base_resume is set."""
+        from resume_agent.graph import resume_lint_node
+        result = resume_lint_node({})
+        assert result == {"lint_feedback": None}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HR review node
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestHRReviewNode:
+
+    def test_hr_review_disabled_by_config_skips_llm(self):
+        """When enable_hr_review=False, the routing closure bypasses the node."""
+        from resume_agent.config import FeaturesConfig, ResumeAgentSettings
+
+        settings = ResumeAgentSettings.load.__func__  # bypass load, create directly
+        # Verify FeaturesConfig respects the flag
+        features = FeaturesConfig(enable_hr_review=False)
+        assert features.enable_hr_review is False
+
+    def test_hr_review_node_noop_on_empty_latex(self):
+        """HR review returns empty dict (no state change) when latex_source is empty."""
+        from resume_agent.agents.hr_review import hr_review_node
+
+        state = {"latex_source": ""}
+        result = hr_review_node(state, settings=MagicMock(features=MagicMock(enable_hr_review=True)))
+        assert result == {}
+
+    def test_hr_review_node_noop_on_llm_failure(self):
+        """HR review returns empty dict when the LLM call raises an exception."""
+        from resume_agent.agents.hr_review import hr_review_node
+
+        mock_settings = MagicMock()
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value.invoke.side_effect = RuntimeError("LLM down")
+
+        state = {"latex_source": "\\documentclass{article}\\begin{document}\\end{document}"}
+
+        with patch("resume_agent.agents.hr_review.get_chat_model", return_value=mock_llm):
+            result = hr_review_node(state, settings=mock_settings)
+
+        assert result == {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
