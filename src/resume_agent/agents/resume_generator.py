@@ -49,10 +49,11 @@ TEMPLATE STRUCTURE — these rules are NON-NEGOTIABLE:
   template intentionally avoids icons for cross-platform font compatibility.
 - Do NOT change \\documentclass, \\geometry, \\addtolength margin commands,
   \\titleformat, or the section ruling. Layout density is part of the design.
-- Keep $|$ as the header separator (math-mode pipe). Do not replace with \\textbar
-  or fontawesome icons.
+- The header uses \\, \\textbar \\, as the contact-item separator (text-mode pipe
+  with thin spaces). Do not replace with $|$ or fontawesome icons.
 - Escape user text properly: &, %, #, _, $ must be backslash-escaped when they
   appear in narrative text. Never escape them inside \\href{URL}{...}'s URL part.
+- Use straight ASCII apostrophes ('). Do not use smart/curly quotes (‘ ’ “ ”).
 """
 
 _POLISH_SYSTEM_HEAD = """\
@@ -67,6 +68,26 @@ Your job, on the LaTeX draft you receive:
    - Keep each bullet to 1-2 lines maximum
 2. Tighten the Professional Summary similarly — concise, keyword-aware, no invented facts.
 3. Fix any obvious LaTeX syntax issues you encounter while polishing.
+4. METRIC DISCIPLINE:
+   - At most ONE numeric claim per bullet. If two metrics appear, keep the
+     stronger one and convert the other to qualitative language.
+   - Across the entire resume, aim for 40-60% of bullets to be quantified,
+     not 100%. Over-quantification destroys credibility.
+   - Soften attribution where the role's seniority cannot plausibly own the
+     outcome (e.g. an Associate Engineer "drove revenue" → "contributed to").
+5. TENSE CONSISTENCY:
+   - Current role (no end date / "Present"): all bullets in PRESENT tense
+     ("Lead", "Architect", "Mentor", "Collaborate"), NEVER past or perfect.
+   - All prior roles: all bullets in SIMPLE PAST ("Built", "Optimized",
+     "Shipped"), NEVER present.
+   - Do not mix tenses within a single role.
+6. APOSTROPHES & PUNCTUATION:
+   - Preserve possessive apostrophes ("company's", "team's"). Do not silently
+     drop them. Use straight ASCII apostrophe ('), not smart quotes.
+   - Use en-dash (--) for date ranges, never hyphen.
+7. ACTION-VERB RULE:
+   - Every bullet starts with a strong verb. Banned openers: "Worked on",
+     "Helped", "Was responsible for", "Participated in", "Involved in".
 
 """
 
@@ -146,22 +167,25 @@ def resume_generator_node(
     latex_errors = state.get("latex_errors", [])
     pdf_errors = state.get("pdf_errors", [])
     validation_feedback = state.get("validation_feedback", "")
+    lint_feedback = state.get("lint_feedback", "")
 
     if retries > 0 and existing_latex:
         print_agent_step("Resume Writer", f"Self-correcting LaTeX (attempt {retries + 1})…")
         all_errors = latex_errors + pdf_errors
-        if all_errors or validation_feedback:
+        # Merge lint feedback into validation feedback for the fix prompt
+        combined_feedback_parts = [p for p in [validation_feedback, lint_feedback] if p]
+        combined_feedback = "\n".join(combined_feedback_parts)
+        if all_errors or combined_feedback:
             print_warning("Issues to address:")
             for err in all_errors:
                 print_info(f"  • {err}")
-            if validation_feedback:
-                for line in validation_feedback.split("\n"):
-                    if line.strip():
-                        print_info(f"  • {line}")
+            for line in combined_feedback.split("\n"):
+                if line.strip():
+                    print_info(f"  • {line}")
         latex_source = _fix_latex(
             existing_latex,
             errors=all_errors,
-            feedback=validation_feedback or "",
+            feedback=combined_feedback or "",
             settings=settings,
         )
     else:
@@ -184,6 +208,19 @@ def resume_generator_node(
     }
 
 
+# Canonical category order for the Skills section.
+# Categories are surfaced in this order so recruiter-critical keywords appear first.
+# Any categories not in this list are appended after the top-5 in original order.
+_SKILL_ORDER = [
+    "Languages",
+    "Frameworks",
+    "Cloud",
+    "GenAI",
+    "MLOps",
+    "Tools",
+]
+
+
 def _render_template(resume) -> str:
     """Render the Jinja2 LaTeX template with resume data."""
     env = Environment(
@@ -203,6 +240,21 @@ def _render_template(resume) -> str:
 
     template = env.get_template("default.tex.jinja")
     data = resume.model_dump() if resume else {}
+
+    # Reorder skills so high-signal categories appear first.
+    raw_skills: dict = data.get("skills", {})
+    if raw_skills:
+        ordered: dict = {}
+        for cat in _SKILL_ORDER:
+            # Case-insensitive match
+            for key in list(raw_skills.keys()):
+                if key.lower() == cat.lower() and key not in ordered:
+                    ordered[key] = raw_skills[key]
+        for key, val in raw_skills.items():
+            if key not in ordered:
+                ordered[key] = val
+        data["skills"] = ordered
+
     return template.render(**data)
 
 
@@ -351,6 +403,15 @@ _LATEX_ESCAPE_MAP: dict[str, str] = {
     "^":  r"\^{}",
     "<":  r"\textless{}",
     ">":  r"\textgreater{}",
+    # Unicode punctuation → LaTeX-safe ASCII equivalents
+    "’": "'",    # right single quotation mark → straight apostrophe
+    "‘": "`",    # left single quotation mark → backtick
+    "“": "``",   # left double quotation mark
+    "”": "''",   # right double quotation mark
+    "–": "--",   # en-dash
+    "—": "---",  # em-dash
+    "…": "\\ldots{}",  # horizontal ellipsis
+    "·": "\\textperiodcentered{}",  # middle dot (used as tech separator)
 }
 
 

@@ -67,6 +67,10 @@ class RetriesConfig(BaseModel):
     generator_max: int = 5
 
 
+class FeaturesConfig(BaseModel):
+    enable_hr_review: bool = True  # opt-out: set false in config.yaml to skip HR pre-flight
+
+
 # ── Main Settings ──────────────────────────────────────────────────────────────
 
 class ResumeAgentSettings(BaseSettings):
@@ -76,6 +80,7 @@ class ResumeAgentSettings(BaseSettings):
     latex: LatexConfig = Field(default_factory=LatexConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     retries: RetriesConfig = Field(default_factory=RetriesConfig)
+    features: FeaturesConfig = Field(default_factory=FeaturesConfig)
 
     # Passed via env or ~/.resume_generator/.env
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")

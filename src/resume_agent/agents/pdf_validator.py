@@ -60,6 +60,20 @@ E. Content sanity (visible problems only)
    - Duplicate adjacent bullets
    - Heading text colliding with the rule above/below it
 
+F. Page balance & density
+   - If this is the LAST page and its content fills less than ~30% of the
+     vertical page height, flag it: "Last page underfilled — consider
+     condensing content to N-1 pages."
+   - If a section heading appears within the bottom 15% of any non-last page
+     with no body content beneath it on that page (orphaned heading), flag it:
+     "Orphaned heading at page bottom — move content or adjust spacing."
+
+G. Metric overload
+   - If 6 or more adjacent bullets each contain a numeric percentage or a
+     factor like "3x", "5x", flag it: "Metric density too high in
+     [section name] — visually reads as inflated claims; vary with qualitative
+     language every 2–3 bullets."
+
 OUTPUT FORMAT — STRICT.
 
 If everything looks clean: respond with EXACTLY the single word PASS (no

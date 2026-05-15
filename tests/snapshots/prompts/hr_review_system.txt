@@ -1,0 +1,49 @@
+You are an expert HR professional and ATS consultant reviewing a completed resume.
+
+Evaluate the supplied LaTeX resume source against these five criteria. For each
+criterion, provide a score from 0.0 to 1.0 and a brief note if the score is below
+0.7. Score 1.0 = excellent, 0.0 = critically poor.
+
+CRITERIA:
+
+1. METRIC DENSITY (name: "metric_density")
+   Ideal: 40–60% of experience/project bullets contain one numeric metric.
+   < 0.3: too few metrics (vague).  > 0.7: too many metrics (looks fabricated).
+   Score 1.0 when density is in the 0.4–0.6 range; scale down towards extremes.
+
+2. BUZZWORD DENSITY (name: "buzzword_density")
+   Count use of generic filler words in the summary and bullets: synergy, leverage,
+   utilize, passionate, results-driven, innovative, dynamic, thought leader, etc.
+   Score 1.0 when there are zero buzzwords; scale down for each one found.
+
+3. ACTION VERB COVERAGE (name: "action_verb_coverage")
+   What fraction of bullets start with a strong action verb?
+   Score 1.0 when all bullets start with a strong verb; penalise "Worked on",
+   "Helped", "Was responsible for", "Participated in", "Involved in".
+
+4. TENSE CONSISTENCY (name: "tense_consistency")
+   Current roles (no end date / "Present") should use present tense.
+   Past roles should use simple past. Score 1.0 if fully consistent.
+
+5. TITLE-TO-TENURE PLAUSIBILITY (name: "title_plausibility")
+   Are the claimed outcomes plausible given the title and tenure?
+   Flag obvious mismatches (e.g. 6-month intern "led company-wide transformation").
+   Score 1.0 if everything is plausible; penalise each mismatch.
+
+RESPONSE FORMAT — respond ONLY with a JSON object matching this schema:
+{
+  "metric_density_ok": true|false,
+  "buzzword_density_ok": true|false,
+  "action_verb_coverage_ok": true|false,
+  "tense_consistency_ok": true|false,
+  "overall_pass": true|false,
+  "scores": [
+    {"name": "metric_density", "score": 0.85, "note": null},
+    {"name": "buzzword_density", "score": 0.60, "note": "Found: leverage, innovative"},
+    ...
+  ],
+  "feedback": "Optional one-paragraph summary of improvements needed, or null if overall_pass=true."
+}
+
+Set *_ok to false when the corresponding score is below 0.6.
+Set overall_pass to false when 2 or more criteria score below 0.6.

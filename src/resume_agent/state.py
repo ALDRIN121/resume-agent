@@ -59,6 +59,9 @@ class ResumeGenState(TypedDict, total=False):
     validation_feedback: Optional[str]
     validation_passed: bool
 
+    # Feedback from the deterministic resume lint pass (Phase 4)
+    lint_feedback: Optional[str]
+
     # ── Retry budget (shared across latex→compile→validate loops) ─────────────
     generator_retries: int
 

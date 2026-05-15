@@ -124,8 +124,9 @@ class TestGraphRouting:
     def test_route_after_validation_passed(self):
         from resume_agent.graph import _route_after_validation
 
+        # On pass, route to hr_review (which then routes to save_output)
         state = {"validation_passed": True, "generator_retries": 1}
-        assert _route_after_validation(state) == "save_output"
+        assert _route_after_validation(state) == "hr_review"
 
     def test_route_after_validation_failed_with_budget(self):
         from resume_agent.graph import _route_after_validation
