@@ -84,7 +84,12 @@ def resume_lint_node(state: ResumeGenState) -> dict:
         )
 
     feedback = result.feedback_text() if result.has_failures else None
-    return {"lint_feedback": feedback}
+    if feedback:
+        return {
+            "lint_feedback": feedback,
+            "lint_retries": state.get("lint_retries", 0) + 1,
+        }
+    return {"lint_feedback": None}
 
 
 # ── Static routing functions (no settings dependency) ─────────────────────────
@@ -134,11 +139,14 @@ def _route_after_render(state: ResumeGenState, *, max_retries: int = 3) -> str:
     return "validate_alignment"
 
 
-def _route_after_lint(state: ResumeGenState, *, max_retries: int = 3) -> str:
-    """Retry generation on hard lint failures (if budget allows), else validate LaTeX."""
+_LINT_MAX_RETRIES = 2  # lint retries are capped independently of generator_retries
+
+
+def _route_after_lint(state: ResumeGenState) -> str:
+    """Retry generation on hard lint failures (cap: 2), then fall through to validate_latex."""
     if state.get("lint_feedback"):
-        if state.get("generator_retries", 0) >= max_retries:
-            return "validate_latex"  # give up on lint, still attempt validation
+        if state.get("lint_retries", 0) >= _LINT_MAX_RETRIES:
+            return "validate_latex"  # budget exhausted; proceed anyway
         return "generate_latex"
     return "validate_latex"
 
@@ -190,7 +198,7 @@ def build_graph(
         return _route_after_latex_validation(state, max_retries=max_retries)
 
     def _retry_after_lint(state: ResumeGenState) -> str:
-        return _route_after_lint(state, max_retries=max_retries)
+        return _route_after_lint(state)
 
     def _retry_after_compile(state: ResumeGenState) -> str:
         return _route_after_compile(state, max_retries=max_retries)
