@@ -45,9 +45,11 @@ Example format:
 """
 
 
-def jd_extractor_node(state: ResumeGenState) -> dict:
+def jd_extractor_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """Extract structured JobDescription from scraped or user-provided text."""
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     llm = get_chat_model(settings, task="structured")
     structured_llm = llm.with_structured_output(JobDescription)
 

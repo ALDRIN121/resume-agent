@@ -77,7 +77,9 @@ Vague fixes ("improve spacing") are not acceptable.
 _HUMAN_IMAGE = "Please evaluate the layout quality of this resume page."
 
 
-def pdf_validator_node(state: ResumeGenState) -> dict:
+def pdf_validator_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """
     Check each PDF page image for layout problems using a vision LLM.
     Sets validation_passed=True or provides validation_feedback for retry.
@@ -85,10 +87,10 @@ def pdf_validator_node(state: ResumeGenState) -> dict:
     page_images: list[str] = state.get("page_images", [])
 
     if not page_images:
-        # No images to validate — skip (already handled in render_pages)
-        return {"validation_passed": True, "validation_feedback": None}
+        feedback = "No rendered page images available — layout unverified."
+        return {"validation_passed": False, "validation_feedback": feedback}
 
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     llm = get_chat_model(settings, task="vision", temperature=0.0)
 
     print_info(f"Validating layout of {len(page_images)} page(s) with vision model…")

@@ -55,9 +55,11 @@ Keywords: {keywords}
 """
 
 
-def gap_analyzer_node(state: ResumeGenState) -> dict:
+def gap_analyzer_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """Analyze gaps between base resume and target JD."""
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     llm = get_chat_model(settings, task="structured")
     structured_llm = llm.with_structured_output(GapAnalysis)
 

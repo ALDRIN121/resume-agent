@@ -22,7 +22,8 @@ from readability import Document
 # Markers that indicate JS-gated or bot-wall pages
 _BOT_WALL_PATTERNS = re.compile(
     r"enable javascript|please verify|captcha|sign in to view|"
-    r"access denied|403 forbidden|bot detected",
+    r"access denied|403 forbidden|bot detected|choose language|"
+    r"選擇語言|join now|go to your feed|pumunta sa iyong feed",
     re.IGNORECASE,
 )
 
@@ -176,8 +177,6 @@ async def _scrape_playwright(url: str, *, timeout: int) -> tuple[str, str | None
             # Block requests to private IPs at the Playwright level
             async def _block_private(route, request):
                 try:
-                    parsed = urlparse(request.url)
-                    hostname = parsed.hostname or ""
                     _validate_url(request.url)
                     await route.continue_()
                 except ValueError:

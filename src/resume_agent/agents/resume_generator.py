@@ -130,9 +130,11 @@ LATEX SOURCE:
 """
 
 
-def resume_generator_node(state: ResumeGenState) -> dict:
+def resume_generator_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """Generate (or regenerate/fix) LaTeX source from tailored resume."""
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     retries = state.get("generator_retries", 0)
 
     # Use tailored_resume if available, else fall back to base_resume
@@ -174,6 +176,9 @@ def resume_generator_node(state: ResumeGenState) -> dict:
         "latex_source": latex_source,
         "latex_errors": [],
         "pdf_errors": [],
+        "pdf_path": None,
+        "page_images": [],
+        "validation_passed": False,
         "validation_feedback": None,
         "generator_retries": retries + 1,
     }

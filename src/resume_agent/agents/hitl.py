@@ -12,10 +12,11 @@ from __future__ import annotations
 import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.types import interrupt
 
 from ..config import MAX_RESUME_JSON_CHARS, ResumeAgentSettings
 from ..llm import get_chat_model
-from ..schemas import UserResume
+from ..schemas import GapAnalysis, UserResume
 from ..state import ResumeGenState
 from ..ui.panels import print_info
 
@@ -42,24 +43,32 @@ Return the updated UserResume JSON incorporating confirmed answers.
 """
 
 
-def hitl_node(state: ResumeGenState) -> dict:
+def hitl_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """
     Process HITL answers and enrich the base resume.
-    The interrupt_before pause happens BEFORE this node runs;
-    by the time it runs, hitl_answers is already populated in state.
+    The node owns the LangGraph interrupt/resume contract: it surfaces the
+    questions to the caller and receives the answers via Command(resume=...).
     """
-    hitl_answers = state.get("hitl_answers", {})
     base_resume = state.get("base_resume")
+    gap_analysis = _coerce_gap_analysis(state.get("gap_analysis"))
+
+    if not gap_analysis or not gap_analysis.open_questions:
+        return {"tailored_resume": base_resume}
+
+    raw_answers = interrupt(
+        {
+            "kind": "missing_questions",
+            "questions": [q.model_dump() for q in gap_analysis.open_questions],
+        }
+    )
+    hitl_answers = _coerce_answers(raw_answers)
 
     if not hitl_answers or not any(v.strip() for v in hitl_answers.values()):
-        # No answers provided — pass base resume through unchanged
         return {"tailored_resume": base_resume}
 
-    gap_analysis = state.get("gap_analysis")
-    if not gap_analysis:
-        return {"tailored_resume": base_resume}
-
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     llm = get_chat_model(settings, task="structured")
     structured_llm = llm.with_structured_output(UserResume)
 
@@ -86,4 +95,28 @@ def hitl_node(state: ResumeGenState) -> dict:
     ]
 
     enriched: UserResume = structured_llm.invoke(messages)
-    return {"tailored_resume": enriched}
+    return {"hitl_answers": hitl_answers, "tailored_resume": enriched}
+
+
+def _coerce_gap_analysis(raw) -> GapAnalysis | None:
+    """Handle checkpoint round-trips that may turn Pydantic models into dicts."""
+    if raw is None:
+        return None
+    if isinstance(raw, GapAnalysis):
+        return raw
+    if isinstance(raw, dict):
+        try:
+            return GapAnalysis.model_validate(raw)
+        except Exception:
+            return None
+    return raw if hasattr(raw, "open_questions") else None
+
+
+def _coerce_answers(raw) -> dict[str, str]:
+    """Normalize a resume payload into question_id -> answer."""
+    if not isinstance(raw, dict):
+        return {}
+    answers = raw.get("answers", raw)
+    if not isinstance(answers, dict):
+        return {}
+    return {str(k): str(v).strip() for k, v in answers.items()}

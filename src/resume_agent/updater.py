@@ -133,12 +133,15 @@ def check_for_update() -> Optional[str]:
     return None
 
 
-def perform_update(repo: Path) -> tuple[bool, str, str]:
+def perform_update(repo: Path) -> tuple[bool, str, str, bool]:
     """
     Pull latest changes from GitHub and re-install via uv.
-    Returns (success, error_hint, captured_output).
+    Returns (success, error_hint, captured_output, did_update).
     error_hint is "" on success or "windows_locked" for the Windows file-lock case.
+    did_update is True only when new commits were actually pulled.
     """
+    sha_before = _get_local_sha()
+
     r1 = subprocess.run(
         ["git", "-C", str(repo), "pull"],
         check=False,
@@ -152,7 +155,10 @@ def perform_update(repo: Path) -> tuple[bool, str, str]:
         print(r1.stderr, end="", flush=True)
 
     if r1.returncode != 0:
-        return False, "", (r1.stderr + r1.stdout).strip()
+        return False, "", (r1.stderr + r1.stdout).strip(), False
+
+    sha_after = _get_local_sha()
+    did_update = bool(sha_before and sha_after and sha_before != sha_after)
 
     uv = _find_uv()
     cmd = [uv, "tool", "install", ".", "--force"] if uv else ["uv", "sync"]
@@ -162,7 +168,7 @@ def perform_update(repo: Path) -> tuple[bool, str, str]:
         new_sha = _get_local_sha()
         if new_sha:
             _save_remote_sha(new_sha)
-        return True, "", ""
+        return True, "", "", did_update
 
     combined = ((r2.stderr or "") + (r2.stdout or "")).strip()
     low = combined.lower()
@@ -175,8 +181,8 @@ def perform_update(repo: Path) -> tuple[bool, str, str]:
         or "being used by another process" in low
         or "cannot access the file" in low
     ):
-        return False, "windows_locked", combined
-    return False, "", combined
+        return False, "windows_locked", combined, False
+    return False, "", combined, False
 
 
 def _find_uv() -> Optional[str]:

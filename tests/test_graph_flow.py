@@ -6,7 +6,6 @@ without making actual LLM API calls.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 from resume_agent.schemas import (
     GapAnalysis,
@@ -75,6 +74,7 @@ class TestGraphRouting:
 
     def test_route_after_scrape_error(self):
         from langgraph.graph import END
+
         from resume_agent.graph import _route_after_scrape
 
         state = {"scrape_error": "HTTP 404: Not Found"}
@@ -133,6 +133,18 @@ class TestGraphRouting:
         state = {"validation_passed": False, "generator_retries": 1}
         assert _route_after_validation(state) == "generate_latex"
 
+    def test_route_after_render_error_with_budget(self):
+        from resume_agent.graph import _route_after_render
+
+        state = {"pdf_errors": ["render failed"], "generator_retries": 1}
+        assert _route_after_render(state) == "generate_latex"
+
+    def test_route_after_render_error_budget_exhausted(self):
+        from resume_agent.graph import _route_after_render
+
+        state = {"pdf_errors": ["render failed"], "generator_retries": 3}
+        assert _route_after_render(state) == "terminal_failure"
+
 
 class TestSuggestionApplier:
     """Test that approved suggestions correctly modify the resume."""
@@ -170,11 +182,68 @@ class TestSuggestionApplier:
 
     def test_skips_unapproved(self, sample_resume):
         from resume_agent.agents.suggestion_presenter import _apply_suggestions
-        from resume_agent.schemas import Suggestion
 
         # No suggestions approved
         updated = _apply_suggestions(sample_resume, [])
         assert updated.experience[0].bullets == sample_resume.experience[0].bullets
+
+    def test_node_reads_suggestions_from_gap_analysis_fallback(self, sample_resume):
+        from resume_agent.agents.suggestion_presenter import suggestion_presenter_node
+        from resume_agent.schemas import GapAnalysis, Suggestion
+
+        suggestion = Suggestion(
+            id="s1",
+            section="experience",
+            role_company="Acme Corp",
+            before="Built REST APIs",
+            after="Designed REST APIs for distributed services",
+            rationale="Mirrors JD keywords",
+        )
+        state = {
+            "base_resume": sample_resume,
+            "gap_analysis": GapAnalysis(tailoring_ideas=[suggestion]),
+            "approved_suggestion_ids": ["s1"],
+        }
+
+        result = suggestion_presenter_node(state)
+
+        assert result["approved_suggestion_ids"] == ["s1"]
+        assert "Designed REST APIs for distributed services" in result["tailored_resume"].experience[0].bullets
+
+    def test_suggestion_node_interrupts_and_resumes(self, sample_resume):
+        from langgraph.checkpoint.memory import InMemorySaver
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.types import Command
+
+        from resume_agent.agents.suggestion_presenter import suggestion_presenter_node
+        from resume_agent.schemas import Suggestion
+        from resume_agent.state import ResumeGenState
+
+        suggestion = Suggestion(
+            id="s1",
+            section="experience",
+            role_company="Acme Corp",
+            before="Built REST APIs",
+            after="Designed REST APIs for distributed services",
+            rationale="Mirrors JD keywords",
+        )
+        builder = StateGraph(ResumeGenState)
+        builder.add_node("present_suggestions", suggestion_presenter_node)
+        builder.add_edge(START, "present_suggestions")
+        builder.add_edge("present_suggestions", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+        config = {"configurable": {"thread_id": "suggestion-test"}}
+
+        first = graph.invoke(
+            {"base_resume": sample_resume, "suggestions": [suggestion]},
+            config,
+        )
+        payload = first["__interrupt__"][0].value
+        assert payload["kind"] == "tailoring_suggestions"
+
+        final = graph.invoke(Command(resume={"approved_ids": ["s1"]}), config)
+        assert final["approved_suggestion_ids"] == ["s1"]
+        assert "Designed REST APIs for distributed services" in final["tailored_resume"].experience[0].bullets
 
 
 class TestBuildGraph:
@@ -215,9 +284,27 @@ class TestCLIImport:
         # runtime so some may be None); just verify ≥4 are wired up.
         assert len(app.registered_commands) >= 4
 
+    def test_graph_config_sets_thread_and_recursion_limit(self):
+        from resume_agent.cli import _graph_config
+        from resume_agent.config import ResumeAgentSettings, RetriesConfig
+
+        settings = ResumeAgentSettings(retries=RetriesConfig(generator_max=5))
+        config = _graph_config("thread-123", settings)
+
+        assert config["configurable"]["thread_id"] == "thread-123"
+        assert config["recursion_limit"] >= 50
+
 
 class TestPDFValidatorNode:
     """Vision validator must distinguish PASS from API-error (not silently PASS)."""
+
+    def test_fails_when_no_rendered_images(self):
+        from resume_agent.agents.pdf_validator import pdf_validator_node
+
+        result = pdf_validator_node({"page_images": []})
+
+        assert result["validation_passed"] is False
+        assert "unverified" in result["validation_feedback"]
 
     def test_pass_on_clean_page(self, tmp_path):
         from unittest.mock import MagicMock, patch
@@ -280,3 +367,51 @@ class TestPDFValidatorNode:
 
         assert result["validation_passed"] is False
         assert "overflow" in result["validation_feedback"]
+
+
+class TestRenderPagesNode:
+    """PDF rendering must not silently pass when page images cannot be produced."""
+
+    def test_render_failure_marks_validation_failed(self):
+        from unittest.mock import patch
+
+        from resume_agent.agents.render_pages import render_pages_node
+
+        with patch("resume_agent.agents.render_pages.pdf_to_images", side_effect=RuntimeError("Poppler missing")):
+            result = render_pages_node({"pdf_path": "/tmp/resume.pdf"})
+
+        assert result["validation_passed"] is False
+        assert result["page_images"] == []
+        assert "PDF render failed" in result["pdf_errors"][0]
+
+
+class TestHITLInterruptNode:
+    """Missing-info HITL should use LangGraph's dynamic interrupt contract."""
+
+    def test_hitl_node_interrupts_and_resumes_empty_answers(self, sample_resume):
+        from langgraph.checkpoint.memory import InMemorySaver
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.types import Command
+
+        from resume_agent.agents.hitl import hitl_node
+        from resume_agent.schemas import GapAnalysis, Question
+        from resume_agent.state import ResumeGenState
+
+        gap = GapAnalysis(
+            open_questions=[
+                Question(id="q1", prompt="Have you used Kubernetes?", why_asking="JD requires it")
+            ]
+        )
+        builder = StateGraph(ResumeGenState)
+        builder.add_node("hitl_ask_missing", hitl_node)
+        builder.add_edge(START, "hitl_ask_missing")
+        builder.add_edge("hitl_ask_missing", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+        config = {"configurable": {"thread_id": "hitl-test"}}
+
+        first = graph.invoke({"base_resume": sample_resume, "gap_analysis": gap}, config)
+        payload = first["__interrupt__"][0].value
+        assert payload["kind"] == "missing_questions"
+
+        final = graph.invoke(Command(resume={"answers": {"q1": ""}}), config)
+        assert final["tailored_resume"] == sample_resume

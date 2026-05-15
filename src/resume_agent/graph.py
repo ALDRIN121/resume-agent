@@ -20,9 +20,11 @@ Graph topology:
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import RetryPolicy
 
 from .agents.base_resume_loader import load_base_resume_node
 from .agents.gap_analyzer import gap_analyzer_node
@@ -41,6 +43,7 @@ from .state import ResumeGenState
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
+
     from .config import ResumeAgentSettings
 
 # ── HITL node name constants (used by CLI to detect interrupt points) ──────────
@@ -87,6 +90,15 @@ def _route_after_compile(state: ResumeGenState, *, max_retries: int = 3) -> str:
     return "render_pages"
 
 
+def _route_after_render(state: ResumeGenState, *, max_retries: int = 3) -> str:
+    """Retry generation on render errors (if budget allows), else validate images."""
+    if state.get("pdf_errors"):
+        if state.get("generator_retries", 0) >= max_retries:
+            return "terminal_failure"
+        return "generate_latex"
+    return "validate_alignment"
+
+
 def _route_after_validation(state: ResumeGenState, *, max_retries: int = 3) -> str:
     """Retry generation on alignment issues (if budget allows), else save output."""
     if not state.get("validation_passed", False):
@@ -99,8 +111,8 @@ def _route_after_validation(state: ResumeGenState, *, max_retries: int = 3) -> s
 # ── Graph builder ──────────────────────────────────────────────────────────────
 
 def build_graph(
-    checkpointer: "BaseCheckpointSaver | None" = None,
-    settings: "ResumeAgentSettings | None" = None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    settings: ResumeAgentSettings | None = None,
 ):
     """
     Assemble and compile the resume generation StateGraph.
@@ -109,8 +121,8 @@ def build_graph(
     Pass settings to avoid repeated disk reads during routing — if omitted,
     settings are loaded once here rather than on every edge evaluation.
 
-    The graph uses interrupt_before on HITL nodes so the CLI can inject
-    user responses via graph.update_state() before those nodes run.
+    HITL nodes use LangGraph dynamic interrupts; the CLI resumes with
+    Command(resume=...) after collecting user input.
     """
     if settings is None:
         from .config import ResumeAgentSettings
@@ -125,25 +137,49 @@ def build_graph(
     def _retry_after_compile(state: ResumeGenState) -> str:
         return _route_after_compile(state, max_retries=max_retries)
 
+    def _retry_after_render(state: ResumeGenState) -> str:
+        return _route_after_render(state, max_retries=max_retries)
+
     def _retry_after_validation(state: ResumeGenState) -> str:
         return _route_after_validation(state, max_retries=max_retries)
 
     builder = StateGraph(ResumeGenState)
+    llm_retry_policy = RetryPolicy(max_attempts=2)
 
     # ── Nodes ──────────────────────────────────────────────────────────────────
-    builder.add_node("scrape_url", jd_scraper_node)
-    builder.add_node("extract_jd", jd_extractor_node)
+    builder.add_node("scrape_url", partial(jd_scraper_node, settings=settings))
+    builder.add_node(
+        "extract_jd",
+        partial(jd_extractor_node, settings=settings),
+        retry_policy=llm_retry_policy,
+    )
     builder.add_node("load_base_resume", load_base_resume_node)
-    builder.add_node("analyze_gaps", gap_analyzer_node)
-    builder.add_node(HITL_MISSING_NODE, hitl_node)
+    builder.add_node(
+        "analyze_gaps",
+        partial(gap_analyzer_node, settings=settings),
+        retry_policy=llm_retry_policy,
+    )
+    builder.add_node(
+        HITL_MISSING_NODE,
+        partial(hitl_node, settings=settings),
+        retry_policy=llm_retry_policy,
+    )
     builder.add_node(HITL_SUGGESTIONS_NODE, suggestion_presenter_node)
-    builder.add_node("generate_latex", resume_generator_node)
+    builder.add_node(
+        "generate_latex",
+        partial(resume_generator_node, settings=settings),
+        retry_policy=llm_retry_policy,
+    )
     builder.add_node("validate_latex", latex_validator_node)
-    builder.add_node("compile_pdf", pdf_compiler_node)
+    builder.add_node("compile_pdf", partial(pdf_compiler_node, settings=settings))
     builder.add_node("render_pages", render_pages_node)
-    builder.add_node("validate_alignment", pdf_validator_node)
-    builder.add_node("save_output", output_saver_node)
-    builder.add_node("terminal_failure", terminal_failure_node)
+    builder.add_node(
+        "validate_alignment",
+        partial(pdf_validator_node, settings=settings),
+        retry_policy=llm_retry_policy,
+    )
+    builder.add_node("save_output", partial(output_saver_node, settings=settings))
+    builder.add_node("terminal_failure", partial(terminal_failure_node, settings=settings))
 
     # ── Edges ──────────────────────────────────────────────────────────────────
     builder.add_conditional_edges(START, _route_input, ["scrape_url", "extract_jd"])
@@ -169,7 +205,11 @@ def build_graph(
         _retry_after_compile,
         ["generate_latex", "render_pages", "terminal_failure"],
     )
-    builder.add_edge("render_pages", "validate_alignment")
+    builder.add_conditional_edges(
+        "render_pages",
+        _retry_after_render,
+        ["generate_latex", "validate_alignment", "terminal_failure"],
+    )
     builder.add_conditional_edges(
         "validate_alignment",
         _retry_after_validation,
@@ -180,7 +220,4 @@ def build_graph(
     builder.add_edge("terminal_failure", END)
 
     # ── Compile ────────────────────────────────────────────────────────────────
-    return builder.compile(
-        checkpointer=checkpointer,
-        interrupt_before=list(HITL_NODES),
-    )
+    return builder.compile(checkpointer=checkpointer)

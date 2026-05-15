@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sys
 import time
 import uuid
 import warnings
@@ -31,6 +32,7 @@ for _lg in ("langgraph", "langgraph.checkpoint", "langgraph.checkpoint.serde",
 
 import typer
 import yaml
+from langgraph.types import Command
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
@@ -42,7 +44,7 @@ from .config import (
     SOURCE_DIR,
     ResumeAgentSettings,
 )
-from .graph import HITL_MISSING_NODE, HITL_NODES, HITL_SUGGESTIONS_NODE, build_graph
+from .graph import HITL_MISSING_NODE, HITL_SUGGESTIONS_NODE, build_graph
 from .state import STATE_SCHEMA_VERSION, ResumeGenState
 from .ui.banner import print_banner
 from .ui.console import console, err_console
@@ -234,24 +236,53 @@ def _read_jd_input() -> str:
     """
     Read a job description from stdin without reprinting a label per line.
 
-    Shows a single `▶` prompt, then reads every line silently with plain
-    input() so pasted multi-line text flows through naturally — no
-    "(continue…)" interrupt after every pasted sentence.
+    On macOS/Linux we temporarily disable canonical mode (ICANON) so that
+    sys.stdin.readline() can return arbitrarily long lines — bypassing
+    libedit/readline's ~1024-byte per-line buffer that truncates large pastes.
+    Echo stays on so the user sees their input normally.
 
     Termination:
       • URL   — ends after the first non-blank line
       • Text  — ends on three consecutive blank lines, or Ctrl+D / Ctrl+C
     """
-    # Print a single, styled caret — cursor lands right after it.
-    # All subsequent pasted/typed lines appear below without re-printing any label.
+    import os
+
     console.print("  [bold blue]▶[/bold blue]  ", end="")
+    sys.stdout.flush()
+
+    # Attempt to disable canonical mode to bypass libedit's ~1024-byte per-line
+    # buffer that truncates large paste operations on macOS. Keep ECHO and ISIG.
+    _termios_mod = None
+    _fd = -1
+    _old: list = []
+    use_raw = False
+
+    try:
+        import termios as _termios_mod
+        _fd = sys.stdin.fileno()
+        if not os.isatty(_fd):
+            raise OSError
+        _old = _termios_mod.tcgetattr(_fd)
+        _new = _termios_mod.tcgetattr(_fd)
+        _new[3] &= ~_termios_mod.ICANON
+        _new[6][_termios_mod.VMIN] = 1
+        _new[6][_termios_mod.VTIME] = 0
+        _termios_mod.tcsetattr(_fd, _termios_mod.TCSAFLUSH, _new)
+        use_raw = True
+    except (ImportError, OSError, AttributeError):
+        pass
 
     lines: list[str] = []
     consecutive_blanks = 0
 
     try:
         while True:
-            line = input()  # reads one line; terminal echoes it naturally
+            # sys.stdin.readline() handles arbitrarily long lines in non-canonical
+            # mode; input() falls back to canonical mode with libedit's line limit.
+            raw = sys.stdin.readline() if use_raw else (input() + "\n")
+            if not raw:  # EOF (Ctrl+D)
+                break
+            line = raw.rstrip("\r\n")
             if not line.strip():
                 if not lines:
                     continue  # ignore leading blank lines before any content
@@ -268,6 +299,9 @@ def _read_jd_input() -> str:
                     break  # URL — single line is enough
     except (EOFError, KeyboardInterrupt):
         pass  # Ctrl+D / Ctrl+C — use whatever was collected
+    finally:
+        if use_raw and _termios_mod is not None:
+            _termios_mod.tcsetattr(_fd, _termios_mod.TCSADRAIN, _old)
 
     return "\n".join(lines).strip()
 
@@ -280,7 +314,7 @@ def _interactive_generate(settings: ResumeAgentSettings) -> None:
             "[bold]Paste a job URL or the full job description below.[/bold]\n\n"
             "  [accent]URL[/accent]   — paste the link and press [bold]Enter[/bold]\n"
             "  [accent]Text[/accent]  — paste the description, then press [bold]Enter[/bold] "
-            "three times on an empty line to finish",
+            "three times on an empty line to finish  (or press [bold]Ctrl+D[/bold])",
             border_style="blue",
             padding=(0, 2),
         )
@@ -303,15 +337,13 @@ def _interactive_generate(settings: ResumeAgentSettings) -> None:
         "latex_errors": [],
         "pdf_errors": [],
         "page_images": [],
-        "hitl_answers": {},
-        "approved_suggestion_ids": [],
         "suggestions": [],
         "generator_retries": 0,
         "validation_passed": False,
         "messages": [],
     }
 
-    cfg = {"configurable": {"thread_id": t_id}}
+    cfg = _graph_config(t_id, settings)
     console.print(f"\n[muted]Session: {t_id}[/muted]")
     console.print(f"[muted](Resume if interrupted: resume-generator resume {t_id})[/muted]\n")
 
@@ -495,15 +527,13 @@ def generate(
         "latex_errors": [],
         "pdf_errors": [],
         "page_images": [],
-        "hitl_answers": {},
-        "approved_suggestion_ids": [],
         "suggestions": [],
         "generator_retries": 0,
         "validation_passed": False,
         "messages": [],
     }
 
-    config = {"configurable": {"thread_id": t_id}}
+    config = _graph_config(t_id, settings)
     console.print(f"[muted]Session thread ID: {t_id}[/muted]")
     console.print(
         f"[muted](To resume if interrupted: resume-generator resume {t_id})[/muted]\n"
@@ -512,7 +542,7 @@ def generate(
     start_time = time.perf_counter()
 
     with get_checkpointer() as checkpointer:
-        graph = build_graph(checkpointer=checkpointer)
+        graph = build_graph(checkpointer=checkpointer, settings=settings)
         final_state = _run_with_hitl(graph, initial_state, config)
 
     elapsed = time.perf_counter() - start_time
@@ -553,13 +583,13 @@ def resume_session(
     print_banner(provider=settings.provider, model=settings.model.default)
     settings = _ensure_llm_ready(settings)
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _graph_config(thread_id, settings)
     console.print(f"[muted]Resuming session: {thread_id}[/muted]\n")
 
     start_time = time.perf_counter()
 
     with get_checkpointer() as checkpointer:
-        graph = build_graph(checkpointer=checkpointer)
+        graph = build_graph(checkpointer=checkpointer, settings=settings)
 
         state = graph.get_state(config)
         if not state.values:
@@ -907,12 +937,15 @@ def update_cmd() -> None:
 
     console.print(f"[muted]Repo: {repo}[/muted]")
     console.print("[muted]Pulling latest changes from GitHub…[/muted]")
-    ok, hint, detail = perform_update(repo)
+    ok, hint, detail, did_update = perform_update(repo)
     if ok:
-        print_success(
-            "Updated successfully!\n"
-            "Restart [bold]resume-generator[/bold] to use the new version."
-        )
+        if did_update:
+            print_success(
+                "Updated successfully!\n"
+                "Open a new terminal window and run [bold]resume-generator[/bold] to use the new version."
+            )
+        else:
+            print_success("Already up to date — you have the latest version.")
     elif hint == "windows_locked":
         console.print()
         console.print(
@@ -949,6 +982,20 @@ def update_cmd() -> None:
 #  Internal helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _graph_config(thread_id: str, settings: ResumeAgentSettings) -> dict:
+    """
+    Build the LangGraph runtime config for a generation thread.
+
+    generator_max counts semantic LaTeX attempts; recursion_limit counts
+    LangGraph super-steps, so it must be higher than the attempt budget.
+    """
+    retry_budget = max(1, settings.retries.generator_max)
+    return {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": max(50, 20 + retry_budget * 8),
+    }
+
+
 def _handle_hitl_missing(state_values: dict) -> tuple[dict, str]:
     gap = state_values.get("gap_analysis")
     questions = gap.open_questions if gap else []
@@ -982,41 +1029,9 @@ def _read_suggestions_from_state(state_values: dict) -> list:
     get_state().values even though gap_analyzer set it. We try the suggestions
     field first, then fall back to gap_analysis.tailoring_ideas.
     """
-    from .schemas import GapAnalysis, Suggestion
+    from .agents.suggestion_presenter import read_suggestions_from_state
 
-    def _coerce(raw) -> list:
-        if not raw:
-            return []
-        out = []
-        for s in raw:
-            if isinstance(s, dict):
-                try:
-                    out.append(Suggestion.model_validate(s))
-                except Exception:
-                    pass
-            elif hasattr(s, "id") and hasattr(s, "before"):
-                out.append(s)
-        return out
-
-    # Primary: suggestions field
-    result = _coerce(state_values.get("suggestions"))
-    if result:
-        return result
-
-    # Fallback: gap_analysis.tailoring_ideas (survives checkpoint round-trips
-    # better because GapAnalysis is a richer object that LangGraph can fully
-    # reconstruct even when suggestions is lost or empty after deserialization)
-    gap = state_values.get("gap_analysis")
-    if gap is None:
-        return []
-    if isinstance(gap, dict):
-        try:
-            gap = GapAnalysis.model_validate(gap)
-        except Exception:
-            return _coerce(gap.get("tailoring_ideas", []))
-    if hasattr(gap, "tailoring_ideas"):
-        return _coerce(gap.tailoring_ideas)
-    return []
+    return read_suggestions_from_state(state_values)
 
 
 # Registry: add a new HITL node by adding one entry here.
@@ -1028,16 +1043,22 @@ _HITL_HANDLERS = {
 
 def _run_with_hitl(graph, initial_input, config: dict) -> dict | None:
     """
-    Run the graph, handling interrupt_before pauses for HITL via a handler registry.
+    Run the graph, handling LangGraph dynamic interrupts for HITL.
     """
     current_input = initial_input
     max_hitl_rounds = 10
 
     for _ in range(max_hitl_rounds):
         try:
-            graph.invoke(current_input, config=config)
+            result = graph.invoke(current_input, config=config)
         except Exception as exc:
             _handle_graph_error(exc)
+
+        interrupts = _extract_interrupt_payloads(result)
+        if interrupts:
+            current_input = Command(resume=_handle_interrupt_payload(interrupts[0]))
+            continue
+
         state = graph.get_state(config)
 
         if not state.next:
@@ -1061,6 +1082,63 @@ def _run_with_hitl(graph, initial_input, config: dict) -> dict | None:
     return graph.get_state(config).values
 
 
+def _extract_interrupt_payloads(result) -> list:
+    """Return JSON payloads from LangGraph interrupt outputs."""
+    raw_interrupts = getattr(result, "interrupts", None)
+    if raw_interrupts is None and isinstance(result, dict):
+        raw_interrupts = result.get("__interrupt__", [])
+    if not raw_interrupts:
+        return []
+    return [getattr(item, "value", item) for item in raw_interrupts]
+
+
+def _handle_interrupt_payload(payload) -> object:
+    """Render a LangGraph interrupt payload and return the resume value."""
+    if not isinstance(payload, dict):
+        print_warning("Unexpected graph interrupt payload.")
+        return {}
+
+    kind = payload.get("kind")
+
+    if kind == "missing_questions":
+        from .schemas import Question
+
+        questions = []
+        for raw in payload.get("questions", []):
+            try:
+                questions.append(Question.model_validate(raw))
+            except Exception:
+                pass
+        if questions:
+            print_section("Human Input Needed")
+            answers = prompt_hitl_questions(questions)
+            print_info(f"Recorded answers for {len(answers)} question(s).")
+        else:
+            answers = {}
+        return {"answers": answers}
+
+    if kind == "tailoring_suggestions":
+        from .schemas import Suggestion
+
+        suggestions = []
+        for raw in payload.get("suggestions", []):
+            try:
+                suggestions.append(Suggestion.model_validate(raw))
+            except Exception:
+                pass
+        if suggestions:
+            print_section("Tailoring Suggestions")
+            print_info(f"Found {len(suggestions)} suggestion(s) to review.")
+            approved_ids = prompt_suggestions(suggestions)
+        else:
+            print_info("No tailoring suggestions available.")
+            approved_ids = []
+        return {"approved_ids": approved_ids}
+
+    print_warning(f"Unexpected graph interrupt kind: {kind!r}")
+    return {}
+
+
 def _handle_graph_error(exc: Exception) -> None:
     """
     Translate known LLM/provider errors into friendly panels, then exit.
@@ -1068,6 +1146,15 @@ def _handle_graph_error(exc: Exception) -> None:
     """
     exc_type = type(exc).__name__
     exc_msg = str(exc)
+
+    if exc_type == "GraphRecursionError":
+        print_error_panel(
+            "Generation Loop Stopped",
+            "LangGraph stopped the run because it exceeded the configured super-step limit.\n\n"
+            "This usually means the generator kept cycling through validation without reaching a stable PDF.",
+            hint="Try a stronger model, or reduce the resume content before regenerating.",
+        )
+        raise typer.Exit(3)
 
     # ── Ollama: server returned 401 Unauthorized ───────────────────────────────
     if exc_type == "ResponseError" and "401" in exc_msg:

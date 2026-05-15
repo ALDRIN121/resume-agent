@@ -22,10 +22,19 @@ def render_pages_node(state: ResumeGenState) -> dict:
     try:
         image_paths = pdf_to_images(pdf_path, dpi=150)
     except RuntimeError as e:
-        # poppler not installed
         print_warning(f"Could not render pages: {e}")
-        # Skip visual validation — treat as passed to avoid blocking the pipeline
-        return {"page_images": [], "validation_passed": True}
+        return {
+            "page_images": [],
+            "pdf_errors": [f"PDF render failed: {e}"],
+            "validation_passed": False,
+        }
+
+    if not image_paths:
+        return {
+            "page_images": [],
+            "pdf_errors": ["PDF render produced no page images"],
+            "validation_passed": False,
+        }
 
     print_info(f"Rendered {len(image_paths)} page(s).")
-    return {"page_images": image_paths}
+    return {"page_images": image_paths, "pdf_errors": [], "validation_passed": False}

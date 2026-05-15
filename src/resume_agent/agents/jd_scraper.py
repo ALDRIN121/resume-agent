@@ -10,12 +10,14 @@ from ..tools.scrape import scrape_url
 from ..ui.panels import print_agent_step, print_info, print_warning
 
 
-def jd_scraper_node(state: ResumeGenState) -> dict:
+def jd_scraper_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """
     Scrape the job description URL from state["raw_input"].
     Populates scraped_text on success, or scrape_error on failure.
     """
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     url = state["raw_input"]
 
     print_agent_step("JD Scraper", "Fetching job posting from the web…")

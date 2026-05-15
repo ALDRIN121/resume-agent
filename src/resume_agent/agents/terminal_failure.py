@@ -17,9 +17,11 @@ from ..ui.panels import print_error
 _WORK_DIR = CONFIG_DIR / "_working"
 
 
-def terminal_failure_node(state: ResumeGenState) -> dict:
+def terminal_failure_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """Save debug artifacts and surface a clear error to the user."""
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     failed_dir = build_failed_path(settings.output_base_dir.resolve())
 
     # Save whatever we have

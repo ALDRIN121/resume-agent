@@ -10,14 +10,16 @@ from ..tools.fs import build_output_path
 from ..ui.panels import print_success
 
 
-def output_saver_node(state: ResumeGenState) -> dict:
+def output_saver_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """
     Copy the compiled PDF to:
       <output.base_dir>/<company_slug>/<user_slug>_<company_slug>_<YYYY-MM-DD>.pdf
 
     Returns final_pdf_path on success.
     """
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     pdf_path = state.get("pdf_path")
     jd = state.get("jd")
     resume = state.get("tailored_resume") or state.get("base_resume")

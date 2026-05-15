@@ -11,7 +11,9 @@ from ..ui.panels import print_info, print_warning
 _WORK_DIR = CONFIG_DIR / "_working"
 
 
-def pdf_compiler_node(state: ResumeGenState) -> dict:
+def pdf_compiler_node(
+    state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
+) -> dict:
     """
     Compile state["latex_source"] to a PDF using Tectonic.
     On success: sets pdf_path, clears pdf_errors.
@@ -20,7 +22,7 @@ def pdf_compiler_node(state: ResumeGenState) -> dict:
     Uses a stable working directory (~/.resume_generator/_working/) so the PDF
     path remains valid for downstream nodes without leaking temp directories.
     """
-    settings = ResumeAgentSettings.load()
+    settings = settings or ResumeAgentSettings.load()
     latex_source = state.get("latex_source", "")
 
     if not latex_source:
