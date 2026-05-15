@@ -89,7 +89,7 @@
   (% if personal.location %)(( personal.location | le )) \, \textbar \, (% endif %)%
   (% if personal.phone %)(( personal.phone | le )) \, \textbar \, (% endif %)%
   \href{mailto:(( personal.email | href ))}{(( personal.email | le ))}%
-(% if personal.linkedin or personal.github or personal.website or personal.portfolio %)
+(% if personal.linkedin or personal.github or personal.website or personal.portfolio -%)
   \\ \vspace{1pt}
   (% if personal.linkedin %)\href{https://linkedin.com/in/(( personal.linkedin | href ))}{linkedin.com/in/(( personal.linkedin | le ))}(% endif %)%
   (% if personal.github %)(% if personal.linkedin %)\, \textbar \, (% endif %)\href{https://github.com/(( personal.github | href ))}{github.com/(( personal.github | le ))}(% endif %)%
