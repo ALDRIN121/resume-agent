@@ -1571,7 +1571,7 @@ wheels = [
 
 [[package]]
 name = "resume-generator"
-version = "2.0.0"
+version = "2.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -1606,6 +1606,11 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.13.0" },
@@ -1636,6 +1641,9 @@ requires-dist = [
     { name = "typer", specifier = ">=0.15.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "rich"
