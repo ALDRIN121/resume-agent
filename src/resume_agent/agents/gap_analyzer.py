@@ -38,6 +38,14 @@ STRICT RULES:
    Assign IDs like "s1", "s2", etc. Max 8 suggestions.
    "rationale" should be 1 short sentence (max 10 words).
    "section" must be one of: experience | summary | skills | projects
+5. CREDIBILITY GUARD:
+   For each existing bullet, if the role's seniority level and the claimed outcome
+   are mismatched (e.g. a junior/associate title claiming sole ownership of a
+   business-revenue outcome like "drove $5M revenue"), surface a suggestion to
+   soften attribution — for example:
+     "drove $5M in revenue" → "contributed to $5M in revenue growth"
+   Mark such suggestions with section="experience" and include "soften attribution"
+   in the rationale. This preserves honesty without deleting accomplishments.
 """
 
 _HUMAN_TEMPLATE = """\

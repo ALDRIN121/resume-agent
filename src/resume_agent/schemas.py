@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
@@ -17,6 +18,8 @@ class PersonalInfo(BaseModel):
     linkedin: Optional[str] = None   # handle only, e.g. "john-doe"
     github: Optional[str] = None     # handle only, e.g. "johndoe"
     website: Optional[str] = None
+    portfolio: Optional[str] = None  # portfolio URL, distinct from personal website
+    headline: Optional[str] = None   # e.g. "Open to Remote / Relocation — EU & US"
 
     @model_validator(mode="before")
     @classmethod
@@ -118,6 +121,16 @@ class Certification(BaseModel):
     date: Optional[str] = None
     url: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _warn_missing_date(self) -> "Certification":
+        if not self.date:
+            warnings.warn(
+                f"Certification '{self.name}' has no date — consider adding one for ATS parsers.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self
+
 
 class UserResume(BaseModel):
     personal: PersonalInfo
@@ -150,6 +163,72 @@ class UserResume(BaseModel):
     def all_skill_strings(self) -> list[str]:
         """Flat list of all skills across categories."""
         return [s for items in self.skills.values() for s in items]
+
+    def all_bullets(self) -> list[tuple[str, bool]]:
+        """All (bullet_text, is_current_role) pairs across experience and projects."""
+        result: list[tuple[str, bool]] = []
+        for role in self.experience:
+            is_current = role.end is None
+            for b in role.bullets:
+                result.append((b, is_current))
+        for project in self.projects:
+            for b in project.bullets:
+                result.append((b, False))
+        return result
+
+    # Regex matching a numeric metric: "50%", "3x", "+40", "2.5x"
+    _METRIC_RE = re.compile(r"\d+(?:\.\d+)?[x%]|\+\d+", re.IGNORECASE)
+
+    def metric_density(self) -> float:
+        """Fraction of bullets that contain at least one quantified metric (0.0 – 1.0)."""
+        bullets = [b for b, _ in self.all_bullets()]
+        if not bullets:
+            return 0.0
+        quantified = sum(1 for b in bullets if self._METRIC_RE.search(b))
+        return quantified / len(bullets)
+
+    # Simple heuristic sets — not exhaustive, but covers the most common cases
+    _PRESENT_TENSE_VERBS = frozenset({
+        "lead", "leads", "architect", "architecting", "build", "builds",
+        "develop", "develops", "maintain", "maintains", "manage", "manages",
+        "mentor", "mentors", "collaborate", "collaborates", "own", "owns",
+        "drive", "drives", "deliver", "delivers", "design", "designs",
+        "implement", "implements", "improve", "improves", "oversee", "oversees",
+    })
+    _PAST_TENSE_VERBS = frozenset({
+        "led", "built", "designed", "shipped", "optimized", "reduced",
+        "increased", "improved", "developed", "deployed", "implemented",
+        "created", "launched", "delivered", "managed", "mentored", "migrated",
+        "refactored", "automated", "architected", "established", "streamlined",
+    })
+
+    def tense_check(self) -> tuple[float, float]:
+        """
+        Returns (current_role_present_ratio, past_role_past_ratio).
+
+        current_role_present_ratio: fraction of current-role bullets starting with a
+          present-tense verb. Should be close to 1.0.
+        past_role_past_ratio: fraction of past-role bullets starting with a past-tense
+          verb. Should be close to 1.0.
+        """
+        current_bullets: list[str] = []
+        past_bullets: list[str] = []
+        for b, is_current in self.all_bullets():
+            (current_bullets if is_current else past_bullets).append(b)
+
+        def _ratio(bullets: list[str], verb_set: frozenset) -> float:
+            if not bullets:
+                return 1.0  # vacuously correct
+            matched = sum(
+                1 for b in bullets
+                if b.split()[0].lower().rstrip(".,;:") in verb_set
+            )
+            return matched / len(bullets)
+
+        return (
+            _ratio(current_bullets, self._PRESENT_TENSE_VERBS),
+            _ratio(past_bullets, self._PAST_TENSE_VERBS),
+        )
 
 
 # ── Job Description models ─────────────────────────────────────────────────────

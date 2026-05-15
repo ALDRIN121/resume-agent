@@ -75,17 +75,29 @@
 
 % ══════════════════════════════════════════════════════════════════════════════
 %  HEADER
+%  Line 1 (always): location · phone · email
+%  Line 2 (if any link present): linkedin · github · website · portfolio
+%  Separator: \, \textbar \, (text-mode pipe with thin spaces — no math mode)
 % ══════════════════════════════════════════════════════════════════════════════
-\begin{center}
+\begin{minipage}{\textwidth}
+\centering
   {\Huge \scshape (( personal.full_name | le ))} \\ \vspace{2pt}
+(% if personal.headline %)
+  \small\textit{(( personal.headline | le ))} \\ \vspace{1pt}
+(% endif %)
   \small
-  (% if personal.location %)(( personal.location | le )) $|$ (% endif %)%
-  (% if personal.phone %)(( personal.phone | le )) $|$ (% endif %)%
+  (% if personal.location %)(( personal.location | le )) \, \textbar \, (% endif %)%
+  (% if personal.phone %)(( personal.phone | le )) \, \textbar \, (% endif %)%
   \href{mailto:(( personal.email | href ))}{(( personal.email | le ))}%
-  (% if personal.linkedin %) $|$ \href{https://linkedin.com/in/(( personal.linkedin | href ))}{linkedin.com/in/(( personal.linkedin | le ))}(% endif %)%
-  (% if personal.github %) $|$ \href{https://github.com/(( personal.github | href ))}{github.com/(( personal.github | le ))}(% endif %)%
-  (% if personal.website %) $|$ \href{(( personal.website | href ))}{(( personal.website | le ))}(% endif %)
-\end{center}
+(% if personal.linkedin or personal.github or personal.website or personal.portfolio %)
+  \\ \vspace{1pt}
+  (% if personal.linkedin %)\href{https://linkedin.com/in/(( personal.linkedin | href ))}{linkedin.com/in/(( personal.linkedin | le ))}(% endif %)%
+  (% if personal.github %)(% if personal.linkedin %)\, \textbar \, (% endif %)\href{https://github.com/(( personal.github | href ))}{github.com/(( personal.github | le ))}(% endif %)%
+  (% if personal.website %)(% if personal.linkedin or personal.github %)\, \textbar \, (% endif %)\href{(( personal.website | href ))}{(( personal.website | le ))}(% endif %)%
+  (% if personal.portfolio %)(% if personal.linkedin or personal.github or personal.website %)\, \textbar \, (% endif %)\href{(( personal.portfolio | href ))}{Portfolio}(% endif %)
+(% endif %)
+\end{minipage}
+\vspace{4pt}
 
 % ══════════════════════════════════════════════════════════════════════════════
 %  SUMMARY
@@ -97,6 +109,7 @@
 
 % ══════════════════════════════════════════════════════════════════════════════
 %  TECHNICAL SKILLS
+%  Categories arrive pre-sorted by _render_template (high-signal first).
 % ══════════════════════════════════════════════════════════════════════════════
 (% if skills %)
 \section{Technical Skills}
@@ -132,13 +145,16 @@
 
 % ══════════════════════════════════════════════════════════════════════════════
 %  FEATURED PROJECTS
+%  Tech stack: small gray non-italic text, middle-dot separators.
+%  Note: use '\\textperiodcentered{}' (double backslash) in the join so that
+%  Jinja2 string-literal escaping (\t → tab) does not corrupt the command.
 % ══════════════════════════════════════════════════════════════════════════════
 (% if projects %)
 \section{Featured Projects}
 \resumeSubHeadingListStart
 (% for project in projects %)
   \resumeProjectHeading
-    {\textbf{(( project.name | le ))}(% if project.tech %) $|$ \emph{(( project.tech | join(', ') | le ))}(% endif %)}{(% if project.url %)\href{(( project.url | href ))}{Link}(% endif %)}
+    {\textbf{(( project.name | le ))}(% if project.tech %){\small\hspace{0.5em}\textcolor{gray!70}{(( project.tech | map('le') | join(' \\textperiodcentered{} ') ))}}(% endif %)}{(% if project.url %)\href{(( project.url | href ))}{Link}(% endif %)}
   \resumeItemListStart
   (% if project.description %)
     \resumeItem{(( project.description | le ))}
@@ -153,11 +169,14 @@
 
 % ══════════════════════════════════════════════════════════════════════════════
 %  EDUCATION
+%  Full entries (has field, GPA, or notes): two-row \resumeSubheading + bullets.
+%  Sparse entries (degree only): single-row tabular, no extra whitespace.
 % ══════════════════════════════════════════════════════════════════════════════
 (% if education %)
 \section{Education}
 \resumeSubHeadingListStart
 (% for edu in education %)
+(% if edu.notes or edu.gpa or edu.field %)
   \resumeSubheading
     {(( edu.institution | le ))}{(% if edu.graduation %)(( edu.graduation | le ))(% endif %)}
     {(( edu.degree | le ))(% if edu.field %), (( edu.field | le ))(% endif %)}{(% if edu.gpa %)GPA: (( edu.gpa | le ))(% endif %)}
@@ -168,6 +187,12 @@
   (% endfor %)
   \resumeItemListEnd
   (% endif %)
+(% else %)
+  \vspace{-1pt}\item
+  \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \textbf{(( edu.institution | le ))}, \textit{\small (( edu.degree | le ))} & \small (% if edu.graduation %)(( edu.graduation | le ))(% endif %) \\
+  \end{tabular*}\vspace{-5pt}
+(% endif %)
 (% endfor %)
 \resumeSubHeadingListEnd
 (% endif %)
