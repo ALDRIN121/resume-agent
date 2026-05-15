@@ -1,0 +1,52 @@
+{
+  "personal": {
+    "full_name": "Jordan Williams",
+    "email": "jordan@example.com",
+    "phone": "+1-555-400-5000",
+    "location": "Chicago, IL",
+    "linkedin": "jordanwilliams"
+  },
+  "summary": "Results-driven software engineer passionate about leveraging synergistic ecosystems to deliver innovative, scalable, best-in-class solutions. Proactive team player with a proven track record of dynamic collaboration and robust implementations.",
+  "experience": [
+    {
+      "company": "Enterprise Solutions Ltd.",
+      "title": "Software Engineer II",
+      "start": "Feb 2021",
+      "end": null,
+      "location": "Chicago, IL",
+      "bullets": [
+        "Responsible for developing enterprise-grade microservices using Spring Boot and Docker",
+        "Worked with cross-functional teams to deliver scalable RESTful APIs",
+        "Assisted in migration of legacy monolith to cloud-native architecture on AWS",
+        "Helped improve CI/CD pipeline using Jenkins and Ansible",
+        "Participated in quarterly on-call rotation, supporting 99.9% uptime SLA"
+      ]
+    },
+    {
+      "company": "Tech Consulting Group",
+      "title": "Junior Developer",
+      "start": "Sep 2018",
+      "end": "Jan 2021",
+      "bullets": [
+        "Supported development of client-facing web applications using Angular and Java",
+        "Involved in requirements gathering and sprint planning sessions",
+        "Helped maintain internal documentation and knowledge base"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "DePaul University",
+      "degree": "B.S. Information Technology",
+      "graduation": "Aug 2018"
+    }
+  ],
+  "skills": {
+    "Languages": ["Java", "Python", "JavaScript"],
+    "Frameworks": ["Spring Boot", "Angular", "React"],
+    "Tools": ["Docker", "Jenkins", "Ansible", "AWS"]
+  },
+  "certifications": [
+    {"name": "AWS Cloud Practitioner", "date": "2021"}
+  ]
+}
