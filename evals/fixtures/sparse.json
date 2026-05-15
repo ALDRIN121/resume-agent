@@ -1,0 +1,29 @@
+{
+  "personal": {
+    "full_name": "Sam Patel",
+    "email": "sam@example.com",
+    "location": "Remote"
+  },
+  "experience": [
+    {
+      "company": "Generic Corp",
+      "title": "Developer",
+      "start": "2020",
+      "end": null,
+      "bullets": [
+        "Worked on various software projects",
+        "Helped team with tasks as needed"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "Online University",
+      "degree": "B.S. Computer Science",
+      "graduation": "2020"
+    }
+  ],
+  "skills": {
+    "Languages": ["Python"]
+  }
+}

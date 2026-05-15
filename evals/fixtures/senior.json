@@ -1,0 +1,70 @@
+{
+  "personal": {
+    "full_name": "Priya Nair",
+    "email": "priya@example.com",
+    "phone": "+1-555-200-3000",
+    "location": "Seattle, WA",
+    "linkedin": "priyanair",
+    "github": "priyanair",
+    "headline": "Senior Software Engineer — Distributed Systems"
+  },
+  "summary": "Senior engineer with 8 years building high-throughput distributed systems at scale. Led platform teams, drove zero-downtime migrations, and mentored engineers from L3 to L5.",
+  "experience": [
+    {
+      "company": "MegaCorp",
+      "title": "Senior Software Engineer",
+      "start": "Mar 2020",
+      "end": null,
+      "location": "Seattle, WA",
+      "bullets": [
+        "Led migration of monolithic payments service to event-driven microservices handling 15M transactions/day",
+        "Reduced P99 latency from 800ms to 120ms by redesigning the Kafka consumer group topology",
+        "Designed and shipped a distributed rate-limiter adopted by 6 downstream teams",
+        "Mentored 4 engineers; 2 promoted to senior within 18 months",
+        "Drove adoption of OpenTelemetry across 30+ services, cutting MTTR by 40%"
+      ]
+    },
+    {
+      "company": "DataFlow Inc.",
+      "title": "Software Engineer II",
+      "start": "Jun 2017",
+      "end": "Feb 2020",
+      "location": "San Francisco, CA",
+      "bullets": [
+        "Built real-time data pipeline ingesting 500GB/day using Flink and Kafka",
+        "Optimized Spark jobs to reduce nightly batch run from 6 hours to 90 minutes",
+        "Implemented exactly-once delivery semantics across 3 downstream consumers"
+      ]
+    },
+    {
+      "company": "Initech",
+      "title": "Software Engineer",
+      "start": "Jul 2015",
+      "end": "May 2017",
+      "bullets": [
+        "Developed backend APIs for SaaS product serving 2,000 enterprise customers",
+        "Migrated CI from Jenkins to CircleCI, cutting build times by 50%"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "Carnegie Mellon University",
+      "degree": "M.S. Computer Science",
+      "graduation": "May 2015"
+    },
+    {
+      "institution": "IIT Bombay",
+      "degree": "B.Tech. Computer Science",
+      "graduation": "May 2013"
+    }
+  ],
+  "skills": {
+    "Languages": ["Java", "Python", "Go", "Scala"],
+    "Infrastructure": ["Kubernetes", "Terraform", "AWS", "Kafka", "Flink"],
+    "Databases": ["PostgreSQL", "Cassandra", "DynamoDB", "Redis"]
+  },
+  "certifications": [
+    {"name": "AWS Solutions Architect Professional", "date": "2022"}
+  ]
+}
