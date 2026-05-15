@@ -1,0 +1,83 @@
+{
+  "personal": {
+    "full_name": "Marcus Chen",
+    "email": "marcus@example.com",
+    "phone": "+1-555-300-4000",
+    "location": "San Francisco, CA",
+    "linkedin": "marcuschen",
+    "github": "marcuschen",
+    "headline": "Staff Engineer — Platform & Infrastructure"
+  },
+  "summary": "Staff engineer specializing in platform infrastructure and developer productivity. Published author of open-source tooling with 3k+ GitHub stars. Seeking principal/staff roles at FAANG.",
+  "experience": [
+    {
+      "company": "Stripe",
+      "title": "Staff Software Engineer",
+      "start": "Jan 2021",
+      "end": null,
+      "location": "San Francisco, CA",
+      "bullets": [
+        "Architected the internal developer platform used by 1,200 engineers daily",
+        "Led cross-org initiative to reduce deployment cycle from 45 minutes to 8 minutes",
+        "Designed multi-region failover strategy that achieved 99.995% SLA across 12 months",
+        "Grew platform team from 3 to 11 engineers; established on-call rotation and runbooks"
+      ]
+    },
+    {
+      "company": "Airbnb",
+      "title": "Senior Software Engineer",
+      "start": "Jul 2017",
+      "end": "Dec 2020",
+      "location": "San Francisco, CA",
+      "bullets": [
+        "Built the service mesh migration framework that moved 200+ microservices to Envoy",
+        "Reduced infrastructure costs by $2.4M/year through right-sizing and spot fleet optimisation",
+        "Designed observability platform ingesting 1.2TB of telemetry data per day"
+      ]
+    },
+    {
+      "company": "Palantir",
+      "title": "Software Engineer",
+      "start": "Aug 2014",
+      "end": "Jun 2017",
+      "bullets": [
+        "Developed data integration pipelines for 3 U.S. government agency deployments",
+        "Implemented role-based access control system covering 50M+ records"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "Stanford University",
+      "degree": "M.S. Computer Science",
+      "field": "Systems",
+      "graduation": "Jun 2014"
+    },
+    {
+      "institution": "UC Berkeley",
+      "degree": "B.S. Electrical Engineering and Computer Sciences",
+      "graduation": "May 2012",
+      "gpa": "3.9"
+    }
+  ],
+  "skills": {
+    "Languages": ["Go", "Python", "Rust", "C++", "TypeScript"],
+    "Infrastructure": ["Kubernetes", "Envoy", "Terraform", "AWS", "GCP"],
+    "Observability": ["OpenTelemetry", "Prometheus", "Grafana", "Jaeger"],
+    "Databases": ["PostgreSQL", "Spanner", "Cassandra", "Redis"]
+  },
+  "projects": [
+    {
+      "name": "k8s-resource-advisor",
+      "description": "Kubernetes admission webhook that recommends right-sized resource requests using historical P99 usage.",
+      "bullets": [
+        "3,200+ GitHub stars; adopted by 40+ companies including 3 Fortune 500 firms",
+        "Presented at KubeCon 2023; featured in CNCF newsletter"
+      ],
+      "url": "github.com/marcuschen/k8s-resource-advisor"
+    }
+  ],
+  "certifications": [
+    {"name": "Certified Kubernetes Administrator", "issuer": "CNCF", "date": "2023"}
+  ]
+}
