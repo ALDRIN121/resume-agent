@@ -1,0 +1,60 @@
+{
+  "personal": {
+    "full_name": "Alex Rivera",
+    "email": "alex@example.com",
+    "phone": "+1-555-100-2000",
+    "location": "Austin, TX",
+    "github": "alexrivera",
+    "headline": "Software Engineer — 2 YOE"
+  },
+  "summary": "Recent CS graduate with 2 years of industry experience in backend development. Built production REST APIs and contributed to open-source projects.",
+  "experience": [
+    {
+      "company": "StartupCo",
+      "title": "Junior Software Engineer",
+      "start": "Jun 2023",
+      "end": null,
+      "location": "Austin, TX",
+      "bullets": [
+        "Built REST API endpoints for user authentication using FastAPI and PostgreSQL",
+        "Reduced average query time by 35% by adding missing indexes on hot tables",
+        "Wrote unit and integration tests, raising coverage from 42% to 78%"
+      ]
+    },
+    {
+      "company": "Freelance",
+      "title": "Web Developer",
+      "start": "Jan 2022",
+      "end": "May 2023",
+      "bullets": [
+        "Delivered 4 small business websites using React and Node.js",
+        "Integrated Stripe payments for an e-commerce client, processing $10k/month"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Texas at Austin",
+      "degree": "B.S. Computer Science",
+      "graduation": "May 2023",
+      "gpa": "3.7"
+    }
+  ],
+  "skills": {
+    "Languages": ["Python", "JavaScript", "TypeScript"],
+    "Frameworks": ["FastAPI", "React", "Node.js"],
+    "Databases": ["PostgreSQL", "Redis"]
+  },
+  "projects": [
+    {
+      "name": "DevLog",
+      "description": "CLI tool for structured daily developer logging with Markdown export.",
+      "bullets": [
+        "Published to PyPI with 120+ downloads in first month",
+        "Added GitHub Actions CI pipeline for automated testing and release"
+      ],
+      "url": "github.com/alexrivera/devlog"
+    }
+  ],
+  "certifications": []
+}

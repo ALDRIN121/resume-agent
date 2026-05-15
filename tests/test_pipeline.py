@@ -338,6 +338,83 @@ class TestHRReviewNode:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  PDF validator node
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestPDFValidatorNode:
+
+    def _make_mock_llm(self, response_text: str):
+        """Return a mock LLM whose .invoke() yields canned content."""
+        llm = MagicMock()
+        llm.invoke.return_value = MagicMock(content=response_text)
+        return llm
+
+    def test_pass_response_sets_validation_passed_true(self, tmp_path):
+        """Vision LLM returning PASS sets validation_passed=True."""
+        from resume_agent.agents.pdf_validator import pdf_validator_node
+
+        img = tmp_path / "page1.png"
+        img.write_bytes(b"\x89PNG\r\n")  # minimal fake PNG
+
+        state = {"page_images": [str(img)]}
+
+        with patch("resume_agent.agents.pdf_validator.get_chat_model",
+                   return_value=self._make_mock_llm("PASS")):
+            result = pdf_validator_node(state)
+
+        assert result["validation_passed"] is True
+        assert result["validation_feedback"] is None
+
+    def test_underfilled_last_page_sets_feedback(self, tmp_path):
+        """Last-page underfilled criterion (F) surfaces as validation feedback."""
+        from resume_agent.agents.pdf_validator import pdf_validator_node
+
+        img = tmp_path / "page1.png"
+        img.write_bytes(b"\x89PNG\r\n")
+
+        underfilled_feedback = (
+            'Page 1 | Section "Education" | Issue: Last page underfilled — '
+            "content fills less than 30% of vertical height | "
+            "Fix: condense content to N-1 pages or expand project bullets."
+        )
+        state = {"page_images": [str(img)]}
+
+        with patch("resume_agent.agents.pdf_validator.get_chat_model",
+                   return_value=self._make_mock_llm(underfilled_feedback)):
+            result = pdf_validator_node(state)
+
+        assert result["validation_passed"] is False
+        assert "underfilled" in result["validation_feedback"].lower()
+
+    def test_no_page_images_fails_validation(self):
+        """Missing page images fail validation without calling the LLM."""
+        from resume_agent.agents.pdf_validator import pdf_validator_node
+
+        result = pdf_validator_node({"page_images": []})
+
+        assert result["validation_passed"] is False
+        assert result["validation_feedback"] is not None
+
+    def test_llm_failure_marks_page_unavailable(self, tmp_path):
+        """When the vision API raises, feedback notes the unavailable page."""
+        from resume_agent.agents.pdf_validator import pdf_validator_node
+
+        img = tmp_path / "page1.png"
+        img.write_bytes(b"\x89PNG\r\n")
+
+        broken_llm = MagicMock()
+        broken_llm.invoke.side_effect = RuntimeError("vision API down")
+        state = {"page_images": [str(img)]}
+
+        with patch("resume_agent.agents.pdf_validator.get_chat_model",
+                   return_value=broken_llm):
+            result = pdf_validator_node(state)
+
+        assert result["validation_passed"] is False
+        assert "unavailable" in result["validation_feedback"].lower()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  Bot-wall test — verify it actually tests the fallback path
 # ══════════════════════════════════════════════════════════════════════════════
 

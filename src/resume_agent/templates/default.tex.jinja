@@ -172,10 +172,7 @@
 %  Full entries (has field, GPA, or notes): two-row \resumeSubheading + bullets.
 %  Sparse entries (degree only): single-row tabular, no extra whitespace.
 % ══════════════════════════════════════════════════════════════════════════════
-(% if education %)
-\section{Education}
-\resumeSubHeadingListStart
-(% for edu in education %)
+(% macro renderEducation(edu) %)
 (% if edu.notes or edu.gpa or edu.field %)
   \resumeSubheading
     {(( edu.institution | le ))}{(% if edu.graduation %)(( edu.graduation | le ))(% endif %)}
@@ -193,6 +190,12 @@
     \textbf{(( edu.institution | le ))}, \textit{\small (( edu.degree | le ))} & \small (% if edu.graduation %)(( edu.graduation | le ))(% endif %) \\
   \end{tabular*}\vspace{-5pt}
 (% endif %)
+(% endmacro %)
+(% if education %)
+\section{Education}
+\resumeSubHeadingListStart
+(% for edu in education %)
+(( renderEducation(edu) ))
 (% endfor %)
 \resumeSubHeadingListEnd
 (% endif %)
