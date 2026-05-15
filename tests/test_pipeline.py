@@ -259,6 +259,44 @@ class TestResumeLintNode:
         result = resume_lint_node({})
         assert result == {"lint_feedback": None}
 
+    def test_lint_node_increments_lint_retries_on_failure(self):
+        """lint_retries must be incremented each time the lint node produces hard feedback."""
+        from resume_agent.graph import resume_lint_node
+        from resume_agent.schemas import PersonalInfo, Role, UserResume
+
+        bad_resume = UserResume(
+            personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"),
+            experience=[
+                Role(
+                    company="Acme", title="Engineer",
+                    start="Jan 2020", end="Dec 2022",
+                    bullets=["“Impactful” launch"],  # smart quotes → FAIL
+                )
+            ],
+        )
+        state = {"tailored_resume": bad_resume, "lint_retries": 0}
+        result = resume_lint_node(state)
+        assert result.get("lint_feedback") is not None
+        assert result.get("lint_retries") == 1
+
+    def test_lint_loops_at_most_2_times_then_proceeds(self):
+        """Router must fall through to validate_latex after 2 lint-driven retries."""
+        from resume_agent.graph import _route_after_lint
+
+        feedback = "[FAIL] UNICODE_QUOTES: Smart-quote characters found."
+
+        # First failure: lint_retries becomes 1 after the node runs, router re-routes
+        assert _route_after_lint({"lint_feedback": feedback, "lint_retries": 1}) == "generate_latex"
+
+        # Second failure: lint_retries becomes 2, cap exhausted → fall through
+        assert _route_after_lint({"lint_feedback": feedback, "lint_retries": 2}) == "validate_latex"
+
+        # Third would also fall through (defensive: retries > cap)
+        assert _route_after_lint({"lint_feedback": feedback, "lint_retries": 3}) == "validate_latex"
+
+        # No feedback → always proceed
+        assert _route_after_lint({"lint_feedback": None, "lint_retries": 0}) == "validate_latex"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  HR review node
