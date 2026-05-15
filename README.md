@@ -135,6 +135,8 @@ resume-generator generate --jd-text "$(cat job_description.txt)"
 resume-generator generate --jd-url "https://jobs.example.com/senior-engineer"
 ```
 
+> **Pasting a job description?** After pasting, press **Enter three times** on a blank line to finish — or press **Ctrl+D** for a quicker exit. Either works.
+
 Your tailored PDF will be saved to `./output/<company>/` and opened automatically.
 
 ---
@@ -332,6 +334,7 @@ Input (text / URL)
     ▼
 [PDF → Images]     — Poppler renders each page as PNG
     │
+    ├── (fail) ──► retry Generator
     ▼
 [Vision Validator] — Vision LLM checks layout, overflow, spacing
     │
@@ -373,6 +376,10 @@ Input (text / URL)
 - The vision validator should catch this and retry automatically.
 - If it keeps failing, try a stronger model: `--provider anthropic --model claude-sonnet-4-6`
 
+**Job description gets cut off when pasting on macOS**
+- This was a known issue with libedit's ~1024-byte per-line buffer — fixed in v2.0.1.
+- Update to the latest version: `resume-generator update`
+
 **LinkedIn / Greenhouse job URLs don't scrape properly**
 - These sites require JavaScript rendering.
 - Make sure `scraping.playwright_fallback: true` is set in your config.
@@ -386,7 +393,7 @@ Input (text / URL)
 resume-generator update
 ```
 
-This pulls the latest code from GitHub and reinstalls the tool. Run `doctor` afterwards to make sure everything still works.
+This pulls the latest code from GitHub and reinstalls the tool. If you're already on the latest version it will tell you so. Run `doctor` afterwards to make sure everything still works.
 
 If the update command can't find the repo (e.g., you moved the install folder), re-run the original one-liner installer — it will pull the latest code and reinstall in one step.
 
