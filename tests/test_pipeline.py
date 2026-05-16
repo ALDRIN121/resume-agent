@@ -71,6 +71,22 @@ class TestCompileLatex:
         assert not result.ok
         assert result.errors
 
+    def test_success_without_output_dir_returns_stable_pdf(self):
+        from resume_agent.tools.tectonic_compile import compile_latex
+
+        def fake_run(cmd, **_kwargs):
+            outdir = Path(cmd[cmd.index("--outdir") + 1])
+            (outdir / "resume.pdf").write_bytes(b"%PDF-1.7")
+            return MagicMock(returncode=0, stderr="", stdout="")
+
+        with patch("resume_agent.tools.tectonic_compile.shutil.which", return_value="/usr/bin/tectonic"), \
+             patch("resume_agent.tools.tectonic_compile.subprocess.run", side_effect=fake_run):
+            result = compile_latex("\\documentclass{article}")
+
+        assert result.ok
+        assert result.pdf_path is not None
+        assert Path(result.pdf_path).exists()
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Resume generator retry-loop state contract
@@ -89,11 +105,11 @@ class TestResumeGeneratorNode:
 
     def test_first_run_increments_retries_to_one(self, fake_llm_factory):
         """On the first call generator_retries should go from 0 → 1."""
-        from resume_agent.agents.resume_generator import resume_generator_node
+        from resume_agent.agents.resume_generator import _render_template, resume_generator_node
         from resume_agent.schemas import PersonalInfo, UserResume
 
-        canned_latex = "\\documentclass{article}\\begin{document}Hello\\end{document}"
         resume = UserResume(personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"))
+        canned_latex = _render_template(resume).replace("Jane Doe", "Jane Polished")
 
         state = {
             "generator_retries": 0,
@@ -119,12 +135,12 @@ class TestResumeGeneratorNode:
 
     def test_retry_path_uses_fix_latex(self, fake_llm_factory):
         """On retries (retries > 0 + existing latex), node must take the fix path."""
-        from resume_agent.agents.resume_generator import resume_generator_node
+        from resume_agent.agents.resume_generator import _render_template, resume_generator_node
         from resume_agent.schemas import PersonalInfo, UserResume
 
-        original_latex = "\\documentclass{article}\\begin{document}Bad\\end{document}"
-        fixed_latex = "\\documentclass{article}\\begin{document}Fixed\\end{document}"
         resume = UserResume(personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"))
+        original_latex = _render_template(resume)
+        fixed_latex = original_latex.replace("Jane Doe", "Jane Fixed")
 
         state = {
             "generator_retries": 1,  # already ran once → retry path
@@ -147,6 +163,63 @@ class TestResumeGeneratorNode:
         assert fixed_latex in result["latex_source"]
         # Errors must be cleared so the validator runs fresh
         assert result["latex_errors"] == []
+
+    def test_template_package_mutation_falls_back_to_rendered_template(self, fake_llm_factory):
+        """LLM must not be allowed to rename required LaTeX packages."""
+        from resume_agent.agents.resume_generator import _render_template, resume_generator_node
+        from resume_agent.schemas import PersonalInfo, UserResume
+
+        resume = UserResume(personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"))
+        draft = _render_template(resume)
+        broken_latex = draft.replace(r"\usepackage{enumitem}", r"\usepackage{enuminfo}")
+
+        state = {
+            "generator_retries": 0,
+            "base_resume": resume,
+            "tailored_resume": None,
+            "jd": None,
+            "latex_source": "",
+            "latex_errors": [],
+            "pdf_errors": [],
+            "validation_feedback": None,
+        }
+
+        with patch("resume_agent.agents.resume_generator.ResumeAgentSettings") as mock_cfg, \
+             patch("resume_agent.agents.resume_generator.get_chat_model",
+                   return_value=fake_llm_factory(broken_latex)):
+            mock_cfg.load.return_value = MagicMock()
+            result = resume_generator_node(state)
+
+        assert r"\usepackage{enumitem}" in result["latex_source"]
+        assert "enuminfo" not in result["latex_source"]
+
+    def test_retry_corrupted_shell_resets_to_rendered_template(self, fake_llm_factory):
+        """A damaged existing LaTeX shell should not poison every retry."""
+        from resume_agent.agents.resume_generator import _render_template, resume_generator_node
+        from resume_agent.schemas import PersonalInfo, UserResume
+
+        resume = UserResume(personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"))
+        clean_latex = _render_template(resume)
+        corrupted_latex = clean_latex.replace(r"\usepackage{microtype}", r"\usepackage{microtype>")
+
+        state = {
+            "generator_retries": 1,
+            "base_resume": resume,
+            "tailored_resume": None,
+            "jd": None,
+            "latex_source": corrupted_latex,
+            "latex_errors": [],
+            "pdf_errors": ["File `enuminfo.sty' not found."],
+            "validation_feedback": None,
+        }
+
+        with patch("resume_agent.agents.resume_generator.ResumeAgentSettings") as mock_cfg, \
+             patch("resume_agent.agents.resume_generator.get_chat_model",
+                   return_value=fake_llm_factory(corrupted_latex)):
+            mock_cfg.load.return_value = MagicMock()
+            result = resume_generator_node(state)
+
+        assert result["latex_source"] == clean_latex
 
     def test_dangerous_commands_stripped_from_output(self, fake_llm_factory):
         """LLM output containing \\write18 must be sanitised before returning."""
@@ -182,37 +255,25 @@ class TestResumeGeneratorNode:
 
 class TestResumeLintNode:
 
-    def test_lint_feedback_set_on_hard_failure(self):
-        """Lint node sets lint_feedback when metric density is too high (hard fail).
-
-        Smart-quote chars are normalised before lint (Bug 1 fix) so they no longer
-        trigger UNICODE_QUOTES. Metric density > 80% is a reliable hard-fail trigger.
-        """
+    def test_lint_node_normalizes_unicode_before_linting(self):
+        “””Lint node cleans mechanical smart punctuation before hard-failing.”””
         from resume_agent.graph import resume_lint_node
         from resume_agent.schemas import PersonalInfo, Role, UserResume
 
-        # 5/5 bullets have metrics (100% density > 80% threshold) → METRIC_DENSITY FAIL
-        # Note: _METRIC_RE matches \d+[x%] or \+\d+ — use "50%" / "3x" style throughout
         resume = UserResume(
-            personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"),
+            personal=PersonalInfo(full_name=”Jane Doe”, email=”j@d.com”),
             experience=[
                 Role(
-                    company="Acme", title="Engineer",
-                    start="Jan 2020", end="Dec 2022",
-                    bullets=[
-                        "Reduced latency by 50%",
-                        "Increased throughput by 3x",
-                        "Saved 40% cost",
-                        "Scaled to serve 2x the traffic",
-                        "Grew revenue 4x year-over-year",
-                    ],
+                    company=”Acme”, title=”Engineer”,
+                    start=”Jan 2020”, end=”Dec 2022”,
+                    bullets=[““Impactful” launch”],
                 )
             ],
         )
-        state = {"tailored_resume": resume}
+        state = {“tailored_resume”: resume}
         result = resume_lint_node(state)
-        assert result.get("lint_feedback") is not None
-        assert "[FAIL]" in result["lint_feedback"]
+        assert result.get(“lint_feedback”) is None
+        assert result[“tailored_resume”].experience[0].bullets == ['”Impactful” launch']
 
     def test_lint_feedback_none_when_clean(self):
         """Lint node returns None lint_feedback for a clean resume."""
@@ -271,8 +332,8 @@ class TestResumeLintNode:
         result = resume_lint_node({})
         assert result == {"lint_feedback": None}
 
-    def test_lint_node_increments_lint_retries_on_failure(self):
-        """lint_retries must be incremented each time the lint node produces hard feedback."""
+    def test_lint_node_increments_lint_retries_on_non_mechanical_failure(self):
+        """lint_retries increments for hard failures that cannot be auto-normalized."""
         from resume_agent.graph import resume_lint_node
         from resume_agent.schemas import PersonalInfo, Role, UserResume
 
@@ -282,13 +343,7 @@ class TestResumeLintNode:
                 Role(
                     company="Acme", title="Engineer",
                     start="Jan 2020", end="Dec 2022",
-                    bullets=[
-                        "Reduced latency by 50%",
-                        "Increased throughput by 3x",
-                        "Saved 40% cost",
-                        "Scaled to serve 2x the traffic",
-                        "Grew revenue 4x year-over-year",
-                    ],  # 100% metric density → METRIC_DENSITY FAIL
+                    bullets=["Improved the companys product quality"],
                 )
             ],
         )
@@ -383,8 +438,8 @@ class TestPDFValidatorNode:
         assert result["validation_passed"] is True
         assert result["validation_feedback"] is None
 
-    def test_underfilled_last_page_sets_feedback(self, tmp_path):
-        """Last-page underfilled criterion (F) surfaces as validation feedback."""
+    def test_underfilled_last_page_is_advisory(self, tmp_path):
+        """Last-page underfilled criterion (F) is feedback but not a blocker."""
         from resume_agent.agents.pdf_validator import pdf_validator_node
 
         img = tmp_path / "page1.png"
@@ -401,7 +456,7 @@ class TestPDFValidatorNode:
                    return_value=self._make_mock_llm(underfilled_feedback)):
             result = pdf_validator_node(state)
 
-        assert result["validation_passed"] is False
+        assert result["validation_passed"] is True
         assert "underfilled" in result["validation_feedback"].lower()
 
     def test_no_page_images_fails_validation(self):

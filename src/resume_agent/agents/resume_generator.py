@@ -197,10 +197,12 @@ def resume_generator_node(
             for line in combined_feedback.split("\n"):
                 if line.strip():
                     print_info(f"  • {line}")
+        fallback_latex = _render_template(resume) if resume is not None else existing_latex
         latex_source = _fix_latex(
             existing_latex,
             errors=all_errors,
             feedback=combined_feedback or "",
+            fallback=fallback_latex,
             settings=settings,
         )
     else:
@@ -287,7 +289,12 @@ def _polish_latex(draft: str, *, keywords: str, settings: ResumeAgentSettings) -
 
 
 def _fix_latex(
-    source: str, *, errors: list[str], feedback: str, settings: ResumeAgentSettings
+    source: str,
+    *,
+    errors: list[str],
+    feedback: str,
+    fallback: str | None = None,
+    settings: ResumeAgentSettings,
 ) -> str:
     """Ask the LLM to fix specific errors in the LaTeX source."""
     llm = get_chat_model(settings, task="default", temperature=0.1)
@@ -304,8 +311,10 @@ def _fix_latex(
     ]
     result = llm.invoke(messages)
     fixed = _sanitize_llm_latex(_strip_code_fences(str(result.content)))
-    # If the LLM degraded structure while "fixing", keep the prior source instead.
-    return _guard_structure(fixed, fallback=source)
+    # If the LLM degraded structure while "fixing", reset to a clean rendered
+    # template when available. This prevents retries from editing a corrupted
+    # preamble forever.
+    return _guard_structure(fixed, fallback=fallback or source)
 
 
 # Sentinel substrings that the resume template MUST contain. If the LLM removes
@@ -314,6 +323,35 @@ _REQUIRED_TOKENS: tuple[str, ...] = (
     r"\documentclass",
     r"\begin{document}",
     r"\end{document}",
+)
+
+_PROTECTED_TEMPLATE_SNIPPETS: tuple[str, ...] = (
+    r"\usepackage[utf8]{inputenc}",
+    r"\usepackage[T1]{fontenc}",
+    r"\usepackage{lmodern}",
+    r"\usepackage{microtype}",
+    r"\usepackage[empty]{fullpage}",
+    r"\usepackage{titlesec}",
+    r"\usepackage{enumitem}",
+    r"\usepackage[hidelinks]{hyperref}",
+    r"\usepackage{xcolor}",
+    r"\usepackage{tabularx}",
+    r"\addtolength{\oddsidemargin}{-0.5in}",
+    r"\addtolength{\evensidemargin}{-0.5in}",
+    r"\addtolength{\textwidth}{1in}",
+    r"\addtolength{\topmargin}{-0.5in}",
+    r"\addtolength{\textheight}{1.0in}",
+    r"\newcommand{\resumeItem}[1]{%",
+    r"\newcommand{\resumeSubheading}[4]{%",
+    r"\newcommand{\resumeProjectHeading}[2]{%",
+    r"\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}",
+    (
+        r"\newcommand{\resumeSubHeadingListStart}"
+        r"{\begin{itemize}[leftmargin=0.15in, label={}]}"
+    ),
+    r"\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}",
+    r"\newcommand{\resumeItemListStart}{\begin{itemize}}",
+    r"\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}",
 )
 
 
@@ -338,6 +376,22 @@ def _guard_structure(candidate: str, *, fallback: str) -> str:
         )
         return fallback
 
+    missing_protected = [s for s in _PROTECTED_TEMPLATE_SNIPPETS if s not in candidate]
+    if missing_protected:
+        print_warning(
+            "LLM output modified protected template lines — "
+            "resetting to the rendered LaTeX template."
+        )
+        return fallback
+
+    balance_errors = _brace_balance_errors(candidate)
+    if balance_errors:
+        print_warning(
+            f"LLM output has invalid brace balance ({'; '.join(balance_errors)}) — "
+            "resetting to the rendered LaTeX template."
+        )
+        return fallback
+
     item_start = candidate.count(r"\resumeItemListStart")
     item_end = candidate.count(r"\resumeItemListEnd")
     head_start = candidate.count(r"\resumeSubHeadingListStart")
@@ -351,6 +405,24 @@ def _guard_structure(candidate: str, *, fallback: str) -> str:
         return fallback
 
     return candidate
+
+
+def _brace_balance_errors(source: str) -> list[str]:
+    """Small in-process brace check used before expensive PDF compilation."""
+    errors: list[str] = []
+    depth = 0
+    for i, ch in enumerate(source):
+        escaped = i > 0 and source[i - 1] == "\\"
+        if ch == "{" and not escaped:
+            depth += 1
+        elif ch == "}" and not escaped:
+            depth -= 1
+        if depth < 0:
+            errors.append(f"unmatched closing brace near position {i}")
+            depth = 0
+    if depth:
+        errors.append(f"{depth} unclosed opening brace(s)")
+    return errors
 
 
 def _sanitize_llm_latex(latex: str) -> str:

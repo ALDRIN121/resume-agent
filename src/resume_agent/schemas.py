@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import warnings
 from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
@@ -120,16 +119,6 @@ class Certification(BaseModel):
     issuer: Optional[str] = None
     date: Optional[str] = None
     url: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _warn_missing_date(self) -> "Certification":
-        if not self.date:
-            warnings.warn(
-                f"Certification '{self.name}' has no date — consider adding one for ATS parsers.",
-                UserWarning,
-                stacklevel=2,
-            )
-        return self
 
 
 class UserResume(BaseModel):

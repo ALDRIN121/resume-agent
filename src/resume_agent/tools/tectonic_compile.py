@@ -116,12 +116,14 @@ def compile_latex(
                 fatal = True
             return CompileResult(ok=False, pdf_path=None, errors=errors, raw_log=raw_log, fatal=fatal)
 
-        # Move PDF to destination
-        dest_dir = output_dir or tmp_path
+        # Copy PDF to a stable destination. If no destination is supplied, use
+        # a second temp directory that survives this context manager; tmp_path
+        # itself is deleted when the source build directory closes.
+        dest_dir = output_dir or Path(tempfile.mkdtemp(prefix="resume_agent_pdf_"))
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_pdf = dest_dir / "resume.pdf"
-        import shutil as _shutil
-        _shutil.copy2(str(produced_pdf), str(dest_pdf))
+        if produced_pdf.resolve() != dest_pdf.resolve():
+            shutil.copy2(str(produced_pdf), str(dest_pdf))
 
         return CompileResult(ok=True, pdf_path=str(dest_pdf), errors=[], raw_log=raw_log)
 

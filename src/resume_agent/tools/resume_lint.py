@@ -17,20 +17,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..schemas import UserResume
 
-# Unicode chars that _LATEX_ESCAPE_MAP already converts at render time.
-# We normalise free-text fields to ASCII before lint so unicode_quote_scan
-# does not fire on characters that are harmless in the final PDF.
-_UNICODE_NORM_MAP: dict[str, str] = {
-    "’": "'",    # right single quotation mark → straight apostrophe
-    "‘": "`",    # left single quotation mark  → backtick
-    "“": "``",   # left double quotation mark
-    "”": "''",   # right double quotation mark
-    "–": "--",   # en-dash
-    "—": "---",  # em-dash
-}
-_UNICODE_NORM_RE = re.compile("|".join(re.escape(k) for k in _UNICODE_NORM_MAP))
-
-
 # ── Data types ─────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -105,18 +91,22 @@ _BANNED_OPENER_PHRASES = re.compile(
     re.IGNORECASE,
 )
 
-# Narrow possessive patterns that likely indicate a dropped apostrophe.
-# Uses `s\s` (not `s\b`) so end-of-sentence plurals ("Led 3 engineers") never
-# match — the pattern only fires when the word is followed by a space and then
-# NOT an auxiliary verb or preposition that would indicate a plain plural.
-_POSSESSIVE_NOUN_RE = re.compile(
-    r"\b(company|team|client|user|employer|manager)s\s"
-    r"(?!(?:are|were|have|do|can|will|would|should|is|was|of|in|to|for|with|by|on|at|\d|\w+ing\b))",
-    re.IGNORECASE,
-)
+# Narrow possessive typo patterns that are safe to flag without grammar context.
+# Do not flag words like "clients" or "teams": those are valid plurals in
+# resume bullets ("clients adopted the system") and caused false hard failures.
+_POSSESSIVE_TYPO_RE = re.compile(r"\b(companys)\b", re.IGNORECASE)
 
 # Unicode smart-quote / em-dash characters that escape should have normalized
 _SMART_QUOTE_RE = re.compile(r"[‘’“”–—]")
+
+_ASCII_PUNCTUATION_MAP = str.maketrans({
+    "’": "'",
+    "‘": "'",
+    "“": '"',
+    "”": '"',
+    "–": "-",
+    "—": "-",
+})
 
 # Simple present-tense verb heuristic (ends in -s, excluding "was"/"is"/"has")
 _PRESENT_TENSE_VERBS = frozenset({
@@ -170,14 +160,15 @@ def apostrophe_audit(resume: "UserResume") -> list[LintIssue]:
     issues: list[LintIssue] = []
     all_text = _collect_all_text(resume)
     for text in all_text:
-        matches = _POSSESSIVE_NOUN_RE.findall(text)
+        matches = _POSSESSIVE_TYPO_RE.findall(text)
         if matches:
             for m in matches:
+                base = m[:-1] if m.lower().endswith("s") else m
                 issues.append(LintIssue(
                     severity="fail",
                     code="APOSTROPHE_LOSS",
                     message=(
-                        f"Possible dropped apostrophe: '{m}s' should likely be '{m}'s'. "
+                        f"Possible dropped apostrophe: '{m}' should likely be '{base}'s'. "
                         "Check the bullet for missing possessives."
                     ),
                 ))
@@ -298,38 +289,20 @@ def github_present(resume: "UserResume") -> list[LintIssue]:
     return []
 
 
-# ── Normalisation helper ───────────────────────────────────────────────────────
-
-def normalize_resume_text(resume: "UserResume") -> "UserResume":
-    """Return a deep copy of *resume* with Unicode smart-quotes/dashes replaced.
-
-    The six characters handled here are already mapped to ASCII by the Jinja2
-    ``_latex_escape`` filter at render time, so they never reach Tectonic.
-    Normalising before lint prevents ``unicode_quote_scan`` from raising a
-    spurious FAIL on characters that are benign in the final PDF.
-
-    The live state object is never mutated — ``model_copy(deep=True)`` is used.
-    """
-    def _norm(text: str) -> str:
-        return _UNICODE_NORM_RE.sub(lambda m: _UNICODE_NORM_MAP[m.group()], text)
-
-    copy = resume.model_copy(deep=True)
-
-    if copy.summary:
-        copy.summary = _norm(copy.summary)
-
-    for role in copy.experience:
-        role.bullets = [_norm(b) for b in role.bullets]
-
-    for proj in copy.projects:
-        if proj.description:
-            proj.description = _norm(proj.description)
-        proj.bullets = [_norm(b) for b in proj.bullets]
-
-    for edu in copy.education:
-        edu.notes = [_norm(n) for n in edu.notes]
-
-    return copy
+def certification_dates(resume: "UserResume") -> list[LintIssue]:
+    """Warn when certifications are missing dates, without raw Pydantic warnings."""
+    issues: list[LintIssue] = []
+    for cert in resume.certifications:
+        if not cert.date:
+            issues.append(LintIssue(
+                severity="warn",
+                code="CERT_MISSING_DATE",
+                message=(
+                    f"Certification '{cert.name}' has no date. "
+                    "Consider adding one for ATS parsers."
+                ),
+            ))
+    return issues
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
@@ -344,6 +317,7 @@ def lint_resume(resume: "UserResume") -> LintResult:
         verb_audit,
         unicode_quote_scan,
         buzzword_density,
+        certification_dates,
         github_present,
     ]
     for check in checks:
@@ -352,6 +326,31 @@ def lint_resume(resume: "UserResume") -> LintResult:
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
+def normalize_ascii_punctuation(resume: "UserResume") -> tuple["UserResume", bool]:
+    """
+    Return a copy with smart quotes/dashes normalized to ASCII punctuation.
+
+    This is a mechanical cleanup, not content rewriting. It prevents the graph
+    from asking the LLM to fix raw resume data that the LaTeX writer cannot
+    mutate directly.
+    """
+    data = resume.model_dump()
+    normalized = _normalize_value(data)
+    changed = normalized != data
+    if not changed:
+        return resume, False
+    return resume.__class__.model_validate(normalized), True
+
+
+def _normalize_value(value):
+    if isinstance(value, str):
+        return value.translate(_ASCII_PUNCTUATION_MAP)
+    if isinstance(value, list):
+        return [_normalize_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalize_value(val) for key, val in value.items()}
+    return value
 
 def _collect_all_text(resume: "UserResume") -> list[str]:
     """Return all free-text strings from the resume (bullets, summary, descriptions)."""

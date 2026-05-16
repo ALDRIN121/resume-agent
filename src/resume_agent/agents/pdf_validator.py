@@ -90,6 +90,35 @@ Vague fixes ("improve spacing") are not acceptable.
 
 _HUMAN_IMAGE = "Please evaluate the layout quality of this resume page."
 
+_ADVISORY_MARKERS = (
+    "last page underfilled",
+    "metric density too high",
+    "feels dense",
+    "text to feel dense",
+)
+
+_HARD_MARKERS = (
+    "touching or crossing",
+    "crossing the",
+    "extends past",
+    "past the right margin",
+    "running off",
+    "overflow",
+    "not right-flush",
+    "wraps awkwardly",
+    "stranded alone",
+    "orphaned heading",
+    "literal latex",
+    "stray brace",
+    "empty bullet",
+    "duplicate adjacent",
+    "colliding",
+    "truncated",
+    "incomplete",
+    "unavailable",
+    "unverified",
+)
+
 
 def pdf_validator_node(
     state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
@@ -130,11 +159,30 @@ def pdf_validator_node(
         return {"validation_passed": True, "validation_feedback": None}
 
     combined = "\n".join(all_feedback)
-    print_warning(f"Layout issues found on {len(all_feedback)} page(s).")
+    blocking_feedback = [
+        line for line in all_feedback if not _is_advisory_feedback(line)
+    ]
+    if not blocking_feedback:
+        print_warning(
+            f"Layout advisories found on {len(all_feedback)} page(s); continuing."
+        )
+        for line in all_feedback:
+            print_info(f"  → {line}")
+        return {"validation_passed": True, "validation_feedback": combined}
+
+    print_warning(f"Layout issues found on {len(blocking_feedback)} page(s).")
     # Print detailed feedback so Resume Writer can address specific issues
-    for line in all_feedback:
+    for line in blocking_feedback:
         print_info(f"  → {line}")
-    return {"validation_passed": False, "validation_feedback": combined}
+    return {"validation_passed": False, "validation_feedback": "\n".join(blocking_feedback)}
+
+
+def _is_advisory_feedback(feedback: str) -> bool:
+    """Return True for visual polish feedback that should not block delivery."""
+    lower = feedback.lower()
+    if any(marker in lower for marker in _HARD_MARKERS):
+        return False
+    return any(marker in lower for marker in _ADVISORY_MARKERS)
 
 
 def _check_page(llm, img_path: str, *, page_num: int) -> str | None:

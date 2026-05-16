@@ -7,7 +7,7 @@ import shutil
 from ..config import ResumeAgentSettings
 from ..state import ResumeGenState
 from ..tools.fs import build_output_path
-from ..ui.panels import print_success
+from ..ui.panels import print_info, print_success
 
 
 def output_saver_node(
@@ -37,4 +37,6 @@ def output_saver_node(
 
     shutil.copy2(pdf_path, str(dest_path))
     print_success(f"Resume saved → {dest_path}")
+    if state.get("validation_feedback"):
+        print_info("Saved with non-blocking layout advisories shown above.")
     return {"final_pdf_path": str(dest_path)}

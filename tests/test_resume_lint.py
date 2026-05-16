@@ -9,6 +9,7 @@ from resume_agent.tools.resume_lint import (
     LintResult,
     apostrophe_audit,
     buzzword_density,
+    certification_dates,
     github_present,
     lint_resume,
     metric_density,
@@ -106,6 +107,11 @@ class TestApostropheAudit:
     def test_allows_plain_plurals_with_verb(self):
         # "teams are working" — "teams" followed by "are" → not possessive
         resume = _resume(bullets_past=["Ensured teams are aligned across orgs"])
+        issues = apostrophe_audit(resume)
+        assert issues == []
+
+    def test_allows_clients_as_plural_subject(self):
+        resume = _resume(bullets_past=["Clients adopted the new system after pilot launch"])
         issues = apostrophe_audit(resume)
         assert issues == []
 
@@ -227,6 +233,21 @@ class TestGithubPresent:
     def test_junior_without_github_no_warn(self):
         resume = _resume()  # no headline, no senior title
         assert github_present(resume) == []
+
+
+# ── certification_dates ───────────────────────────────────────────────────────
+
+class TestCertificationDates:
+
+    def test_missing_certification_date_warns(self):
+        from resume_agent.schemas import Certification
+
+        resume = _resume()
+        resume.certifications.append(Certification(name="AWS Solutions Architect"))
+
+        issues = certification_dates(resume)
+        assert any(i.code == "CERT_MISSING_DATE" for i in issues)
+        assert all(i.severity == "warn" for i in issues)
 
 
 # ── lint_resume (integration) ─────────────────────────────────────────────────
