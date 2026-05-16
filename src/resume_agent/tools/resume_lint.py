@@ -17,6 +17,19 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..schemas import UserResume
 
+# Unicode chars that _LATEX_ESCAPE_MAP already converts at render time.
+# We normalise free-text fields to ASCII before lint so unicode_quote_scan
+# does not fire on characters that are harmless in the final PDF.
+_UNICODE_NORM_MAP: dict[str, str] = {
+    "’": "'",    # right single quotation mark → straight apostrophe
+    "‘": "`",    # left single quotation mark  → backtick
+    "“": "``",   # left double quotation mark
+    "”": "''",   # right double quotation mark
+    "–": "--",   # en-dash
+    "—": "---",  # em-dash
+}
+_UNICODE_NORM_RE = re.compile("|".join(re.escape(k) for k in _UNICODE_NORM_MAP))
+
 
 # ── Data types ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +60,19 @@ class LintResult:
         for issue in self.issues:
             prefix = "[FAIL]" if issue.severity == "fail" else "[WARN]"
             lines.append(f"{prefix} {issue.code}: {issue.message}")
+        return "\n".join(lines)
+
+    def fail_feedback_text(self) -> str:
+        """Formatted text for the fix-prompt containing only FAIL-severity issues.
+
+        WARN issues are intentionally excluded so they do not destabilise the
+        LLM fix pass with unrelated verb-tense rewrites.
+        """
+        lines = [
+            f"[FAIL] {i.code}: {i.message}"
+            for i in self.issues
+            if i.severity == "fail"
+        ]
         return "\n".join(lines)
 
 
@@ -85,7 +111,7 @@ _BANNED_OPENER_PHRASES = re.compile(
 # NOT an auxiliary verb or preposition that would indicate a plain plural.
 _POSSESSIVE_NOUN_RE = re.compile(
     r"\b(company|team|client|user|employer|manager)s\s"
-    r"(?!(?:are|were|have|do|can|will|would|should|is|was|of|in|to|for|with|by|on|at|\d))",
+    r"(?!(?:are|were|have|do|can|will|would|should|is|was|of|in|to|for|with|by|on|at|\d|\w+ing\b))",
     re.IGNORECASE,
 )
 
@@ -270,6 +296,40 @@ def github_present(resume: "UserResume") -> list[LintIssue]:
             ),
         )]
     return []
+
+
+# ── Normalisation helper ───────────────────────────────────────────────────────
+
+def normalize_resume_text(resume: "UserResume") -> "UserResume":
+    """Return a deep copy of *resume* with Unicode smart-quotes/dashes replaced.
+
+    The six characters handled here are already mapped to ASCII by the Jinja2
+    ``_latex_escape`` filter at render time, so they never reach Tectonic.
+    Normalising before lint prevents ``unicode_quote_scan`` from raising a
+    spurious FAIL on characters that are benign in the final PDF.
+
+    The live state object is never mutated — ``model_copy(deep=True)`` is used.
+    """
+    def _norm(text: str) -> str:
+        return _UNICODE_NORM_RE.sub(lambda m: _UNICODE_NORM_MAP[m.group()], text)
+
+    copy = resume.model_copy(deep=True)
+
+    if copy.summary:
+        copy.summary = _norm(copy.summary)
+
+    for role in copy.experience:
+        role.bullets = [_norm(b) for b in role.bullets]
+
+    for proj in copy.projects:
+        if proj.description:
+            proj.description = _norm(proj.description)
+        proj.bullets = [_norm(b) for b in proj.bullets]
+
+    for edu in copy.education:
+        edu.notes = [_norm(n) for n in edu.notes]
+
+    return copy
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
