@@ -20,23 +20,27 @@ An AI-powered CLI tool that reads a job description and your existing resume, th
 2. The tool reads your resume and the job description, then identifies gaps and tailoring opportunities.
 3. It asks you a few questions (only what it can't figure out on its own).
 4. You approve or reject suggested rewrites to your bullet points.
-5. A polished, job-specific PDF lands on your desktop.
+5. A polished, job-specific PDF is saved in the output folder and opened automatically.
 
-No web UI. No uploading your resume to a third-party service. Everything runs locally on your machine.
+No hosted web UI. Your files stay on your machine, but the resume and job description text are sent to whichever AI provider you choose. If you want the AI step to stay local too, use Ollama with a local model.
 
 ---
 
 ## Requirements
 
-Before installing, you need three things on your computer:
+Before installing, you need these tools on your computer:
 
 | What | Why you need it | How to install |
 |------|----------------|----------------|
 | **Python 3.12+** | Runs the tool | [python.org/downloads](https://python.org/downloads) |
+| **Git** | Downloads and updates the project | [git-scm.com/downloads](https://git-scm.com/downloads) |
+| **uv** | Installs the CLI and Python dependencies | The installer adds it automatically if missing |
 | **Tectonic** | Converts the resume to PDF (a LaTeX compiler) | See below |
 | **Poppler** | Reads PDF pages as images so the AI can check the layout | See below |
 
-You also need an API key for at least one AI provider. The easiest free options are **Google Gemini** (no credit card) and **NVIDIA NIM** (free tier, no credit card).
+You also need an API key for at least one AI provider, unless you use local Ollama. The easiest free cloud options are **Google Gemini** (no credit card) and **NVIDIA NIM** (free tier, no credit card).
+
+> **Note:** The one-line installers install `uv` for you, but they do not install Python, Git, Tectonic, or Poppler. If `resume-generator doctor` reports missing tools, follow the hints it prints.
 
 ### Installing Tectonic and Poppler
 
@@ -120,22 +124,43 @@ After installation, `resume-generator` should be available in your terminal. If 
 
 ## Quickstart
 
+### Mac / Linux
+
 ```bash
-# 1. Check everything is working
+# 1. First-time setup: choose your AI provider and enter your API key
+resume-generator setup
+
+# 2. Check everything is working
 resume-generator doctor
 
-# 2. First-time setup: parse your existing resume (one-time step)
+# 3. Parse your existing resume (one-time step)
 resume-generator init --source path/to/your_resume.tex
 # or if you only have a PDF:
 resume-generator init --source path/to/your_resume.pdf
 
-# 3. Generate a tailored resume
-resume-generator generate --jd-text "$(cat job_description.txt)"
+# 4. Generate a tailored resume from a text file
+resume-generator generate --jd-file job_description.txt
 # or paste a job listing URL:
 resume-generator generate --jd-url "https://jobs.example.com/senior-engineer"
 ```
 
-> **Pasting a job description?** After pasting, press **Enter three times** on a blank line to finish — or press **Ctrl+D** for a quicker exit. Either works.
+### Windows PowerShell
+
+```powershell
+# 1. First-time setup: choose your AI provider and enter your API key
+resume-generator setup
+
+# 2. Check everything is working
+resume-generator doctor
+
+# 3. Parse your existing resume (one-time step)
+resume-generator init --source C:\Users\you\Documents\resume.pdf
+
+# 4. Generate a tailored resume from a text file
+resume-generator generate --jd-file C:\Users\you\Documents\job_description.txt
+# or paste a job listing URL:
+resume-generator generate --jd-url "https://jobs.example.com/senior-engineer"
+```
 
 Your tailored PDF will be saved to `./output/<company>/` and opened automatically.
 
@@ -157,10 +182,10 @@ The tool needs to call an AI model. Pick one:
 
 ### Running the setup wizard
 
-Just run `resume-generator` with no arguments — it will walk you through picking a provider and entering your API key:
+Run the setup wizard once. It will walk you through picking a provider and entering your API key:
 
 ```bash
-resume-generator
+resume-generator setup
 ```
 
 The wizard asks you to:
@@ -171,6 +196,10 @@ The wizard asks you to:
 
 Settings are saved to `~/.resume_generator/config.yaml`. Your API key is stored separately in `~/.resume_generator/.env` (chmod 600 on Mac/Linux).
 
+You can also run `resume-generator` with no arguments. On a fresh install, it launches the same first-time setup flow, then asks for your resume and job description interactively.
+
+> **Pasting a job description in interactive mode?** After pasting, press **Enter three times** on a blank line to finish — or press **Ctrl+D** for a quicker exit. Either works.
+
 ---
 
 ## All commands
@@ -179,8 +208,9 @@ Settings are saved to `~/.resume_generator/config.yaml`. Your API key is stored 
 resume-generator                           # Interactive mode (first run = setup wizard)
 resume-generator setup                    # Re-run the setup wizard
 resume-generator init --source <file>     # Parse your resume (one-time)
-resume-generator generate --jd-text "…"  # Generate from pasted text
-resume-generator generate --jd-url <url> # Generate from a job listing URL
+resume-generator generate --jd-file <file>  # Generate from a job description file
+resume-generator generate --jd-text "…"     # Generate from pasted text
+resume-generator generate --jd-url <url>    # Generate from a job listing URL
 resume-generator resume <thread-id>       # Resume an interrupted session
 resume-generator config show              # Show current settings
 resume-generator config set provider openai
@@ -351,7 +381,9 @@ Input (text / URL)
 - Mac/Linux: make sure `~/.local/bin` is in your PATH.
 - Windows: make sure `%APPDATA%\uv\bin` is in your PATH (the installer prints the exact command to fix this).
 - Try closing and reopening your terminal after updating PATH.
-- Or run directly: `uvx resume-generator`
+- Or run it directly:
+  - Mac/Linux: `~/.local/bin/resume-generator`
+  - Windows PowerShell: `& "$env:APPDATA\uv\bin\resume-generator.exe"`
 
 **`tectonic: command not found` or `pdftoppm: command not found`**
 - Run `resume-generator install-deps` to install automatically.
@@ -383,7 +415,7 @@ Input (text / URL)
 **LinkedIn / Greenhouse job URLs don't scrape properly**
 - These sites require JavaScript rendering.
 - Make sure `scraping.playwright_fallback: true` is set in your config.
-- Run `playwright install chromium` once after installation.
+- Run `uv tool run --from playwright playwright install chromium` once after installation.
 
 ---
 
