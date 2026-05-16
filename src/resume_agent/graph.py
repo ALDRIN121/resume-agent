@@ -43,7 +43,7 @@ from .agents.resume_generator import resume_generator_node
 from .agents.suggestion_presenter import suggestion_presenter_node
 from .agents.terminal_failure import terminal_failure_node
 from .state import ResumeGenState
-from .tools.resume_lint import lint_resume
+from .tools.resume_lint import lint_resume, normalize_resume_text
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -72,7 +72,7 @@ def resume_lint_node(state: ResumeGenState) -> dict:
         return {"lint_feedback": None}
 
     print_agent_step("Resume Lint", "Running deterministic quality checks…")
-    result = lint_resume(resume)
+    result = lint_resume(normalize_resume_text(resume))
 
     if not result.issues:
         print_info("Lint: all checks passed.")
@@ -83,7 +83,7 @@ def resume_lint_node(state: ResumeGenState) -> dict:
             f"  [{issue.severity.upper()}] {issue.code}: {issue.message}"
         )
 
-    feedback = result.feedback_text() if result.has_failures else None
+    feedback = result.fail_feedback_text() if result.has_failures else None
     if feedback:
         return {
             "lint_feedback": feedback,
