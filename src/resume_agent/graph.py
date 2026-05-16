@@ -43,7 +43,7 @@ from .agents.resume_generator import resume_generator_node
 from .agents.suggestion_presenter import suggestion_presenter_node
 from .agents.terminal_failure import terminal_failure_node
 from .state import ResumeGenState
-from .tools.resume_lint import lint_resume, normalize_resume_text
+from .tools.resume_lint import lint_resume, normalize_ascii_punctuation
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -72,11 +72,24 @@ def resume_lint_node(state: ResumeGenState) -> dict:
         return {"lint_feedback": None}
 
     print_agent_step("Resume Lint", "Running deterministic quality checks…")
-    result = lint_resume(normalize_resume_text(resume))
+    updates: dict = {}
+    normalized_resume, changed = normalize_ascii_punctuation(resume)
+    if changed:
+        resume = normalized_resume
+        key = (
+            "tailored_resume"
+            if state.get("tailored_resume") is not None
+            else "base_resume"
+        )
+        updates[key] = normalized_resume
+        print_info("Normalized smart quotes/dashes to ASCII punctuation.")
+
+    result = lint_resume(resume)
 
     if not result.issues:
         print_info("Lint: all checks passed.")
-        return {"lint_feedback": None}
+        updates["lint_feedback"] = None
+        return updates
 
     for issue in result.issues:
         (print_warning if issue.severity == "fail" else print_info)(
@@ -85,11 +98,13 @@ def resume_lint_node(state: ResumeGenState) -> dict:
 
     feedback = result.fail_feedback_text() if result.has_failures else None
     if feedback:
-        return {
+        updates.update({
             "lint_feedback": feedback,
             "lint_retries": state.get("lint_retries", 0) + 1,
-        }
-    return {"lint_feedback": None}
+        })
+        return updates
+    updates["lint_feedback"] = None
+    return updates
 
 
 # ── Static routing functions (no settings dependency) ─────────────────────────

@@ -151,11 +151,12 @@ class TestPersonalInfoExtended:
 
 class TestCertificationWarning:
 
-    def test_certification_warns_on_missing_date(self):
+    def test_certification_missing_date_does_not_emit_raw_warning(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             cert = Certification(name="AWS Solutions Architect", issuer="Amazon")
-        assert any("no date" in str(w.message).lower() for w in caught)
+        assert cert.date is None
+        assert not any("no date" in str(w.message).lower() for w in caught)
 
     def test_certification_no_warn_when_date_present(self):
         with warnings.catch_warnings(record=True) as caught:
