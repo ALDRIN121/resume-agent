@@ -51,7 +51,10 @@ TEMPLATE STRUCTURE — these rules are NON-NEGOTIABLE:
   with thin spaces). Do not replace with $|$ or fontawesome icons.
 - Escape user text properly: &, %, #, _, $ must be backslash-escaped when they
   appear in narrative text. Never escape them inside \href{URL}{...}'s URL part.
-- Use straight ASCII apostrophes ('). Do not use smart/curly quotes (‘ ’ “ ”).
+- Use straight ASCII apostrophes (‘). Do not use smart/curly quotes (‘ ‘ " ").
+- The SUMMARY section must NEVER use \resumeSubHeadingListStart/\resumeSubHeadingListEnd.
+  If you render the summary as bullet points, use ONLY \resumeItemListStart + \resumeItem{...} + \resumeItemListEnd directly after \section{Professional Summary}.
+  Wrapping an \resumeItemListStart inside a \resumeSubHeadingListStart causes a LaTeX "missing \item" error.
 
 
 CRITICAL: Do NOT add any experience, skills, dates, or accomplishments not
