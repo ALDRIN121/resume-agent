@@ -183,17 +183,29 @@ class TestResumeGeneratorNode:
 class TestResumeLintNode:
 
     def test_lint_feedback_set_on_hard_failure(self):
-        """Lint node sets lint_feedback when unicode quotes are detected (hard fail)."""
+        """Lint node sets lint_feedback when metric density is too high (hard fail).
+
+        Smart-quote chars are normalised before lint (Bug 1 fix) so they no longer
+        trigger UNICODE_QUOTES. Metric density > 80% is a reliable hard-fail trigger.
+        """
         from resume_agent.graph import resume_lint_node
         from resume_agent.schemas import PersonalInfo, Role, UserResume
 
+        # 5/5 bullets have metrics (100% density > 80% threshold) → METRIC_DENSITY FAIL
+        # Note: _METRIC_RE matches \d+[x%] or \+\d+ — use "50%" / "3x" style throughout
         resume = UserResume(
             personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"),
             experience=[
                 Role(
                     company="Acme", title="Engineer",
                     start="Jan 2020", end="Dec 2022",
-                    bullets=["“Impactful” launch"],  # smart quotes → hard fail
+                    bullets=[
+                        "Reduced latency by 50%",
+                        "Increased throughput by 3x",
+                        "Saved 40% cost",
+                        "Scaled to serve 2x the traffic",
+                        "Grew revenue 4x year-over-year",
+                    ],
                 )
             ],
         )
@@ -270,7 +282,13 @@ class TestResumeLintNode:
                 Role(
                     company="Acme", title="Engineer",
                     start="Jan 2020", end="Dec 2022",
-                    bullets=["“Impactful” launch"],  # smart quotes → FAIL
+                    bullets=[
+                        "Reduced latency by 50%",
+                        "Increased throughput by 3x",
+                        "Saved 40% cost",
+                        "Scaled to serve 2x the traffic",
+                        "Grew revenue 4x year-over-year",
+                    ],  # 100% metric density → METRIC_DENSITY FAIL
                 )
             ],
         )

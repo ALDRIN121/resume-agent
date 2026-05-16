@@ -31,6 +31,18 @@ _DANGEROUS_LATEX = re.compile(
 # Strip only when followed by a brace group pointing outside the document root.
 _INPUT_INCLUDE = re.compile(r"\\(input|include)\s*\{", re.IGNORECASE)
 
+# When the LLM wraps the Summary \resumeItemListStart inside a
+# \resumeSubHeadingListStart, LaTeX raises "missing \item" because itemize
+# environments cannot be directly nested without an intervening \item.
+# Collapse the illegal double-list wrapper by keeping only the inner list.
+_SUMMARY_DOUBLE_LIST_RE = re.compile(
+    r"(\\section\{Professional Summary\}[^\n]*\n)"
+    r"\s*\\resumeSubHeadingListStart\s*\n"
+    r"(\s*\\resumeItemListStart.*?\\resumeItemListEnd)\s*\n"
+    r"\s*\\resumeSubHeadingListEnd",
+    re.DOTALL,
+)
+
 _TEMPLATE_RULES = """\
 TEMPLATE STRUCTURE — these rules are NON-NEGOTIABLE:
 - The preamble defines custom macros: \\resumeItem, \\resumeSubheading,
@@ -53,7 +65,10 @@ TEMPLATE STRUCTURE — these rules are NON-NEGOTIABLE:
   with thin spaces). Do not replace with $|$ or fontawesome icons.
 - Escape user text properly: &, %, #, _, $ must be backslash-escaped when they
   appear in narrative text. Never escape them inside \\href{URL}{...}'s URL part.
-- Use straight ASCII apostrophes ('). Do not use smart/curly quotes (‘ ’ “ ”).
+- Use straight ASCII apostrophes (‘). Do not use smart/curly quotes (‘ ‘ " ").
+- The SUMMARY section must NEVER use \\resumeSubHeadingListStart/\\resumeSubHeadingListEnd.
+  If you render the summary as bullet points, use ONLY \\resumeItemListStart + \\resumeItem{...} + \\resumeItemListEnd directly after \\section{Professional Summary}.
+  Wrapping an \\resumeItemListStart inside a \\resumeSubHeadingListStart causes a LaTeX "missing \\item" error.
 """
 
 _POLISH_SYSTEM_HEAD = """\
@@ -359,6 +374,16 @@ def _sanitize_llm_latex(latex: str) -> str:
         print_warning("LLM output contained \\input/\\include — stripped.")
         # Remove entire \input{...} and \include{...} invocations
         latex = re.sub(r"\\(input|include)\s*\{[^}]*\}", "", latex, flags=re.IGNORECASE)
+
+    # Collapse illegal double-list nesting in the Summary section.
+    # The LLM sometimes wraps \resumeItemListStart inside \resumeSubHeadingListStart
+    # which causes a LaTeX "missing \item" error at the nested itemize boundary.
+    latex, n_fixed = _SUMMARY_DOUBLE_LIST_RE.subn(r"\1\2", latex)
+    if n_fixed:
+        print_warning(
+            "Fixed illegal \\resumeSubHeadingListStart wrapper around Summary "
+            "\\resumeItemListStart — outer wrapper removed."
+        )
 
     return latex
 
