@@ -69,6 +69,13 @@ TEMPLATE STRUCTURE — these rules are NON-NEGOTIABLE:
 - The SUMMARY section must NEVER use \\resumeSubHeadingListStart/\\resumeSubHeadingListEnd.
   If you render the summary as bullet points, use ONLY \\resumeItemListStart + \\resumeItem{...} + \\resumeItemListEnd directly after \\section{Professional Summary}.
   Wrapping an \\resumeItemListStart inside a \\resumeSubHeadingListStart causes a LaTeX "missing \\item" error.
+- SECTION PRESERVATION: Output EVERY \\section{...} present in the draft, in the SAME ORDER.
+  Do NOT skip, merge, or reorder sections. If the draft has Technical Skills before
+  Professional Experience, your output must too. Missing a section is a critical error.
+- HYPHEN PRESERVATION: Keep hyphens in compound technical terms exactly as they appear.
+  Examples: "end-to-end", "production-grade", "context-length-aware", "fine-tuning",
+  "multi-agent", "high-volume", "state-of-the-art", "GPT-4", "scikit-learn".
+  Do NOT remove or merge hyphens when polishing bullets.
 """
 
 _POLISH_SYSTEM_HEAD = """\
@@ -404,6 +411,18 @@ def _guard_structure(candidate: str, *, fallback: str) -> str:
         )
         return fallback
 
+    # Guard against the LLM silently dropping content sections.
+    # Count \section{ occurrences (each is a resume section header).
+    candidate_sections = candidate.count(r"\section{")
+    fallback_sections = fallback.count(r"\section{")
+    if candidate_sections < fallback_sections:
+        print_warning(
+            f"LLM output is missing sections "
+            f"({candidate_sections} vs {fallback_sections} expected) — "
+            "keeping previous LaTeX."
+        )
+        return fallback
+
     return candidate
 
 
@@ -463,15 +482,12 @@ def _sanitize_llm_latex(latex: str) -> str:
 def _strip_code_fences(text: str) -> str:
     """Remove ```latex ... ``` or ``` ... ``` wrappers if present."""
     text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        # Remove first and last fence lines
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines)
-    return text.strip()
+    lines = text.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
 
 
 def _latex_href_escape(value: str) -> str:

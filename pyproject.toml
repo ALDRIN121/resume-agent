@@ -9,15 +9,15 @@ description = "AI-powered multi-agent resume generator — LangGraph + LaTeX + R
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    # LangGraph / LangChain
-    "langgraph>=0.3.0",
-    "langgraph-checkpoint-sqlite>=2.0.0",
-    "langchain-core>=0.3.0",
-    "langchain-anthropic>=0.3.0",
-    "langchain-openai>=0.3.0",
-    "langchain-ollama>=0.3.0",
-    "langchain-google-genai>=2.0.0",
-    "langchain-nvidia-ai-endpoints>=0.3.0",
+    # LangGraph / LangChain (floors track the tested 1.x lock; some carry CVE fixes)
+    "langgraph>=1.1.0",
+    "langgraph-checkpoint-sqlite>=3.0.0",
+    "langchain-core>=1.3.3",
+    "langchain-anthropic>=1.0.0",
+    "langchain-openai>=1.1.14",
+    "langchain-ollama>=1.0.0",
+    "langchain-google-genai>=4.0.0",
+    "langchain-nvidia-ai-endpoints>=1.0.0",
     # Pydantic
     "pydantic>=2.9.0",
     "pydantic-settings>=2.7.0",
@@ -37,18 +37,16 @@ dependencies = [
     # Config / Utilities
     "pyyaml>=6.0.0",
     "python-slugify>=8.0.0",
+    # Local web app
+    "fastapi>=0.115.0",
+    "starlette>=1.0.1",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    "websockets>=14.0",
 ]
 
 [project.scripts]
 resume-generator = "resume_agent.cli:app"
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
-    "respx>=0.22.0",
-    "ruff>=0.8.0",
-]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/resume_agent"]
@@ -68,5 +66,8 @@ testpaths = ["tests"]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.22.0",
+    "ruff>=0.8.0",
 ]

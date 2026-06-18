@@ -325,3 +325,16 @@ def build_graph(
 
     # ── Compile ────────────────────────────────────────────────────────────────
     return builder.compile(checkpointer=checkpointer)
+
+
+async def astream_events(
+    initial_input,
+    *,
+    config: dict,
+    checkpointer=None,
+    settings: ResumeAgentSettings | None = None,
+):
+    """Async event-stream wrapper used by the FastAPI API layer."""
+    graph = build_graph(checkpointer=checkpointer, settings=settings)
+    async for event in graph.astream_events(initial_input, config=config, version="v2"):
+        yield event

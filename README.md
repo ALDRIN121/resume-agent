@@ -22,7 +22,7 @@ An AI-powered CLI tool that reads a job description and your existing resume, th
 4. You approve or reject suggested rewrites to your bullet points.
 5. A polished, job-specific PDF is saved in the output folder and opened automatically.
 
-No hosted web UI. Your files stay on your machine, but the resume and job description text are sent to whichever AI provider you choose. If you want the AI step to stay local too, use Ollama with a local model.
+Two ways to drive it: a **CLI** (the primary interface) and an **optional local web UI** (`resume-generator serve`) that runs entirely on your own machine — nothing is hosted. Your files stay local; only the resume and job-description text are sent to whichever AI provider you choose. If you want the AI step to stay local too, use Ollama with a local model.
 
 ---
 
@@ -217,16 +217,35 @@ resume-generator config set provider openai
 resume-generator config set retries.generator_max 5
 resume-generator doctor                   # Check tools and API keys
 resume-generator install-deps             # Auto-install Tectonic and Poppler
+resume-generator serve                    # Launch the local web UI (FastAPI + React)
 resume-generator update                   # Pull latest version from GitHub
 ```
 
 ### Overriding the AI model for one run
 
 ```bash
-resume-generator generate --jd-url <url> --provider openai --model gpt-4o
+resume-generator generate --jd-url <url> --provider openai --model gpt-5.5
 resume-generator generate --jd-url <url> --provider anthropic --model claude-sonnet-4-6
-resume-generator generate --jd-url <url> --provider nvidia --model meta/llama-3.1-70b-instruct
+resume-generator generate --jd-url <url> --provider nvidia --model meta/llama-3.3-70b-instruct
 ```
+
+---
+
+## Web UI (optional)
+
+Prefer a browser to the terminal? Launch the bundled local web app:
+
+```bash
+resume-generator serve            # serves on http://127.0.0.1:8000
+resume-generator serve --port 9000
+```
+
+It runs a FastAPI backend plus a pre-built React frontend entirely on your machine — there is no hosted service and no telemetry. The UI covers the same flow as the CLI: configure your provider, upload/parse a base resume, paste a job description, watch the pipeline stream live (with the human-in-the-loop questions and suggestion review inline), and download the generated PDF.
+
+Notes:
+- Bind address defaults to loopback (`127.0.0.1`). Because the app ships no login, state-changing requests and WebSocket connections are only accepted from loopback — a deliberate guard against malicious web pages or DNS-rebinding driving your local API.
+- `--reload` is for frontend/static development only; it restarts the worker and drops in-flight runs (run state is in-memory).
+- The frontend is pre-built and committed under `Frontend/dist/`. To develop the UI itself, see [Development](#development).
 
 ---
 
@@ -237,8 +256,8 @@ Config file: `~/.resume_generator/config.yaml`
 ```yaml
 provider: gemini
 model:
-  default: gemini-2.0-flash     # Text model for writing and analysis
-  vision: gemini-2.0-flash      # Vision model for PDF layout checking
+  default: gemini-2.5-flash     # Text model for writing and analysis
+  vision: gemini-2.5-flash      # Vision model for PDF layout checking
 scraping:
   playwright_fallback: true     # Use a full browser for JS-heavy sites (e.g. LinkedIn)
 latex:
@@ -443,6 +462,7 @@ If the update command can't find the repo (e.g., you moved the install folder), 
 | PDF → images | pdf2image + Poppler |
 | CLI | Typer + Rich |
 | State checkpointing | LangGraph SqliteSaver (`~/.resume_generator/state.sqlite`) |
+| Local web app | FastAPI + WebSockets backend · React (Vite) SPA |
 
 ---
 
@@ -462,10 +482,21 @@ If the update command can't find the repo (e.g., you moved the install folder), 
 ```bash
 git clone https://github.com/ALDRIN121/resume-agent.git
 cd resume-agent
-uv sync --extra dev
+uv sync                 # installs the dev dependency group by default
 
-pytest -q
-ruff check src/
+uv run pytest -q
+uv run ruff check src/
+```
+
+### Working on the web UI
+
+The committed `Frontend/dist/` is what `resume-generator serve` ships. To change the UI, edit the sources and rebuild:
+
+```bash
+cd Frontend
+npm ci
+npm run dev             # hot-reload dev server (proxies the API)
+npm run build           # rebuild Frontend/dist/ before committing
 ```
 
 To add a new LaTeX template, copy `src/resume_agent/templates/default.tex.jinja` and update `config.yaml` to point to it.

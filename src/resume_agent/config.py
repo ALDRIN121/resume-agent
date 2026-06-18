@@ -16,7 +16,7 @@ MAX_JD_TEXT_CHARS: int = 8_000       # scraped JD text sent to jd_extractor
 MAX_JD_STORAGE_CHARS: int = 2_000    # JD raw_text stored on JobDescription
 MAX_RESUME_JSON_CHARS: int = 6_000   # resume JSON sent to gap_analyzer / hitl
 MAX_RESUME_PARSE_CHARS: int = 12_000 # resume text sent to base_resume_loader
-MAX_LLM_OUTPUT_TOKENS: int = 4_096   # max_tokens for all LLM calls
+MAX_LLM_OUTPUT_TOKENS: int = 16_384  # max_tokens for all LLM calls — full LaTeX resume needs ~5–8k tokens
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -44,8 +44,8 @@ def migrate_config_dir() -> None:
 # ── Sub-configs ────────────────────────────────────────────────────────────────
 
 class ModelConfig(BaseModel):
-    default: str = "gemma4:31b-cloud"
-    vision: str = "claude-opus-4-6"
+    default: str = "llama3.2"          # pullable local Ollama tag (default provider is ollama)
+    vision: str = "claude-opus-4-8"
 
 
 class ScrapingConfig(BaseModel):
