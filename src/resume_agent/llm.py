@@ -51,9 +51,10 @@ def get_chat_model(
         from langchain_openai import ChatOpenAI
 
         api_key = settings.openai_api_key or os.environ.get("OPENAI_API_KEY")
-        oai_model = _map_openai_model(model_name, task)
+        # Use the configured model directly — model_name is already vision-aware
+        # (settings.model.vision vs .default is chosen above by task).
         return ChatOpenAI(
-            model=oai_model,
+            model=model_name,
             temperature=temperature,
             max_tokens=MAX_LLM_OUTPUT_TOKENS,
             api_key=api_key,  # type: ignore[arg-type]
@@ -107,12 +108,3 @@ def get_chat_model(
         return ChatNVIDIA(**kwargs)  # type: ignore[arg-type]
 
     raise ValueError(f"Unknown provider: {provider!r}")
-
-
-def _map_openai_model(model_name: str, task: TaskType) -> str:
-    """Translate Anthropic model names to OpenAI equivalents."""
-    if task == "vision":
-        return "gpt-4o"
-    if "opus" in model_name or "sonnet" in model_name:
-        return "gpt-4o"
-    return "gpt-4o-mini"

@@ -1,7 +1,7 @@
 """
 PDF Validator agent node — vision LLM checks each page for layout issues.
 
-Uses a multimodal model (claude-opus-4-6 or gpt-4o) to inspect PNG screenshots
+Uses a multimodal model (claude-opus-4-8 or gpt-5.5) to inspect PNG screenshots
 of each PDF page and identify alignment/formatting problems.
 """
 

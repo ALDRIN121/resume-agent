@@ -645,7 +645,7 @@ app.add_typer(config_app, name="config")
 def config_show() -> None:
     """Show current configuration."""
     settings = ResumeAgentSettings.load()
-    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key"})
+    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key"})
     console.print(Panel(yaml.dump(data, default_flow_style=False), title="[accent]Config[/accent]"))
     console.print(f"[muted]Config file: {CONFIG_FILE}[/muted]")
     console.print(f"[muted]Base resume: {BASE_RESUME_FILE}[/muted]")
@@ -656,7 +656,7 @@ def config_set(key: str = typer.Argument(...), value: str = typer.Argument(...))
     """Set a configuration value. Example: config set provider openai"""
     settings = ResumeAgentSettings.load()
     parts = key.split(".")
-    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key"})
+    data = settings.model_dump(exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key"})
 
     target = data
     for part in parts[:-1]:
@@ -783,6 +783,35 @@ def doctor() -> None:
                 "\n[muted]Run [bold]resume-generator install-deps[/bold] to install missing tools automatically.[/muted]"
             )
         raise typer.Exit(2)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  serve
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host interface to bind."),
+    port: int = typer.Option(8000, "--port", "-p", help="Port for the FastAPI server."),
+    reload: bool = typer.Option(False, "--reload", help="Enable uvicorn auto-reload."),
+) -> None:
+    """Serve the local FastAPI + React Resume Generator app."""
+    import uvicorn
+
+    if reload:
+        console.print(
+            "[yellow]Warning:[/yellow] --reload restarts the worker on file changes, "
+            "which drops in-flight runs and live WebSocket subscribers (run state is "
+            "in-memory). Use it only for frontend/static development."
+        )
+
+    uvicorn.run(
+        "resume_agent.api:create_app",
+        host=host,
+        port=port,
+        reload=reload,
+        factory=True,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
