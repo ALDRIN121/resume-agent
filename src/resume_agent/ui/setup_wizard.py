@@ -57,18 +57,18 @@ _PROVIDERS: list[tuple[str, str, str, bool]] = [
 ]
 
 _MODELS: dict[str, list[str]] = {
-    "gemini":    ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash"],
-    "nvidia":    ["meta/llama-3.1-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "meta/llama-3.3-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
-    "anthropic": ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
-    "openai":    ["gpt-4o", "gpt-4o-mini", "o1-mini", "gpt-3.5-turbo"],
+    "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
+    "nvidia":    ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
+    "anthropic": ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
+    "openai":    ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2"],
     "ollama":    ["llama3.2", "gemma2", "mistral", "qwen2.5", "phi3", "codellama"],
 }
 
 _VISION: dict[str, list[str]] = {
-    "gemini":    ["gemini-2.0-flash", "gemini-1.5-pro"],
+    "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro"],
     "nvidia":    ["meta/llama-3.2-11b-vision-instruct", "microsoft/phi-3.5-vision-instruct"],
-    "anthropic": ["claude-opus-4-6", "claude-sonnet-4-6"],
-    "openai":    ["gpt-4o"],
+    "anthropic": ["claude-opus-4-8", "claude-sonnet-4-6"],
+    "openai":    ["gpt-5.5", "gpt-5.4-mini"],
     "ollama":    ["llava", "llava:13b", "llava:34b"],
 }
 

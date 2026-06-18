@@ -256,24 +256,24 @@ class TestResumeGeneratorNode:
 class TestResumeLintNode:
 
     def test_lint_node_normalizes_unicode_before_linting(self):
-        “””Lint node cleans mechanical smart punctuation before hard-failing.”””
+        """Lint node cleans mechanical smart punctuation before hard-failing."""
         from resume_agent.graph import resume_lint_node
         from resume_agent.schemas import PersonalInfo, Role, UserResume
 
         resume = UserResume(
-            personal=PersonalInfo(full_name=”Jane Doe”, email=”j@d.com”),
+            personal=PersonalInfo(full_name="Jane Doe", email="j@d.com"),
             experience=[
                 Role(
-                    company=”Acme”, title=”Engineer”,
-                    start=”Jan 2020”, end=”Dec 2022”,
-                    bullets=[““Impactful” launch”],
+                    company="Acme", title="Engineer",
+                    start="Jan 2020", end="Dec 2022",
+                    bullets=['“Impactful” launch'],
                 )
             ],
         )
-        state = {“tailored_resume”: resume}
+        state = {"tailored_resume": resume}
         result = resume_lint_node(state)
-        assert result.get(“lint_feedback”) is None
-        assert result[“tailored_resume”].experience[0].bullets == ['”Impactful” launch']
+        assert result.get("lint_feedback") is None
+        assert result["tailored_resume"].experience[0].bullets == ['"Impactful" launch']
 
     def test_lint_feedback_none_when_clean(self):
         """Lint node returns None lint_feedback for a clean resume."""
