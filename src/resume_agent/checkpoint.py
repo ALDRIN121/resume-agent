@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import warnings
-from contextlib import contextmanager
-from typing import Generator
+from contextlib import asynccontextmanager, contextmanager
+from typing import AsyncGenerator, Generator
 
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .config import CONFIG_DIR, STATE_DB
@@ -26,4 +27,15 @@ def get_checkpointer() -> Generator[SqliteSaver, None, None]:
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with SqliteSaver.from_conn_string(str(STATE_DB)) as checkpointer:
+        yield checkpointer
+
+
+@asynccontextmanager
+async def get_async_checkpointer() -> AsyncGenerator[AsyncSqliteSaver, None]:
+    """
+    Async context manager returning an AsyncSqliteSaver checkpointer.
+    Used by the FastAPI/LangGraph streaming path.
+    """
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    async with AsyncSqliteSaver.from_conn_string(str(STATE_DB)) as checkpointer:
         yield checkpointer

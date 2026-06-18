@@ -55,6 +55,13 @@ TEMPLATE STRUCTURE — these rules are NON-NEGOTIABLE:
 - The SUMMARY section must NEVER use \resumeSubHeadingListStart/\resumeSubHeadingListEnd.
   If you render the summary as bullet points, use ONLY \resumeItemListStart + \resumeItem{...} + \resumeItemListEnd directly after \section{Professional Summary}.
   Wrapping an \resumeItemListStart inside a \resumeSubHeadingListStart causes a LaTeX "missing \item" error.
+- SECTION PRESERVATION: Output EVERY \section{...} present in the draft, in the SAME ORDER.
+  Do NOT skip, merge, or reorder sections. If the draft has Technical Skills before
+  Professional Experience, your output must too. Missing a section is a critical error.
+- HYPHEN PRESERVATION: Keep hyphens in compound technical terms exactly as they appear.
+  Examples: "end-to-end", "production-grade", "context-length-aware", "fine-tuning",
+  "multi-agent", "high-volume", "state-of-the-art", "GPT-4", "scikit-learn".
+  Do NOT remove or merge hyphens when polishing bullets.
 
 
 CRITICAL: Do NOT add any experience, skills, dates, or accomplishments not

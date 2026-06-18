@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 from typing import NamedTuple
 from urllib.parse import urlparse
 
@@ -30,6 +31,7 @@ _BOT_WALL_PATTERNS = re.compile(
 _MIN_CONTENT_LENGTH = 400  # chars below this triggers Playwright fallback
 _ALLOWED_SCHEMES = {"http", "https"}
 _MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB cap
+_MAX_REDIRECTS = 5
 
 
 class ScrapeResult(NamedTuple):
@@ -38,17 +40,31 @@ class ScrapeResult(NamedTuple):
     error: str | None
 
 
+def _reject_if_internal(ip_str: str, hostname: str) -> None:
+    """Raise if an IP literal points at a private/loopback/reserved range."""
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        raise ValueError(
+            f"Blocked URL: {hostname!r} maps to a private/reserved address ({ip_str})."
+        )
+
+
 def _validate_url(url: str) -> None:
     """
     Reject URLs that are unsafe to fetch.
 
     Blocks:
     - Non-http/https schemes (file://, gopher://, ftp://, etc.)
-    - Literal private/loopback/link-local IP addresses in the hostname
     - URLs with no hostname
+    - Literal private/loopback/link-local/reserved IP addresses
+    - Public hostnames that *resolve* to a private/reserved address (DNS
+      rebinding): every address returned by getaddrinfo is checked.
 
-    Note: DNS-rebinding attacks (a public hostname resolving to a private IP)
-    are not addressed here; mitigate at the network/firewall level.
+    A residual TOCTOU gap remains between this check and the socket connect;
+    each redirect hop is re-validated by the caller to narrow it.
     """
     parsed = urlparse(url)
 
@@ -61,17 +77,22 @@ def _validate_url(url: str) -> None:
     if not hostname:
         raise ValueError("URL has no hostname.")
 
-    # Block literal private/loopback/link-local/reserved IP addresses
+    # Literal IP — check directly without a DNS lookup.
     try:
-        ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            raise ValueError(
-                f"Blocked URL: hostname {hostname!r} is a private/reserved address."
-            )
+        ipaddress.ip_address(hostname)
+        _reject_if_internal(hostname, hostname)
+        return
     except ValueError as exc:
-        # Re-raise our own ValueError; swallow the "not a valid IP" error from ip_address()
         if "Blocked" in str(exc):
             raise
+
+    # Hostname — resolve and validate every address it maps to.
+    try:
+        infos = socket.getaddrinfo(hostname, parsed.port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise ValueError(f"Could not resolve hostname {hostname!r}.") from exc
+    for info in infos:
+        _reject_if_internal(str(info[4][0]), hostname)
 
 
 async def scrape_url(
@@ -135,20 +156,33 @@ async def _scrape_httpx(
     """Fetch and extract text with httpx + readability. Returns (text, error)."""
     headers = {"User-Agent": user_agent, "Accept-Language": "en-US,en;q=0.9"}
     try:
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=timeout,
-            max_redirects=5,
-        ) as client:
-            resp = await client.get(url, headers=headers)
-            resp.raise_for_status()
-            # Enforce content-type and size limits
-            content_type = resp.headers.get("content-type", "")
-            if "text/html" not in content_type and "text/plain" not in content_type:
-                return "", f"Unexpected content type: {content_type!r}"
-            if len(resp.content) > _MAX_RESPONSE_BYTES:
-                return "", f"Response too large ({len(resp.content)} bytes)"
-            html = resp.text
+        # Follow redirects manually so every hop is re-validated against the
+        # SSRF rules — httpx's own follow_redirects only validates the first URL.
+        async with httpx.AsyncClient(follow_redirects=False, timeout=timeout) as client:
+            current = url
+            html = ""
+            for _ in range(_MAX_REDIRECTS + 1):
+                _validate_url(current)
+                resp = await client.get(current, headers=headers)
+                if resp.is_redirect:
+                    location = resp.headers.get("location")
+                    if not location:
+                        break
+                    current = str(resp.url.join(location))
+                    continue
+                resp.raise_for_status()
+                # Enforce content-type and size limits
+                content_type = resp.headers.get("content-type", "")
+                if "text/html" not in content_type and "text/plain" not in content_type:
+                    return "", f"Unexpected content type: {content_type!r}"
+                if len(resp.content) > _MAX_RESPONSE_BYTES:
+                    return "", f"Response too large ({len(resp.content)} bytes)"
+                html = resp.text
+                break
+            else:
+                return "", f"Too many redirects (>{_MAX_REDIRECTS})"
+    except ValueError as e:
+        return "", str(e)
     except httpx.HTTPStatusError as e:
         return "", f"HTTP {e.response.status_code}: {e.response.reason_phrase}"
     except httpx.RequestError as e:
