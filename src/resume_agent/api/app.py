@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .routers.library import router as library_router
 from .routers.resume import router as resume_router
 from .routers.resume import ws_router as resume_ws_router
 from .routers.runs import router as runs_router
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     app.include_router(runs_router)
+    app.include_router(library_router)
     app.include_router(resume_router)
     app.include_router(settings_router)
     app.include_router(ws_router)

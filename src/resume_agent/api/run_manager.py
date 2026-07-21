@@ -13,6 +13,7 @@ from typing import Any
 
 from langgraph.types import Command
 
+from .. import library
 from ..checkpoint import get_async_checkpointer
 from ..config import CONFIG_DIR, ResumeAgentSettings
 from ..graph import build_graph
@@ -56,6 +57,12 @@ class RunManager:
         self._sessions: dict[str, RunSession] = {}
         self._lock = asyncio.Lock()
         self._load_history()
+        # Durable résumé library (SQLite). Import any pre-existing JSONL history once.
+        try:
+            library.init_db()
+            library.migrate_from_jsonl()
+        except Exception:
+            pass  # library persistence must never block server startup
 
     async def start_run(self, jd_input: dict[str, Any]) -> RunSession:
         thread_id = str(uuid.uuid4())
@@ -227,6 +234,21 @@ class RunManager:
             self._trim_history()
         except Exception:
             pass  # history write failure must never crash the server
+
+        # File the run in the durable résumé library, grouped by company.
+        try:
+            library.upsert_resume(
+                thread_id=session.thread_id,
+                company=session.company,
+                role=session.role,
+                status=session.status,
+                pdf_path=session.pdf_path,
+                error=session.error,
+                duration_s=session.stored_duration_s,
+                created_at=session.started_wall_ts,
+            )
+        except Exception:
+            pass  # library write failure must never crash the server
 
     def _trim_history(self) -> None:
         """Keep only the most recent _HISTORY_MAX_ENTRIES lines."""

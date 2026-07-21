@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
-import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor } from "./api/client.js";
+import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, pdfUrl } from "./api/client.js";
 import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS, PARSE_STAGES } from "./data.jsx";
 
 // Fetch the live provider catalogue (A4); fall back to the static data.jsx
@@ -1486,10 +1486,9 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
   return (
     <div className="two-col-grid" style={{ padding: "32px 40px", maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 24 }}>
       <div>
-        <div style={{ marginBottom: 18 }}>
-          <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>New run</div>
-          <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: -0.4, marginTop: 4 }}>Tailor to a job posting</div>
-        </div>
+        <Masthead eyebrow="A new commission" title="Tailor a résumé, step by step"
+          sub="Hand over the posting; the agent reads it against your base résumé, asks only what it can't infer, then files the finished PDF under the company automatically."/>
+        <StepSpine current={1}/>
 
         <Card padding={24}>
           <Tabs value={tab} onChange={switchTab} options={[{value:"text",label:"Paste text"},{value:"url",label:"From URL"}]}/>
@@ -1927,4 +1926,393 @@ const SettingsView = ({ tweaks, setTweak }) => {
   );
 };
 
-export { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView };
+// ============== RÉSUMÉ LIBRARY (the front door) ==============
+// Status → stamp treatment. The persisted DB record and any live run session are
+// merged, so drafting/awaiting rows show alongside filed PDFs.
+const LIB_STATUS = {
+  complete:         { key: "final",  label: "Final",      color: "var(--success)", soft: "var(--success-soft)", icon: "check" },
+  "awaiting-input": { key: "needs",  label: "Needs you",  color: "var(--warning)", soft: "var(--warning-soft)", icon: "alert" },
+  running:          { key: "draft",  label: "Drafting",   color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
+  queued:           { key: "draft",  label: "Queued",     color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
+  retrying:         { key: "draft",  label: "Retrying",   color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "refresh" },
+  failed:           { key: "failed", label: "Failed",     color: "var(--danger)",  soft: "var(--danger-soft)",  icon: "x" },
+  cancelled:        { key: "failed", label: "Cancelled",  color: "var(--danger)",  soft: "var(--danger-soft)",  icon: "x" },
+};
+const libMeta = (status) => LIB_STATUS[status] || LIB_STATUS.queued;
+
+const Masthead = ({ eyebrow, title, sub, action }) => (
+  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", borderBottom: "2px solid var(--text)", paddingBottom: 16, marginBottom: 22 }}>
+    <div style={{ minWidth: 0 }}>
+      <div className="mono" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 2, color: "var(--stamp)", fontWeight: 600 }}>{eyebrow}</div>
+      <div className="serif" style={{ fontSize: 30, fontWeight: 600, letterSpacing: -0.2, lineHeight: 1.08, margin: "9px 0 8px" }}>{title}</div>
+      {sub && <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.55, maxWidth: "62ch" }}>{sub}</div>}
+    </div>
+    {action}
+  </div>
+);
+
+// The five-step spine shown atop Create — gives the flow a visible direction.
+const StepSpine = ({ current = 1 }) => {
+  const steps = ["Job posting", "Answer gaps", "Approve rewrites", "Generate", "Filed by company"];
+  return (
+    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0, marginBottom: 22 }}>
+      {steps.map((label, i) => {
+        const n = i + 1;
+        const done = n < current, now = n === current;
+        return (
+          <React.Fragment key={label}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, color: now ? "var(--text)" : "var(--text-faint)", fontSize: 12.5, fontWeight: now ? 600 : 400 }}>
+              <span className="mono" style={{
+                width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700,
+                background: done ? "var(--success)" : now ? "var(--stamp)" : "var(--surface-2)",
+                color: done || now ? "#fff" : "var(--text-muted)",
+                border: "1px solid " + (done ? "var(--success)" : now ? "var(--stamp)" : "var(--border-strong)"),
+                boxShadow: now ? "0 0 0 4px var(--stamp-soft)" : "none",
+              }}>{done ? <Icon name="check" size={12} stroke={3}/> : n}</span>
+              {label}
+            </div>
+            {n < steps.length && <span style={{ width: 26, height: 1, background: "var(--border-strong)", margin: "0 8px" }}/>}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
+const Stamp = ({ status, size = 34 }) => {
+  const m = libMeta(status);
+  return (
+    <span style={{
+      width: size, height: size, borderRadius: "var(--radius-md)", flexShrink: 0,
+      display: "grid", placeItems: "center",
+      color: m.color, background: m.soft,
+      border: `1px solid color-mix(in oklab, ${m.color} 38%, transparent)`,
+    }}>
+      <Icon name={m.icon} size={size * 0.47} stroke={2.4} style={m.icon === "loader" ? { animation: "spin 1.2s linear infinite" } : {}}/>
+    </span>
+  );
+};
+
+const LibPill = ({ status }) => {
+  const m = libMeta(status);
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px 3px 8px",
+      borderRadius: 99, fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap",
+      color: m.color, background: m.soft, border: `1px solid color-mix(in oklab, ${m.color} 32%, transparent)`,
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: 99, background: "currentColor" }}/>{m.label}
+    </span>
+  );
+};
+
+// Merge the live run sessions (fresh status) with the persisted library records.
+const useLibrary = () => {
+  const [rows, setRows] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    const fetchAll = () => Promise.all([
+      listRuns().catch(() => []),
+      listLibraryResumes().catch(() => []),
+    ]).then(([live, filed]) => {
+      if (!alive) return;
+      const byId = new Map();
+      (Array.isArray(filed) ? filed : []).forEach(r => byId.set(r.id || r.thread_id, normalizeRun(r)));
+      (Array.isArray(live) ? live : []).forEach(r => byId.set(r.id || r.thread_id, normalizeRun(r))); // live wins
+      setRows(Array.from(byId.values()).sort((a, b) => (b.ts || 0) - (a.ts || 0)));
+    });
+    fetchAll();
+    const id = setInterval(fetchAll, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  return rows;
+};
+
+const groupByCompany = (rows) => {
+  const map = new Map();
+  rows.forEach(r => { const c = r.company || "Unknown"; if (!map.has(c)) map.set(c, []); map.get(c).push(r); });
+  return Array.from(map.entries());
+};
+
+const fmtFiled = (ts) => {
+  if (!ts) return "—";
+  const d = new Date(ts * 1000);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+};
+
+const RowActions = ({ r, openRun }) => {
+  const m = libMeta(r.status);
+  const download = (e) => { e.stopPropagation(); if (r.pdf_url) window.open(pdfUrl(r.id), "_blank"); };
+  if (m.key === "needs") {
+    return <IconButton name="arrow-right" label="Answer & continue" onClick={(e) => { e.stopPropagation(); openRun(r.id, "awaiting-input", r); }} />;
+  }
+  if (m.key === "failed") {
+    return <IconButton name="refresh" label="View & retry" onClick={(e) => { e.stopPropagation(); openRun(r.id, "failed", r); }} />;
+  }
+  if (m.key === "final" && r.pdf_url) {
+    return (
+      <div style={{ display: "inline-flex", gap: 2 }}>
+        <IconButton name="eye" label="Preview" onClick={download} />
+        <IconButton name="download" label="Download PDF" onClick={download} />
+      </div>
+    );
+  }
+  return <IconButton name="arrow-right" label="Open" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }} />;
+};
+
+const LedgerTable = ({ groups, openRun }) => (
+  <Card padding={0} style={{ overflow: "hidden" }}>
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 660 }}>
+        <thead>
+          <tr>
+            {["Document", "Status", "Filed", ""].map((h, i) => (
+              <th key={i} className="mono" style={{
+                textAlign: i === 3 ? "right" : "left", fontSize: 10, textTransform: "uppercase", letterSpacing: 1,
+                color: "var(--text-muted)", fontWeight: 600, padding: "12px 16px",
+                borderBottom: "2px solid var(--text)", background: "var(--surface)",
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map(([company, rows]) => (
+            <React.Fragment key={company}>
+              <tr>
+                <td colSpan={4} style={{ padding: "10px 16px", background: "var(--bg)", borderBottom: "1px solid var(--border)", borderTop: "1px solid var(--border)" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 9 }}>
+                    <Icon name="folder" size={14} style={{ color: "var(--accent)" }}/>
+                    <span className="serif" style={{ fontWeight: 600, fontSize: 15 }}>{company}</span>
+                    <span className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", marginLeft: 6 }}>{rows.length} {rows.length === 1 ? "document" : "documents"}</span>
+                  </span>
+                </td>
+              </tr>
+              {rows.map(r => (
+                <tr key={r.id} style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                  onClick={() => openRun(r.id, r.status, r)}
+                >
+                  <td style={{ padding: "12px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                      <Stamp status={r.status}/>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: -0.1 }} className="truncate">{r.role}</div>
+                        <div className="mono truncate" style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                          {r.pdf || (r.status === "awaiting-input" ? (r.hitlDetail || "waiting on your answers") : r.status === "failed" ? "generation failed" : "in progress")} · #{String(r.id).slice(0, 8)}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 16px" }}><LibPill status={r.status}/></td>
+                  <td className="mono" style={{ padding: "12px 16px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtFiled(r.ts)}</td>
+                  <td style={{ padding: "12px 16px", textAlign: "right" }} onClick={(e) => e.stopPropagation()}><RowActions r={r} openRun={openRun}/></td>
+                </tr>
+              ))}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </Card>
+);
+
+const ShelvesBoard = ({ groups, openRun }) => (
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(258px, 1fr))", gap: 16 }}>
+    {groups.map(([company, rows]) => (
+      <Card key={company} padding={0} style={{ overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "12px 15px", borderBottom: "2px solid var(--text)" }}>
+          <Icon name="folder" size={15} style={{ color: "var(--accent)" }}/>
+          <span className="serif" style={{ fontWeight: 600, fontSize: 15 }}>{company}</span>
+          <span className="mono" style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-faint)" }}>{rows.length}</span>
+        </div>
+        {rows.map(r => (
+          <button key={r.id} onClick={() => openRun(r.id, r.status, r)} style={{
+            width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 11,
+            padding: "12px 15px", borderBottom: "1px solid var(--border)", background: "transparent", border: "none", cursor: "pointer",
+          }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+          >
+            <Stamp status={r.status} size={28}/>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }} className="truncate">{r.role}</div>
+              <div className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)" }}>{libMeta(r.status).label} · {fmtFiled(r.ts)}</div>
+            </div>
+          </button>
+        ))}
+      </Card>
+    ))}
+  </div>
+);
+
+const LibraryView = ({ goto, openRun, locked }) => {
+  const rows = useLibrary();
+  const [company, setCompany] = React.useState(null);
+  const [status, setStatus] = React.useState("all");
+  const [layout, setLayout] = React.useState("table");
+
+  const all = rows || [];
+  const counts = {
+    all: all.length,
+    final: all.filter(r => libMeta(r.status).key === "final").length,
+    needs: all.filter(r => libMeta(r.status).key === "needs").length,
+    draft: all.filter(r => libMeta(r.status).key === "draft").length,
+    failed: all.filter(r => libMeta(r.status).key === "failed").length,
+  };
+  const companyList = groupByCompany(all).map(([name, rs]) => ({ name, count: rs.length }));
+  const visible = all.filter(r =>
+    (!company || r.company === company) &&
+    (status === "all" || libMeta(r.status).key === status)
+  );
+  const groups = groupByCompany(visible);
+
+  const chip = (id, label) => (
+    <button key={id} onClick={() => setStatus(id)} style={{
+      border: "1px solid transparent", background: status === id ? "var(--text)" : "transparent",
+      color: status === id ? "var(--bg)" : "var(--text-muted)", fontSize: 12.5, padding: "6px 12px",
+      borderRadius: "var(--radius-md)", display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", fontWeight: status === id ? 600 : 400,
+    }}>
+      {label} <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{counts[id]}</span>
+    </button>
+  );
+
+  return (
+    <div style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
+      <Masthead eyebrow="The library" title="Every résumé, filed by company"
+        sub="A records room for your applications. Each tailored résumé is a stamped, dated document filed under the company you made it for — browse, preview and download. All saved to your local database."
+        action={<Button variant="primary" iconRight="arrow-right" disabled={locked} onClick={() => goto("new")}>New résumé</Button>}
+      />
+
+      {/* Summary strip */}
+      <Card padding={0} style={{ display: "flex", overflow: "hidden", marginBottom: 18 }}>
+        {[
+          { k: "Filed", v: counts.all, tone: "var(--text)" },
+          { k: "Final & ready", v: counts.final, tone: "var(--success)" },
+          { k: "Needs you", v: counts.needs, tone: "var(--warning)" },
+          { k: "In progress", v: counts.draft, tone: "var(--accent)" },
+          { k: "Failed", v: counts.failed, tone: "var(--danger)" },
+        ].map((c, i) => (
+          <div key={c.k} style={{ flex: 1, padding: "13px 20px", borderRight: i < 4 ? "1px solid var(--border)" : "none", display: "flex", flexDirection: "column", gap: 3 }}>
+            <span className="mono" style={{ fontSize: 9.5, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-faint)" }}>{c.k}</span>
+            <span className="serif" style={{ fontSize: 25, lineHeight: 1, letterSpacing: -0.4, color: c.tone, fontVariantNumeric: "tabular-nums" }}>{c.v}</span>
+          </div>
+        ))}
+      </Card>
+
+      {/* Toolbar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "inline-flex", gap: 2 }}>
+          {chip("all", "All")}{chip("final", "Final")}{chip("needs", "Needs you")}{chip("draft", "Draft")}{chip("failed", "Failed")}
+        </div>
+        <div style={{ marginLeft: "auto", display: "inline-flex", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+          {[["table", "list", "Ledger"], ["board", "columns", "Shelves"]].map(([id, icon, label], i) => (
+            <button key={id} onClick={() => setLayout(id)} style={{
+              border: "none", borderLeft: i ? "1px solid var(--border)" : "none",
+              background: layout === id ? "var(--accent)" : "var(--surface)", color: layout === id ? "var(--accent-contrast)" : "var(--text-muted)",
+              padding: "7px 12px", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: layout === id ? 600 : 400, cursor: "pointer",
+            }}><Icon name={icon} size={14}/> {label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="org-grid" style={{ display: "grid", gridTemplateColumns: "212px 1fr", gap: 20, alignItems: "start" }}>
+        {/* company tree */}
+        <Card padding={8} style={{ position: "sticky", top: 12 }}>
+          <div className="mono" style={{ fontSize: 9.5, textTransform: "uppercase", letterSpacing: 1.2, color: "var(--text-faint)", padding: "8px 9px 6px" }}>Companies</div>
+          <TreeItem label="All companies" icon="folder" count={all.length} active={!company} onClick={() => setCompany(null)}/>
+          <div style={{ height: 1, background: "var(--border)", margin: "6px 4px" }}/>
+          {companyList.map(c => (
+            <TreeItem key={c.name} label={c.name} icon="folder" count={c.count} active={company === c.name} onClick={() => setCompany(c.name)}/>
+          ))}
+        </Card>
+
+        {/* ledger / shelves */}
+        <div style={{ minWidth: 0 }}>
+          {rows === null ? (
+            <Card padding={0}><EmptyState icon="loader" title="Opening the library…" sub="Reading your filed resumes."/></Card>
+          ) : visible.length === 0 ? (
+            <Card padding={0}><EmptyState icon="folder" title={all.length ? "Nothing matches this filter" : "No resumes filed yet"}
+              sub={all.length ? "Try a different company or status." : "Create your first tailored résumé and it will be filed here by company."}
+              action={all.length ? null : <Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>Create a résumé</Button>}/></Card>
+          ) : layout === "table" ? (
+            <LedgerTable groups={groups} openRun={openRun}/>
+          ) : (
+            <ShelvesBoard groups={groups} openRun={openRun}/>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TreeItem = ({ label, icon, count, active, onClick }) => (
+  <button onClick={onClick} style={{
+    width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px 9px",
+    border: "none", borderLeft: "2px solid " + (active ? "var(--accent)" : "transparent"),
+    background: active ? "var(--surface-2)" : "transparent", color: active ? "var(--accent)" : "var(--text)",
+    borderRadius: "var(--radius-md)", textAlign: "left", cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400,
+  }}
+    onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--surface-2)"; }}
+    onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+  >
+    <Icon name={icon} size={15} style={{ color: active ? "var(--accent)" : "var(--text-faint)" }}/>
+    <span className="truncate" style={{ flex: 1 }}>{label}</span>
+    <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>{count}</span>
+  </button>
+);
+
+// ============== COMPANIES (the cabinet) ==============
+const CompaniesView = ({ goto, openRun }) => {
+  const rows = useLibrary();
+  const all = rows || [];
+  const groups = groupByCompany(all);
+
+  return (
+    <div style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
+      <Masthead eyebrow="The cabinet" title="Companies"
+        sub="Each company is a folder in your cabinet. Open one to see its tailored resumes, the roles you targeted, and where each stands."
+        action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>New résumé</Button>}
+      />
+      {rows === null ? (
+        <Card padding={0}><EmptyState icon="loader" title="Opening the cabinet…"/></Card>
+      ) : groups.length === 0 ? (
+        <Card padding={0}><EmptyState icon="building" title="No companies yet" sub="Start a résumé for a company and a folder appears here."
+          action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>Create a résumé</Button>}/></Card>
+      ) : (
+        <div className="provider-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(244px, 1fr))", gap: 16 }}>
+          {groups.map(([name, rs]) => {
+            const final = rs.filter(r => libMeta(r.status).key === "final").length;
+            const needs = rs.filter(r => libMeta(r.status).key === "needs").length;
+            const failed = rs.filter(r => libMeta(r.status).key === "failed").length;
+            const roles = Array.from(new Set(rs.map(r => r.role))).slice(0, 2).join(" · ");
+            return (
+              <Card key={name} padding={20} hover onClick={() => openRun(rs[0].id, rs[0].status, rs[0])}>
+                <div style={{ width: 42, height: 42, borderRadius: "var(--radius-md)", background: "var(--accent-soft)", color: "var(--accent)", display: "grid", placeItems: "center", marginBottom: 14 }}>
+                  <Icon name="folder" size={20}/>
+                </div>
+                <div className="serif" style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.1 }}>{name}</div>
+                <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }} title={roles}>{roles || "—"}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 15, flexWrap: "wrap" }}>
+                  {final > 0 && <span style={tagStyle("var(--success)")}>{final} final</span>}
+                  {needs > 0 && <span style={tagStyle("var(--warning)")}>{needs} needs you</span>}
+                  {failed > 0 && <span style={tagStyle("var(--danger)")}>{failed} failed</span>}
+                  <span style={tagStyle("var(--text-muted)")}>{rs.length} total</span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const tagStyle = (color) => ({
+  fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 9px", borderRadius: 99,
+  background: "var(--bg)", border: "1px solid var(--border)", color, letterSpacing: 0.2,
+});
+
+export { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView, LibraryView, CompaniesView };
