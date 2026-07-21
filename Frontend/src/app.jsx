@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, StatusPill, Badge, EmptyState, Kbd, Logo, MonoTicker, UploadDropzone } from "./components.jsx";
-import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView } from "./screens.jsx";
+import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView, LibraryView, CompaniesView } from "./screens.jsx";
 import { LiveRunView } from "./live-run.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PARSE_STAGES, PROVIDERS } from "./data.jsx";
@@ -434,10 +434,10 @@ const ReplaceBaseResumeModal = ({ open, onClose, onUpload }) => {
 // Sidebar
 const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, settings = ACTIVE_LLM }) => {
   const items = [
-    { id: "dashboard", icon: "home", label: "Dashboard" },
-    { id: "new", icon: "play", label: "New run" },
+    { id: "new", icon: "play", label: "Create" },
+    { id: "library", icon: "folder", label: "Résumé library" },
+    { id: "companies", icon: "building", label: "Companies" },
     { id: "resume", icon: "file-text", label: "Base resume" },
-    { id: "history", icon: "history", label: "History" },
   ];
   const secondary = [
     { id: "settings", icon: "settings", label: "Settings" },
@@ -466,15 +466,15 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, settings = ACTI
         <Logo size={24}/>
         {!collapsed && (
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: -0.1, lineHeight: 1.2 }}>Resume Generator</div>
-            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", letterSpacing: 0.3 }}>v0.4.1 · localhost</div>
+            <div className="serif" style={{ fontSize: 15, fontWeight: 600, letterSpacing: 0, lineHeight: 1.15 }}>Resume Generator</div>
+            <div className="mono" style={{ fontSize: 9.5, color: "var(--text-faint)", letterSpacing: 1, textTransform: "uppercase" }}>Filing room</div>
           </div>
         )}
       </div>
 
       {/* Main nav */}
       <div style={{ flex: 1, overflow: "auto", padding: collapsed ? "10px 6px" : "12px 10px" }}>
-        {!collapsed && <div className="mono" style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, padding: "4px 6px 8px" }}>Workspace</div>}
+        {!collapsed && <div className="mono" style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, padding: "4px 6px 8px" }}>Workroom</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {items.map(it => (
             <NavItem key={it.id} {...it}
@@ -610,9 +610,13 @@ const NavItem = ({ icon, label, active, collapsed, onClick, locked }) => (
 // Top bar
 const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCount, bellRef, settings }) => {
   const titles = {
-    dashboard: "Dashboard", new: "New run", resume: "Base resume",
-    history: "History", settings: "Settings", setup: "Setup",
+    dashboard: "Overview", new: "Create", library: "Résumé library", companies: "Companies",
+    resume: "Base resume", history: "History", settings: "Settings", setup: "Setup",
     run: runTitle || "Run",
+  };
+  const sections = {
+    new: "Workroom", library: "Library", companies: "Cabinet", resume: "Workroom",
+    settings: "System", setup: "System", run: "Library", dashboard: "Overview", history: "Library",
   };
   return (
     <div style={{
@@ -623,9 +627,9 @@ const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCou
       padding: "0 24px", gap: 12,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", letterSpacing: 0.3 }}>~/resume-generator</span>
+        <span className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", letterSpacing: 0.8, textTransform: "uppercase" }}>{sections[route] || "Workroom"}</span>
         <span style={{ color: "var(--text-faint)" }}>/</span>
-        <span style={{ fontSize: 13.5, fontWeight: 500 }}>{titles[route] || route}</span>
+        <span className="serif" style={{ fontSize: 16, fontWeight: 600 }}>{titles[route] || route}</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -764,10 +768,11 @@ const CommandPalette = ({ open, onClose, goto, openRun, lastRun }) => {
   };
 
   const actions = [
-    { id: "new", label: "New run", sub: "Start a tailored resume", icon: "play", kbd: ["⌘", "N"] },
+    { id: "new", label: "Create résumé", sub: "Tailor to a company", icon: "play", kbd: ["⌘", "N"] },
+    { id: "library", label: "Open library", sub: "All filed resumes by company", icon: "folder" },
+    { id: "companies", label: "Companies", sub: "Browse company folders", icon: "building" },
     { id: "resume", label: "Open base resume", sub: "Edit your master CV", icon: "file-text", kbd: ["⌘", "B"] },
     { id: "run", label: "Open last run", sub: lastRun ? `${lastRun.company || "Run"} · ${relTime(lastRun.created_at)}` : "No recent runs", icon: "arrow-right" },
-    { id: "history", label: "Go to history", sub: "All past runs", icon: "history" },
     { id: "settings", label: "Settings", sub: "Provider, retries, output…", icon: "settings", kbd: ["⌘", ","] },
     { id: "setup", label: "Re-run setup wizard", sub: "Recheck doctor", icon: "stethoscope" },
   ].filter(a => !query || a.label.toLowerCase().includes(query.toLowerCase()) || a.sub.toLowerCase().includes(query.toLowerCase()));
@@ -831,11 +836,11 @@ const CommandPalette = ({ open, onClose, goto, openRun, lastRun }) => {
 };
 
 // Map hex <-> accent key (so the existing TweakColor swatch UI can drive our data-attribute)
-const ACCENT_HEX = { graphite: "#1C1917", indigo: "#4F46E5", emerald: "#059669", amber: "#B45309" };
+const ACCENT_HEX = { indigo: "#31507E", pine: "#1F6F5C", oxblood: "#8A2F2A", graphite: "#33312B" };
 const HEX_TO_ACCENT = Object.fromEntries(Object.entries(ACCENT_HEX).map(([k, v]) => [v.toLowerCase(), k]));
 const TWEAK_DEFAULTS = {
   theme: "light",
-  accent: "emerald",
+  accent: "indigo",
   sidebar: "expanded",
   density: "comfortable",
   runState: "running",
@@ -851,9 +856,9 @@ const TweaksContent = ({ t, setTweak }) => (
     </TweakSection>
 
     <TweakSection label="Accent">
-      <TweakColor label="Color" value={ACCENT_HEX[t.accent] || ACCENT_HEX.graphite}
-        onChange={(hex) => setTweak("accent", HEX_TO_ACCENT[String(hex).toLowerCase()] || "graphite")}
-        options={[ACCENT_HEX.graphite, ACCENT_HEX.indigo, ACCENT_HEX.emerald, ACCENT_HEX.amber]} />
+      <TweakColor label="Color" value={ACCENT_HEX[t.accent] || ACCENT_HEX.indigo}
+        onChange={(hex) => setTweak("accent", HEX_TO_ACCENT[String(hex).toLowerCase()] || "indigo")}
+        options={[ACCENT_HEX.indigo, ACCENT_HEX.pine, ACCENT_HEX.oxblood, ACCENT_HEX.graphite]} />
     </TweakSection>
 
     <TweakSection label="Layout">
@@ -882,7 +887,7 @@ const TweaksContent = ({ t, setTweak }) => (
 
 // Root app
 export const App = () => {
-  const [route, setRoute] = useState("dashboard"); // dashboard | new | resume | history | settings | setup | run
+  const [route, setRoute] = useState("library"); // library | new | companies | resume | history | settings | setup | run | dashboard
   const [cmdK, setCmdK] = useState(false);
   const [notifsOpen, setNotifsOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1019,6 +1024,8 @@ export const App = () => {
 
   const renderRoute = () => {
     switch (route) {
+      case "library":   return <LibraryView goto={goto} openRun={openRun} locked={isLocked}/>;
+      case "companies": return <CompaniesView goto={goto} openRun={openRun}/>;
       case "dashboard": return <Dashboard goto={goto} openRun={openRun} locked={isLocked} doctor={doctor}/>;
       case "new":       return <NewRun goto={goto} openRun={openRun} locked={isLocked} onRunStarted={(id) => openRun(id, "running")}/>;
       case "resume":    return <ResumeEditor onReplace={() => setReplaceOpen(true)} parsing={parsing}/>;
@@ -1026,7 +1033,7 @@ export const App = () => {
       case "settings":  return <SettingsView tweaks={tweaks} setTweak={setTweak}/>;
       case "setup":     return <SetupWizard goto={goto} startParse={startParse} parsing={parsing}/>;
       case "run":       return <LiveRunView key={selectedRunId} threadId={selectedRunId} density={tweaks.density} runState={tweaks.runState} setRunState={(v) => setTweak("runState", v)} settings={appSettings}/>;
-      default:          return <Dashboard goto={goto} openRun={openRun} locked={isLocked} doctor={doctor}/>;
+      default:          return <LibraryView goto={goto} openRun={openRun} locked={isLocked}/>;
     }
   };
 

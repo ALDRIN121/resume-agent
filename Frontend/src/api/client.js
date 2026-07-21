@@ -58,3 +58,10 @@ export const testConnection = (settings) => request("/api/settings/test-connecti
 export const runDoctor = () => request("/api/settings/doctor", { method: "POST" });
 
 export const pdfUrl = (threadId) => `${API_BASE}/api/runs/${threadId}/pdf`;
+
+// ── Résumé library (companies + filed resumes, persisted in library.sqlite) ──
+export const listCompanies = () => request("/api/library/companies");
+export const listLibraryResumes = (company) =>
+  request(`/api/library/resumes${company ? `?company=${encodeURIComponent(company)}` : ""}`);
+export const deleteLibraryResume = (threadId) =>
+  request(`/api/library/resumes/${threadId}`, { method: "DELETE" });
