@@ -24,6 +24,11 @@ An AI-powered CLI tool that reads a job description and your existing resume, th
 
 Two ways to drive it: a **CLI** (the primary interface) and an **optional local web UI** (`resume-generator serve`) that runs entirely on your own machine — nothing is hosted. Your files stay local; only the resume and job-description text are sent to whichever AI provider you choose. If you want the AI step to stay local too, use Ollama with a local model.
 
+<p align="center">
+  <img src="docs/screenshots/dashboard-light.jpg" width="49%" alt="Dashboard overview, light theme">
+  <img src="docs/screenshots/dashboard-dark.jpg" width="49%" alt="Dashboard overview, dark theme">
+</p>
+
 ---
 
 ## Requirements
@@ -240,7 +245,13 @@ resume-generator serve            # serves on http://127.0.0.1:8000
 resume-generator serve --port 9000
 ```
 
-It runs a FastAPI backend plus a pre-built React frontend entirely on your machine — there is no hosted service and no telemetry. The UI covers the same flow as the CLI: configure your provider, upload/parse a base resume, paste a job description, watch the pipeline stream live (with the human-in-the-loop questions and suggestion review inline), and download the generated PDF.
+It runs a FastAPI backend plus a pre-built React frontend entirely on your machine — there is no hosted service and no telemetry. The UI covers the same flow as the CLI: configure your provider, upload/parse a base resume, paste or upload a job description (`.txt`/`.pdf`), watch the pipeline stream live (with the human-in-the-loop questions and suggestion review inline), and download the generated PDF. A dashboard tracks runs per company, and appearance (theme/accent/density) is remembered across reloads.
+
+<p align="center">
+  <img src="docs/screenshots/companies.jpg" width="32%" alt="Companies tab with per-company run stats">
+  <img src="docs/screenshots/settings-appearance.jpg" width="32%" alt="Settings, dark theme with appearance controls">
+  <img src="docs/screenshots/base-resume.jpg" width="32%" alt="Base resume editor">
+</p>
 
 Notes:
 - Bind address defaults to loopback (`127.0.0.1`). Because the app ships no login, state-changing requests and WebSocket connections are only accepted from loopback — a deliberate guard against malicious web pages or DNS-rebinding driving your local API.
