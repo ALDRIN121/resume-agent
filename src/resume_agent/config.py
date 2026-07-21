@@ -71,6 +71,12 @@ class FeaturesConfig(BaseModel):
     enable_hr_review: bool = True  # opt-out: set false in config.yaml to skip HR pre-flight
 
 
+class UIConfig(BaseModel):
+    theme: str = "light"
+    accent: str = "graphite"
+    density: str = "comfortable"
+
+
 # ── Main Settings ──────────────────────────────────────────────────────────────
 
 class ResumeAgentSettings(BaseSettings):
@@ -81,6 +87,7 @@ class ResumeAgentSettings(BaseSettings):
     output: OutputConfig = Field(default_factory=OutputConfig)
     retries: RetriesConfig = Field(default_factory=RetriesConfig)
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
+    ui: UIConfig = Field(default_factory=UIConfig)
 
     # Passed via env or ~/.resume_generator/.env
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")

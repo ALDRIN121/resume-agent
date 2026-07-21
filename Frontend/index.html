@@ -7,6 +7,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <script>
+      try {
+        var t = JSON.parse(localStorage.getItem("rg.tweaks") || "{}");
+        document.documentElement.dataset.theme = t.theme || "light";
+        document.documentElement.dataset.accent = t.accent || "graphite";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

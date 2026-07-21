@@ -29,6 +29,9 @@ class SettingsUpdate(BaseModel):
     scrape_timeout_seconds: int | None = None
     output_dir: str | None = None
     enable_hr_review: bool | None = None
+    ui_theme: str | None = None
+    ui_accent: str | None = None
+    ui_density: str | None = None
 
 
 class TestConnectionRequest(SettingsUpdate):
@@ -165,6 +168,9 @@ def _settings_payload(settings: ResumeAgentSettings) -> dict[str, Any]:
         "scrapeTimeoutSeconds": settings.scraping.timeout_seconds,
         "outputDir": settings.output.base_dir,
         "enableHrReview": settings.features.enable_hr_review,
+        "uiTheme": settings.ui.theme,
+        "uiAccent": settings.ui.accent,
+        "uiDensity": settings.ui.density,
         "status": "connected" if settings.is_configured() else "reconnecting",
         "latencyMs": None,
         "lastTested": None,
@@ -199,6 +205,17 @@ def _settings_from_request(settings: ResumeAgentSettings, request: SettingsUpdat
         updates["output"] = settings.output.model_copy(update={"base_dir": request.output_dir})
     if request.enable_hr_review is not None:
         updates["features"] = settings.features.model_copy(update={"enable_hr_review": request.enable_hr_review})
+    ui_updates = {
+        k: v
+        for k, v in {
+            "theme": request.ui_theme,
+            "accent": request.ui_accent,
+            "density": request.ui_density,
+        }.items()
+        if v is not None
+    }
+    if ui_updates:
+        updates["ui"] = settings.ui.model_copy(update=ui_updates)
     return settings.model_copy(update=updates)
 
 
