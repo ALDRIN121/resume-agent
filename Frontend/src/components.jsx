@@ -3,9 +3,10 @@ import { Icon } from "./icons.jsx";
 
 const Button = ({ children, variant = "primary", size = "md", icon, iconRight, className = "", ...rest }) => {
   const sizeStyles = {
-    sm: { height: 28, padding: "0 10px", fontSize: 13, gap: 6 },
-    md: { height: 34, padding: "0 14px", fontSize: 13.5, gap: 8 },
-    lg: { height: 40, padding: "0 18px", fontSize: 14, gap: 8 },
+    sm: { height: 34, padding: "0 12px", fontSize: 13, gap: 6 },
+    md: { height: 40, padding: "0 16px", fontSize: 13.5, gap: 8, fontWeight: 600 },
+    lg: { height: 40, padding: "0 18px", fontSize: 13.5, gap: 8, fontWeight: 600 },
+    xl: { height: 40, padding: "0 20px", fontSize: 13.5, gap: 9, fontWeight: 600 },
   }[size];
   const variantStyles = {
     primary: { background: "var(--accent)", color: "var(--accent-contrast)", border: "1px solid var(--accent)" },
@@ -21,7 +22,7 @@ const Button = ({ children, variant = "primary", size = "md", icon, iconRight, c
       style={{
         ...sizeStyles, ...variantStyles,
         display: "inline-flex", alignItems: "center", justifyContent: "center",
-        borderRadius: "var(--radius-md)", fontWeight: 500, cursor: "pointer",
+        borderRadius: "var(--radius-md)", fontWeight: size === "xl" ? 600 : 500, cursor: "pointer",
         transition: `background var(--t-fast), border-color var(--t-fast), opacity var(--t-fast), transform 220ms var(--ease-bounce)`,
         ...(rest.style || {})
       }}
@@ -45,7 +46,7 @@ const IconButton = ({ name, label, size = 14, padding = 6, onClick, active = fal
       background: active ? "var(--accent-soft)" : "transparent",
       color: active ? "var(--accent)" : "var(--text-muted)",
       border: "1px solid " + (active ? "var(--accent-ring)" : "transparent"),
-      borderRadius: "var(--radius-md)", cursor: "pointer",
+      borderRadius: "var(--radius-lg)", cursor: "pointer",
       transition: `background var(--t-fast), color var(--t-fast)`,
       ...style,
     }}
@@ -59,8 +60,8 @@ const IconButton = ({ name, label, size = 14, padding = 6, onClick, active = fal
 // Status pill — color + icon + word (a11y: never color-only)
 const STATUS_META = {
   running:        { color: "var(--info)",     bg: "var(--info-soft)",     icon: "loader",      label: "Running" },
-  "awaiting-input":{ color: "var(--warning)",  bg: "var(--warning-soft)",  icon: "alert",       label: "Awaiting input" },
-  complete:       { color: "var(--success)",  bg: "var(--success-soft)",  icon: "check-circle",label: "Complete" },
+  "awaiting-input":{ color: "#422006",        bg: "var(--warning-chip)",  icon: "alert",       label: "Awaiting input" },
+  complete:       { color: "#052E16",         bg: "var(--success-chip)",  icon: "check-circle",label: "Complete" },
   failed:         { color: "var(--danger)",   bg: "var(--danger-soft)",   icon: "x-circle",    label: "Failed" },
   queued:         { color: "var(--text-muted)", bg: "var(--surface-2)",   icon: "circle",      label: "Queued" },
   retrying:       { color: "var(--warning)",  bg: "var(--warning-soft)",  icon: "refresh",     label: "Retrying" },
@@ -72,13 +73,14 @@ const StatusPill = ({ status, size = "md", label }) => {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: small ? 5 : 6,
-      padding: small ? "2px 8px" : "3px 10px",
-      borderRadius: 99,
+      padding: small ? "2px 8px" : "4px 10px",
+      height: small ? 24 : 24,
+      borderRadius: 999,
       background: meta.bg,
       color: meta.color,
       fontSize: small ? 11 : 12,
-      fontWeight: 500,
-      lineHeight: 1.4,
+      fontWeight: 600,
+      lineHeight: 1,
       border: `1px solid ${meta.color}1f`,
     }}>
       <Icon name={meta.icon} size={small ? 10 : 12} stroke={2.4}
@@ -88,7 +90,7 @@ const StatusPill = ({ status, size = "md", label }) => {
   );
 };
 
-const Card = ({ children, className = "", padding = 20, style = {}, hover = false, onClick, id }) => (
+const Card = ({ children, className = "", padding = 18, style = {}, hover = false, onClick, id }) => (
   <div
     id={id}
     onClick={onClick}
@@ -96,14 +98,15 @@ const Card = ({ children, className = "", padding = 20, style = {}, hover = fals
     style={{
       background: "var(--surface)",
       border: "1px solid var(--border)",
-      borderRadius: "var(--radius-lg)",
+      borderRadius: "var(--radius-xl)",
       padding,
-      transition: `border-color var(--t-fast), background var(--t-fast), transform 260ms var(--ease-spring), box-shadow 260ms var(--ease-spring)`,
+      boxShadow: "var(--shadow-sm)",
+      transition: `border-color var(--t-fast), background var(--t-fast), transform 150ms var(--ease-spring), box-shadow 150ms var(--ease-spring)`,
       cursor: onClick || hover ? "pointer" : "default",
       ...style
     }}
     onMouseEnter={(e) => { if (hover || onClick) { e.currentTarget.style.borderColor = "var(--border-strong)"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "var(--shadow-md)"; } }}
-    onMouseLeave={(e) => { if (hover || onClick) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; } }}
+    onMouseLeave={(e) => { if (hover || onClick) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "var(--shadow-sm)"; } }}
   >
     {children}
   </div>
@@ -113,24 +116,24 @@ const Input = React.forwardRef(({ icon, suffix, style = {}, ...rest }, ref) => (
   <div style={{
     position: "relative", display: "flex", alignItems: "center",
     background: "var(--surface)",
-    border: "1px solid var(--border-strong)",
-    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
     transition: `border-color var(--t-fast), box-shadow var(--t-fast)`,
     ...style
   }}>
-    {icon && <span style={{ display: "flex", paddingLeft: 10, color: "var(--text-muted)" }}><Icon name={icon} size={14} /></span>}
+    {icon && <span style={{ display: "flex", paddingLeft: 12, color: "var(--text-muted)" }}><Icon name={icon} size={14} /></span>}
     <input
       ref={ref}
       {...rest}
       style={{
-        flex: 1, height: 34, padding: icon ? "0 10px 0 8px" : "0 12px",
+        flex: 1, height: 38, padding: icon ? "0 10px 0 8px" : "0 12px",
         background: "transparent", border: "none", outline: "none",
         color: "var(--text)", fontSize: 13.5, minWidth: 0,
       }}
       onFocus={(e) => { e.currentTarget.parentElement.style.borderColor = "var(--accent)"; e.currentTarget.parentElement.style.boxShadow = "0 0 0 3px var(--accent-ring)"; rest.onFocus?.(e); }}
-      onBlur={(e) => { e.currentTarget.parentElement.style.borderColor = "var(--border-strong)"; e.currentTarget.parentElement.style.boxShadow = "none"; rest.onBlur?.(e); }}
+      onBlur={(e) => { e.currentTarget.parentElement.style.borderColor = "var(--border)"; e.currentTarget.parentElement.style.boxShadow = "none"; rest.onBlur?.(e); }}
     />
-    {suffix && <span style={{ display: "flex", paddingRight: 10, color: "var(--text-muted)" }}>{suffix}</span>}
+    {suffix && <span style={{ display: "flex", paddingRight: 14, color: "var(--text-muted)" }}>{suffix}</span>}
   </div>
 ));
 
@@ -141,7 +144,7 @@ const Textarea = ({ style = {}, ...rest }) => (
       width: "100%", minHeight: 80, padding: "10px 12px",
       background: "var(--surface)",
       border: "1px solid var(--border-strong)",
-      borderRadius: "var(--radius-md)",
+      borderRadius: "var(--radius-lg)",
       color: "var(--text)", fontSize: 13.5, lineHeight: 1.55,
       outline: "none", resize: "vertical",
       fontFamily: "var(--font-sans)",
@@ -192,17 +195,17 @@ const Tabs = ({ value, onChange, options, style = {} }) => (
 const Badge = ({ children, tone = "neutral", style = {} }) => {
   const tones = {
     neutral: { bg: "var(--surface-2)", color: "var(--text-muted)" },
-    success: { bg: "var(--success-soft)", color: "var(--success)" },
-    warning: { bg: "var(--warning-soft)", color: "var(--warning)" },
+    success: { bg: "var(--success-chip)", color: "#052E16" },
+    warning: { bg: "var(--warning-chip)", color: "#422006" },
     danger:  { bg: "var(--danger-soft)", color: "var(--danger)" },
     info:    { bg: "var(--info-soft)", color: "var(--info)" },
     accent:  { bg: "var(--accent-soft)", color: "var(--accent)" },
   }[tone];
   return (
-    <span className="mono" style={{
+    <span style={{
       display: "inline-flex", alignItems: "center",
-      padding: "1px 7px", borderRadius: 4,
-      fontSize: 11, fontWeight: 500,
+      height: 20, padding: "6px 10px", borderRadius: 999,
+      fontSize: 12, fontWeight: 600,
       background: tones.bg, color: tones.color,
       ...style
     }}>{children}</span>
@@ -248,16 +251,16 @@ const SectionHeader = ({ eyebrow, title, sub }) => (
 
 // Empty state
 const EmptyState = ({ icon = "sparkles", title, sub, action }) => (
-  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "40px 20px", textAlign: "center", color: "var(--text-muted)" }}>
+  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "48px 20px 40px", textAlign: "center", color: "var(--text-muted)" }}>
     <div style={{
-      width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
-      border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface-2)", color: "var(--text-muted)"
+      width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center",
+      border: "1px solid var(--border)", borderRadius: 12, background: "var(--surface-2)", color: "var(--text-muted)"
     }}>
-      <Icon name={icon} size={18} />
+      <Icon name={icon} size={20} />
     </div>
     <div>
-      <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 500 }}>{title}</div>
-      {sub && <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4, maxWidth: 360 }}>{sub}</div>}
+      <div style={{ color: "var(--text)", fontSize: 18, fontWeight: 600 }}>{title}</div>
+      {sub && <div style={{ fontSize: 15, color: "#7A7A7A", marginTop: 4, maxWidth: 360 }}>{sub}</div>}
     </div>
     {action}
   </div>
