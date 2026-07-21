@@ -1,33 +1,38 @@
 :root {
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --bg: #f7f6f2;
-  --surface: #fffefa;
-  --surface-2: #f1efe8;
-  --surface-3: #e8e4d8;
-  --text: #211f1a;
-  --text-muted: #706b60;
-  --text-faint: #9a9387;
-  --border: #e3ded2;
-  --border-strong: #cfc7b8;
-  --accent: #0f766e;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+
+  /* THE FILING ROOM — stone paper, ink-indigo accent, vermilion stamp signature */
+  --bg: #e7e6e0;
+  --surface: #f6f5f1;
+  --surface-2: #eceae2;
+  --surface-3: #e0ddd2;
+  --text: #1f2124;
+  --text-muted: #5d5f63;
+  --text-faint: #90918b;
+  --border: #d5d3c9;
+  --border-strong: #bab7a9;
+  --accent: #31507e;
   --accent-contrast: #ffffff;
-  --accent-soft: #dff5f1;
-  --accent-ring: #99d8cf;
-  --success: #16803c;
-  --success-soft: #ddf5e6;
-  --warning: #a45c08;
-  --warning-soft: #fff0d7;
-  --danger: #b42318;
-  --danger-soft: #ffe5e1;
-  --info: #2463eb;
-  --info-soft: #e5edff;
+  --accent-soft: #e0e6f1;
+  --accent-ring: #a9bdda;
+  --stamp: #c8462d;
+  --stamp-soft: #f4ddd6;
+  --success: #3a7d44;
+  --success-soft: #dcefdd;
+  --warning: #a76a12;
+  --warning-soft: #f6e9cf;
+  --danger: #a5342a;
+  --danger-soft: #f3dcd7;
+  --info: #3a6091;
+  --info-soft: #e2eaf3;
   --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
-  --shadow-sm: 0 1px 2px rgba(26, 22, 14, 0.06);
-  --shadow-md: 0 8px 24px rgba(26, 22, 14, 0.10);
-  --shadow-lg: 0 18px 60px rgba(26, 22, 14, 0.18);
+  --radius-lg: 9px;
+  --radius-xl: 12px;
+  --shadow-sm: 0 1px 0 rgba(31, 33, 36, 0.04), 0 1px 2px rgba(31, 33, 36, 0.06);
+  --shadow-md: 0 12px 28px rgba(31, 33, 36, 0.10);
+  --shadow-lg: 0 26px 60px rgba(31, 33, 36, 0.16);
   --t-fast: 140ms ease;
   --t-mid: 240ms ease;
   --ease-spring: cubic-bezier(.2,.7,.2,1);
@@ -35,24 +40,49 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #181816;
-  --surface: #22211e;
-  --surface-2: #2b2925;
-  --surface-3: #37342f;
-  --text: #f4f1e8;
-  --text-muted: #b8b1a3;
-  --text-faint: #827b70;
-  --border: #37342f;
-  --border-strong: #555047;
+  --bg: #17181b;
+  --surface: #1e2024;
+  --surface-2: #26282d;
+  --surface-3: #31343a;
+  --text: #ecebe4;
+  --text-muted: #a7a89f;
+  --text-faint: #74756d;
+  --border: #2f3238;
+  --border-strong: #494d55;
+  --accent: #7ea3d6;
+  --accent-contrast: #10151f;
+  --accent-soft: #1c2740;
+  --accent-ring: #38507a;
+  --stamp: #e0765c;
+  --stamp-soft: #3a201a;
+  --success: #63b96f;
+  --success-soft: #17301c;
+  --warning: #d69a3c;
+  --warning-soft: #362610;
+  --danger: #d9695c;
+  --danger-soft: #371c18;
+  --info: #7aa4ff;
+  --info-soft: #1a2540;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 26px 60px rgba(0, 0, 0, 0.6);
 }
 
-:root[data-accent="blue"] { --accent: #2563eb; --accent-soft: #e6efff; --accent-ring: #a9c5ff; }
-:root[data-accent="violet"] { --accent: #7c3aed; --accent-soft: #efe7ff; --accent-ring: #c8b2ff; }
-:root[data-accent="rose"] { --accent: #be123c; --accent-soft: #ffe4ea; --accent-ring: #ffb3c4; }
-:root[data-accent="graphite"] { --accent: #1c1917; --accent-soft: #ece8e3; --accent-ring: #c8beb2; }
-:root[data-accent="indigo"] { --accent: #4f46e5; --accent-soft: #ecebff; --accent-ring: #c1bfff; }
-:root[data-accent="emerald"] { --accent: #059669; --accent-soft: #daf7ec; --accent-ring: #95dcc5; }
-:root[data-accent="amber"] { --accent: #b45309; --accent-soft: #fff0d9; --accent-ring: #f1bf78; }
+/* Accent choices (Settings › Appearance). Default is ink-indigo. */
+:root[data-accent="indigo"]   { --accent: #31507e; --accent-soft: #e0e6f1; --accent-ring: #a9bdda; }
+:root[data-accent="pine"]     { --accent: #1f6f5c; --accent-soft: #d9f0e8; --accent-ring: #93d3c2; }
+:root[data-accent="oxblood"]  { --accent: #8a2f2a; --accent-soft: #f2ddda; --accent-ring: #dda9a4; }
+:root[data-accent="graphite"] { --accent: #33312b; --accent-soft: #e6e3da; --accent-ring: #c3bcaa; }
+/* Legacy keys kept so older saved prefs still resolve to a sensible hue. */
+:root[data-accent="emerald"]  { --accent: #1f6f5c; --accent-soft: #d9f0e8; --accent-ring: #93d3c2; }
+:root[data-accent="amber"]    { --accent: #a76a12; --accent-soft: #f6e9cf; --accent-ring: #e3c489; }
+
+:root[data-theme="dark"][data-accent="indigo"]   { --accent: #7ea3d6; --accent-soft: #1c2740; --accent-ring: #38507a; }
+:root[data-theme="dark"][data-accent="pine"]     { --accent: #5cc0a6; --accent-soft: #10312a; --accent-ring: #205046; }
+:root[data-theme="dark"][data-accent="oxblood"]  { --accent: #d98a83; --accent-soft: #331917; --accent-ring: #5a2c28; }
+:root[data-theme="dark"][data-accent="graphite"] { --accent: #cfc9bb; --accent-soft: #2a2822; --accent-ring: #4c483e; }
+:root[data-theme="dark"][data-accent="emerald"]  { --accent: #5cc0a6; --accent-soft: #10312a; --accent-ring: #205046; }
+:root[data-theme="dark"][data-accent="amber"]    { --accent: #e3b063; --accent-soft: #322510; --accent-ring: #5a4520; }
 
 * { box-sizing: border-box; }
 body {
@@ -60,9 +90,11 @@ body {
   font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 button, input, textarea { font: inherit; }
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.serif { font-family: var(--font-serif); }
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -84,19 +116,24 @@ button, input, textarea { font: inherit; }
 @keyframes sparkle-twinkle { 50% { transform: scale(.65) rotate(35deg); opacity: .25; } }
 @keyframes sparkle-up { from { transform: translateY(10px); opacity: 0; } 35% { opacity: 1; } to { transform: translateY(-38px); opacity: 0; } }
 @keyframes draw-check { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+@keyframes stamp-in { from { transform: scale(1.4) rotate(-8deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
 
 .fade-in { animation: fade-in 180ms ease; }
 .route-in { animation: route-in 180ms ease; }
 .pop-in { animation: panel-slide 220ms var(--ease-bounce); }
 
-/* Responsive: collapse the fixed two-column page grids (dashboard, new-run) and
+/* Responsive: collapse the fixed two-column page grids (library, new-run) and
    the KPI row so they don't crush on narrower viewports. !important is required
    to override the inline grid-template-columns set in the JSX. */
 @media (max-width: 1000px) {
   .two-col-grid { grid-template-columns: 1fr !important; }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .org-grid { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 560px) {
   .kpi-grid, .provider-grid { grid-template-columns: 1fr !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
