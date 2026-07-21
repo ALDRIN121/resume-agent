@@ -152,12 +152,12 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
   const maxBar = Math.max(1, ...activityData);
 
   const Stat = ({ icon, label, value, sub, alert }) => (
-    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)", padding: "15px 16px 13px", boxShadow: alert ? "0 0 0 1px var(--text) inset" : "none" }}>
+    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)", padding: "15px 16px 13px", boxShadow: "var(--shadow-sm)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-muted)", fontWeight: 500 }}>
         <Icon name={icon} size={15} style={{ color: "var(--text-faint)" }}/>{label}
       </div>
-      <div className="serif" style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1, lineHeight: 1.15, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      <div style={{ marginTop: 3, fontSize: 12, color: "var(--text-faint)" }}>{sub}</div>
+      <div className="serif" style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.15, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ marginTop: 3, fontSize: 12, fontWeight: 400, color: "var(--text-faint)" }}>{sub}</div>
     </div>
   );
 
@@ -165,25 +165,27 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
     const needsYou = r.status === "awaiting-input";
     const done = r.status === "complete";
     const bad = r.status === "failed";
-    const tone = needsYou ? { bg: "var(--warning-soft)", fg: "var(--warning)", ic: "alert" }
+    const tone = needsYou ? { bg: "var(--warning-chip)", fg: "#422006", ic: "alert" }
       : bad ? { bg: "var(--danger-soft)", fg: "var(--danger)", ic: "x" }
-      : done ? { bg: "var(--success-soft)", fg: "var(--success)", ic: "file-text" }
+      : done ? { bg: "var(--success-chip)", fg: "#052E16", ic: "file-text" }
       : { bg: "var(--info-soft)", fg: "var(--info)", ic: "loader" };
     return (
       <div onClick={() => openRun(r.id, r.status, r)} style={{
         display: "flex", alignItems: "center", gap: 13, flexWrap: "wrap",
-        border: "1px solid " + (needsYou ? "var(--border-strong)" : "var(--border)"),
+        border: "1px solid var(--border)",
         borderRadius: "var(--radius-lg)", padding: "13px 15px", background: "var(--surface)", cursor: "pointer",
+        boxShadow: "var(--shadow-sm)",
+        transition: "border-color var(--t-fast)",
       }}
-        onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--border-strong)"}
-        onMouseLeave={(e) => e.currentTarget.style.borderColor = needsYou ? "var(--border-strong)" : "var(--border)"}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-strong)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
       >
-        <span style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: tone.bg, color: tone.fg }}>
+        <span style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: tone.bg, color: tone.fg, border: "1px solid var(--border)" }}>
           <Icon name={tone.ic} size={16}/>
         </span>
-        <div style={{ minWidth: 150, flex: 1 }}>
+        <div style={{ minWidth: 160, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 14, fontWeight: 600 }}>
-            <span className={r.pdf ? "mono" : ""} style={{ fontSize: r.pdf ? 12.5 : 14 }}>{r.pdf || `${r.company} — ${r.role}`}</span>
+            <span className={r.pdf ? "mono" : ""} style={{ fontSize: r.pdf ? 12 : 14, fontWeight: 600 }}>{r.pdf || `${r.company} — ${r.role}`}</span>
             <StatusPill status={r.status} size="sm"/>
           </div>
           <div style={{ fontSize: 12.5, color: "var(--text-faint)", marginTop: 2 }}>
@@ -193,8 +195,11 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
         {needsYou
           ? <Button size="sm" variant="primary" iconRight="arrow-right">Answer</Button>
           : bad ? <Button size="sm" variant="secondary" icon="refresh">Retry</Button>
-          : done && r.pdf_url ? <IconButton name="download" label="Download" onClick={(e) => { e.stopPropagation(); window.open(pdfUrl(r.id), "_blank"); }}/>
-          : <IconButton name="arrow-right" label="Open" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }}/>}
+          : done ? <div style={{ display: "flex", gap: 6 }}>
+              {r.pdf_url && <button aria-label="Download" title="Download" onClick={(e) => { e.stopPropagation(); window.open(pdfUrl(r.id), "_blank"); }} style={{ width: 34, height: 34, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--text)", border: "1px solid var(--text)", color: "var(--bg)", cursor: "pointer" }}><Icon name="download" size={15}/></button>}
+              <button aria-label="Open" title="Open" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }} style={{ width: 34, height: 34, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", border: "1px solid var(--border-strong)", color: "var(--text)", cursor: "pointer" }}><Icon name="arrow-right" size={15}/></button>
+            </div>
+          : <button aria-label="Open" title="Open" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }} style={{ width: 34, height: 34, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid transparent", color: "var(--text-muted)", cursor: "pointer" }}><Icon name="arrow-right" size={15}/></button>}
       </div>
     );
   };
@@ -210,6 +215,7 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
     { id: "overview", label: "Overview", count: null },
     { id: "active", label: "Active runs", count: activeRuns.length },
     { id: "final", label: "Resumes", count: completedRuns.length },
+    { id: "companies", label: "Companies", count: companies.length },
     { id: "needs", label: "Questions asked", count: needsRuns.length },
     { id: "failed", label: "Failures", count: failedRuns.length },
   ];
@@ -225,7 +231,7 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
       );
     }
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {items.map(r => <RunRow key={r.id} r={r}/>)}
       </div>
     );
@@ -242,13 +248,43 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
         return <RunListView items={needsRuns} emptyIcon="check-circle" emptyTitle="Nothing needs your attention" emptySub="All questions have been answered. Good work." fullLibraryLink/>;
       case "failed":
         return <RunListView items={failedRuns} emptyIcon="check-circle" emptyTitle="No failures" emptySub="Every run has succeeded so far." fullLibraryLink/>;
+      case "companies":
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+            {companies.length === 0 ? (
+              <Card padding={0}><EmptyState icon="building" title="No companies yet" sub="Start a résumé for a company and a folder appears here."/></Card>
+            ) : companies.map(name => {
+              const companyRuns = runs.filter(r => r.company === name);
+              const final = companyRuns.filter(r => r.status === "complete").length;
+              const needs = companyRuns.filter(r => r.status === "awaiting-input").length;
+              const failed = companyRuns.filter(r => r.status === "failed").length;
+              const roles = Array.from(new Set(companyRuns.map(r => r.role))).slice(0, 2).join(" · ");
+              const color = companyColor(name);
+              return (
+                <Card key={name} padding={18} hover onClick={() => { const latest = companyRuns[0]; if (latest) openRun(latest.id, latest.status, latest); }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 11, background: color.bg, color: color.fg, display: "grid", placeItems: "center", fontSize: 17, fontWeight: 800 }}>
+                    {name[0].toUpperCase()}
+                  </div>
+                  <div className="serif" style={{ fontSize: 16, fontWeight: 700, marginTop: 12, letterSpacing: "-0.01em" }}>{name}</div>
+                  <div className="mono" style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{roles || "—"}</div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+                    <div style={{ flex: 1 }}><b style={{ fontSize: 18, fontWeight: 800 }}>{final}</b><span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>Final</span></div>
+                    <div style={{ flex: 1 }}><b style={{ fontSize: 18, fontWeight: 800 }}>{needs}</b><span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>Needs you</span></div>
+                    <div style={{ flex: 1 }}><b style={{ fontSize: 18, fontWeight: 800 }}>{failed}</b><span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>Failed</span></div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        );
       default: // overview
         return (
           <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.9fr) minmax(280px, 1fr)", gap: 24, alignItems: "start" }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 12px" }}>
                 <span style={{ fontSize: 16, fontWeight: 700 }}>Active runs</span>
-                <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", background: "var(--surface-2)", borderRadius: 99, padding: "2px 9px" }}>{activeRuns.length} live</span>
+                <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--surface-2)", borderRadius: 999, padding: "6px 10px", fontWeight: 600 }}>{activeRuns.length} live</span>
+                <button onClick={() => setTab("active")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 5 }}>Go to runs <Icon name="chevron-right" size={13}/></button>
               </div>
               {activeRunsSummary.length === 0
                 ? <Card padding={0}><EmptyState icon="check-circle" title="No active runs" sub="Start a tailored resume and it will show up here live."/></Card>
@@ -256,7 +292,8 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
 
               <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "26px 0 12px" }}>
                 <span style={{ fontSize: 16, fontWeight: 700 }}>Recent resumes</span>
-                <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", background: "var(--surface-2)", borderRadius: 99, padding: "2px 9px" }}>{completed} filed</span>
+                <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--surface-2)", borderRadius: 999, padding: "6px 10px", fontWeight: 600 }}>{completed} filed</span>
+                <button onClick={() => goto("library")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 5 }}>Open library <Icon name="chevron-right" size={13}/></button>
               </div>
               {recentDone.length === 0
                 ? <Card padding={0}><EmptyState icon="folder" title="No resumes filed yet" sub="Your generated PDFs will be filed here by company." action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>Create a résumé</Button>}/></Card>
@@ -268,16 +305,16 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
               <Card padding={18}>
                 <div style={{ display: "flex", alignItems: "center", fontSize: 15, fontWeight: 700 }}>
                   Activity
-                  <button onClick={() => goto("library")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>See all</button>
+                  <button onClick={() => goto("library")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-muted)" }}>See all</button>
                 </div>
                 {activityFeed.length === 0 ? (
-                  <div style={{ fontSize: 12.5, color: "var(--text-faint)", marginTop: 12 }}>No activity yet — start a run to see it here.</div>
+                  <div style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 12 }}>No activity yet — start a run to see it here.</div>
                 ) : (
-                  <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
                     {activityFeed.map(r => {
-                      const tone = r.status === "awaiting-input" ? { bg: "var(--warning-soft)", fg: "var(--warning)", ic: "alert" }
+                      const tone = r.status === "awaiting-input" ? { bg: "var(--warning-chip)", fg: "#422006", ic: "alert" }
                         : r.status === "failed" ? { bg: "var(--danger-soft)", fg: "var(--danger)", ic: "x" }
-                        : r.status === "complete" ? { bg: "var(--success-soft)", fg: "var(--success)", ic: "check" }
+                        : r.status === "complete" ? { bg: "var(--success-chip)", fg: "#052E16", ic: "check" }
                         : { bg: "var(--info-soft)", fg: "var(--info)", ic: "loader" };
                       const verb = r.status === "awaiting-input" ? "is waiting on your input"
                         : r.status === "failed" ? "failed to generate"
@@ -289,8 +326,8 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
                             <Icon name={tone.ic} size={12} stroke={2.4}/>
                           </span>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, lineHeight: 1.4 }}><b style={{ fontWeight: 600 }}>{r.company}</b> {verb}</div>
-                            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 2 }}>{r.role} · {timeAgo(r.ts)}</div>
+                            <div style={{ fontSize: 13.5, lineHeight: 1.4 }}><b style={{ fontWeight: 600 }}>{r.company}</b> {verb}</div>
+                            <div className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>{r.role} · {timeAgo(r.ts)}</div>
                           </div>
                         </div>
                       );
@@ -302,7 +339,7 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
               <Card padding={18}>
                 <div style={{ display: "flex", alignItems: "center", fontSize: 15, fontWeight: 700 }}>
                   This week
-                  <button onClick={() => goto("library")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>Details</button>
+                  <button onClick={() => goto("library")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-muted)" }}>Details</button>
                 </div>
                 <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 74, marginTop: 14 }}>
                   {activityData.map((v, i) => (
@@ -326,7 +363,7 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
 
               {companies.length > 0 && (
                 <Card padding={18}>
-                  <div style={{ display: "flex", alignItems: "baseline", marginBottom: 12 }}><span style={{ fontSize: 15, fontWeight: 700 }}>Companies</span><span className="mono" style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-faint)" }}>{companies.length}</span></div>
+                  <div style={{ display: "flex", alignItems: "baseline", marginBottom: 12 }}><span style={{ fontSize: 14, fontWeight: 600 }}>Companies</span><span className="mono" style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>{companies.length}</span></div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {companies.map(c => (
                       <button key={c} onClick={() => goto("companies")} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 99, fontSize: 11.5, cursor: "pointer" }}>
@@ -345,37 +382,41 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
 
   return (
     <div className="page-pad" style={{ padding: "24px 32px 48px", maxWidth: 1500, margin: "0 auto" }}>
-      <div className="mono" style={{ fontSize: 11, letterSpacing: 0.6, color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 8 }}>Workspace / Overview</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-faint)", marginBottom: 8, fontWeight: 500 }}>
+        <span>Workspace</span>
+        <span style={{ color: "var(--text-faint)" }}>›</span>
+        <span style={{ color: "var(--text)", fontWeight: 600 }}>Overview</span>
+      </div>
 
       {/* head */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 18, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
-          <div className="serif" style={{ fontSize: 34, fontWeight: 800, letterSpacing: -1.2, lineHeight: 1.05 }}>
+          <div className="serif" style={{ fontSize: "clamp(28px, 3.4vw, 40px)", fontWeight: 800, letterSpacing: "-0.045em", lineHeight: 1.04 }}>
             Job hunt, on autopilot.
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10, fontSize: 13, color: "var(--text-muted)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10, fontSize: 13, fontWeight: 400, color: "var(--text-muted)" }}>
             {new Date().toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
             <span style={{ color: "var(--border-strong)" }}>·</span>
             {weekCount} this week
-            {needsInput > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--warning-soft)", color: "var(--warning)", fontWeight: 600, fontSize: 12, padding: "3px 10px", borderRadius: 7 }}>{needsInput} need{needsInput === 1 ? "s" : ""} your input</span>}
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--border)", borderRadius: 7, padding: "3px 10px", fontSize: 12 }}>
+            {needsInput > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--warning-soft)", color: "var(--warning)", fontWeight: 600, fontSize: 12, padding: "3px 12px", borderRadius: 99 }}>{needsInput} need{needsInput === 1 ? "s" : ""} your input</span>}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--surface-2)", border: "1px solid var(--border-strong)", borderRadius: 99, padding: "4px 12px", fontSize: 12 }}>
               <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--success)" }}/>
               <span className="mono truncate" style={{ maxWidth: 180 }}>{settings.defaultModel}{settings.latencyMs != null ? ` · ${settings.latencyMs}ms` : ""}</span>
             </span>
           </div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Button variant="secondary" icon="upload" onClick={() => goto("resume")}>Replace base resume</Button>
-          <Button variant="primary" icon="play" disabled={locked} onClick={() => !locked && goto("new")}>New tailored resume</Button>
+          <Button size="xl" variant="secondary" icon="upload" onClick={() => goto("resume")}>Replace base resume</Button>
+          <Button size="xl" variant="primary" icon="plus" disabled={locked} onClick={() => !locked && goto("new")}>New tailored resume</Button>
         </div>
       </div>
 
       {/* In-page tabs — switch content within the Dashboard, no navigation away. */}
-      <div style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--border)", marginTop: 22, overflowX: "auto" }}>
+      <div style={{ display: "flex", gap: 22, borderBottom: "1px solid var(--border)", marginTop: 22, overflowX: "auto" }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            display: "inline-flex", alignItems: "center", gap: 7,
-            padding: "10px 14px", background: "transparent", border: "none",
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "12px 2px", background: "transparent", border: "none",
             cursor: "pointer", fontSize: 13.5, fontWeight: tab === t.id ? 600 : 500, whiteSpace: "nowrap",
             color: tab === t.id ? "var(--text)" : "var(--text-muted)",
             borderBottom: "2px solid " + (tab === t.id ? "var(--text)" : "transparent"), marginBottom: -1,
@@ -383,25 +424,16 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
           }}>
             {t.label}
             {t.count != null && (
-              <span className="mono" style={{
-                fontSize: 10.5, padding: "1px 6px", borderRadius: 99,
-                background: tab === t.id ? "var(--text)" : "var(--surface-2)",
-                color: tab === t.id ? "var(--bg)" : "var(--text-muted)",
+              <span style={{
+                fontSize: 12, padding: "6px 10px", borderRadius: 999, height: 20,
+                display: "inline-flex", alignItems: "center",
+                background: tab === t.id ? "var(--text)" : t.id === "active" ? "var(--warning-chip)" : "var(--surface-2)",
+                color: tab === t.id ? "var(--bg)" : t.id === "active" ? "#422006" : "var(--text-muted)",
                 fontWeight: 600,
               }}>{t.count}</span>
             )}
           </button>
         ))}
-        <span style={{ flex: 1, borderBottom: "2px solid transparent", marginBottom: -1 }}/>
-        <button onClick={() => goto("companies")} style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          padding: "10px 14px", background: "transparent", border: "none",
-          cursor: "pointer", fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap",
-          color: "var(--text-muted)", marginBottom: -1,
-        }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
-        >Companies <Icon name="arrow-right" size={12} style={{ opacity: 0.5 }}/></button>
       </div>
 
       {/* KPI stats — visible on every tab */}
@@ -1215,7 +1247,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
               {/* Links */}
               <Card id="sec-links" style={{ marginBottom: 16 }} padding={20}>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Links</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <div><div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>LinkedIn</div><Input icon="link" value={r.profile.linkedin || ""} onChange={(e) => updProfile("linkedin", e.target.value)} placeholder="linkedin.com/in/yourname"/></div>
                   <div><div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>GitHub</div><Input icon="link" value={r.profile.github || ""} onChange={(e) => updProfile("github", e.target.value)} placeholder="github.com/yourname"/></div>
                   <div><div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Website</div><Input icon="link" value={r.profile.website || ""} onChange={(e) => updProfile("website", e.target.value)} placeholder="yoursite.com"/></div>
@@ -1342,12 +1374,12 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
   );
 
   return (
-    <div className="page-pad" style={{ padding: "24px 32px 48px", maxWidth: 1280, margin: "0 auto" }}>
+    <div className="page-pad" style={{ padding: "40px 40px 48px", maxWidth: 1280, margin: "0 auto" }}>
       <div className="mono" style={{ fontSize: 11, letterSpacing: 0.6, color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 8 }}>Workspace / Create</div>
       <div className="serif" style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1.1, lineHeight: 1.05 }}>Tailor a resume to a job</div>
       <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginTop: 8, maxWidth: 620 }}>Paste the posting or drop a URL — the agents read it against your base résumé, ask only what they can't infer, and file the finished PDF under the company.</div>
 
-      <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)", gap: 24, alignItems: "start", marginTop: 24 }}>
+      <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)", gap: 32, alignItems: "start", marginTop: 24 }}>
         {/* input card */}
         <Card padding={22}>
           <div style={{ display: "inline-flex", background: "var(--surface-2)", borderRadius: "var(--radius-md)", padding: 3, gap: 2 }}>
@@ -1414,7 +1446,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
 
         {/* right column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <Card padding={18}>
+          <Card padding={24}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>What happens next</div>
             {step(1, "Understand the role", "Company, seniority & must-haves extracted")}
             {step(2, "Gap analysis", "Your resume compared against the posting")}
@@ -1422,14 +1454,14 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
             {step(4, "Generate & validate", "LaTeX written, linted, compiled, layout-checked")}
             {step(5, "Filed to library", "PDF saved under the company folder")}
           </Card>
-          <Card padding={18}>
+          <Card padding={24}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Run options</div>
             {optRow("Ask me about gaps", "Pause to add missing experience")}
             {optRow("Review rewrites", "Approve each bullet before compiling")}
             {optRow("Vision layout check", "opus reviews the final PDF", true)}
           </Card>
-          <Card padding={18}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Base resume</div>
+          <Card padding={24}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Base resume</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: "var(--success-soft)", color: "var(--success)" }}><Icon name="file-text" size={16}/></span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1832,8 +1864,8 @@ const SettingsView = ({ tweaks, setTweak }) => {
 // Status → stamp treatment. The persisted DB record and any live run session are
 // merged, so drafting/awaiting rows show alongside filed PDFs.
 const LIB_STATUS = {
-  complete:         { key: "final",  label: "Final",      color: "var(--success)", soft: "var(--success-soft)", icon: "check" },
-  "awaiting-input": { key: "needs",  label: "Needs you",  color: "var(--warning)", soft: "var(--warning-soft)", icon: "alert" },
+  complete:         { key: "final",  label: "Final",      color: "#052E16",         soft: "var(--success-chip)", icon: "check" },
+  "awaiting-input": { key: "needs",  label: "Needs you",  color: "#422006",         soft: "var(--warning-chip)", icon: "alert" },
   running:          { key: "active", label: "Active",     color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
   queued:           { key: "active", label: "Queued",     color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
   retrying:         { key: "active", label: "Retrying",   color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "refresh" },
@@ -2093,7 +2125,7 @@ const LibraryView = ({ goto, openRun, locked, initialFilter }) => {
   );
 
   return (
-    <div className="page-pad" style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
+    <div className="page-pad" style={{ padding: "40px 40px 64px", maxWidth: 1240, margin: "0 auto" }}>
       <Masthead crumb="Workspace / Library" title="Résumé library"
         sub={`${counts.all} résumé${counts.all === 1 ? "" : "s"} across ${companyList.length} compan${companyList.length === 1 ? "y" : "ies"}`}
         action={<Button variant="primary" iconRight="arrow-right" disabled={locked} onClick={() => goto("new")}>New résumé</Button>}
@@ -2186,7 +2218,7 @@ const CompaniesView = ({ goto, openRun }) => {
   const groups = groupByCompany(all);
 
   return (
-    <div className="page-pad" style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
+    <div className="page-pad" style={{ padding: "40px 40px 64px", maxWidth: 1240, margin: "0 auto" }}>
       <Masthead crumb="Workspace / Companies" title="Companies"
         sub={`${groups.length} compan${groups.length === 1 ? "y" : "ies"} you've applied to`}
         action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>New résumé</Button>}
@@ -2205,15 +2237,15 @@ const CompaniesView = ({ goto, openRun }) => {
             const roles = Array.from(new Set(rs.map(r => r.role))).slice(0, 2).join(" · ");
             return (
               <Card key={name} padding={20} hover onClick={() => openRun(rs[0].id, rs[0].status, rs[0])}>
-                <div style={{ width: 42, height: 42, borderRadius: "var(--radius-md)", background: "var(--accent-soft)", color: "var(--accent)", display: "grid", placeItems: "center", marginBottom: 14 }}>
-                  <Icon name="folder" size={20}/>
+                <div style={{ width: 42, height: 42, borderRadius: "var(--radius-md)", background: companyColor(name).bg, color: companyColor(name).fg, display: "grid", placeItems: "center", marginBottom: 14, fontSize: 17, fontWeight: 800 }}>
+                  {name[0].toUpperCase()}
                 </div>
                 <div className="serif" style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.1 }}>{name}</div>
                 <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }} title={roles}>{roles || "—"}</div>
                 <div style={{ display: "flex", gap: 6, marginTop: 15, flexWrap: "wrap" }}>
-                  {final > 0 && <span style={tagStyle("var(--success)")}>{final} final</span>}
-                  {needs > 0 && <span style={tagStyle("var(--warning)")}>{needs} needs you</span>}
-                  {failed > 0 && <span style={tagStyle("var(--danger)")}>{failed} failed</span>}
+                  {final > 0 && <span style={tagStyle("#052E16", "var(--success-chip)")}>{final} final</span>}
+                  {needs > 0 && <span style={tagStyle("#422006", "var(--warning-chip)")}>{needs} needs you</span>}
+                  {failed > 0 && <span style={tagStyle("var(--danger)", "var(--danger-soft)")}>{failed} failed</span>}
                   <span style={tagStyle("var(--text-muted)")}>{rs.length} total</span>
                 </div>
               </Card>
@@ -2225,9 +2257,19 @@ const CompaniesView = ({ goto, openRun }) => {
   );
 };
 
-const tagStyle = (color) => ({
+const tagStyle = (color, bg) => ({
   fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 9px", borderRadius: 99,
-  background: "var(--bg)", border: "1px solid var(--border)", color, letterSpacing: 0.2,
+  background: bg || "var(--bg)", border: bg ? "none" : "1px solid var(--border)", color, letterSpacing: 0.2, fontWeight: bg ? 600 : 400,
 });
+
+// Hash a company name to a color from the mockup palette
+const COMPANY_COLORS = [
+  { bg: "var(--info-soft)", fg: "var(--info)" },
+  { bg: "var(--violet-soft)", fg: "var(--violet)" },
+  { bg: "var(--success-soft)", fg: "var(--success)" },
+  { bg: "var(--warning-soft)", fg: "var(--warning)" },
+  { bg: "var(--danger-soft)", fg: "var(--danger)" },
+];
+const companyColor = (name) => COMPANY_COLORS[Array.from(name).reduce((a, c) => a + c.charCodeAt(0), 0) % COMPANY_COLORS.length];
 
 export { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView, LibraryView, CompaniesView };

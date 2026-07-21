@@ -56,6 +56,7 @@ class RunManager:
     def __init__(self) -> None:
         self._sessions: dict[str, RunSession] = {}
         self._lock = asyncio.Lock()
+        self._jd_files: dict[str, str] = {}
         self._load_history()
         # Durable résumé library (SQLite). Import any pre-existing JSONL history once.
         try:
@@ -64,10 +65,24 @@ class RunManager:
         except Exception:
             pass  # library persistence must never block server startup
 
+    def store_jd_file(self, text: str) -> str:
+        """Stash job-description text extracted from an uploaded file, keyed by a
+        one-time id. Consumed (and discarded) by start_run via jd_file_id."""
+        file_id = str(uuid.uuid4())
+        self._jd_files[file_id] = text
+        return file_id
+
     async def start_run(self, jd_input: dict[str, Any]) -> RunSession:
         thread_id = str(uuid.uuid4())
-        is_url = bool(jd_input.get("jd_url"))
-        raw_input = (jd_input.get("jd_url") or jd_input.get("jd_text") or "").strip()
+        jd_file_id = jd_input.get("jd_file_id")
+        if jd_file_id:
+            raw_input = self._jd_files.pop(jd_file_id, None)
+            if raw_input is None:
+                raise ValueError(f"Unknown or already-used upload: {jd_file_id}")
+            is_url = False
+        else:
+            is_url = bool(jd_input.get("jd_url"))
+            raw_input = (jd_input.get("jd_url") or jd_input.get("jd_text") or "").strip()
         initial_state: ResumeGenState = {
             "schema_version": STATE_SCHEMA_VERSION,
             "input_type": "url" if is_url else "text",
