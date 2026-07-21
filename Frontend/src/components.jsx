@@ -281,7 +281,7 @@ const Logo = ({ size = 22 }) => (
 );
 
 // File dropzone — real <input type=file> + drag-and-drop. Calls onUpload(File).
-const UploadDropzone = ({ onUpload, accept = ".pdf,.tex", padding = "32px 20px", hint = "parsed into a structured base_resume.yaml" }) => {
+const UploadDropzone = ({ onUpload, accept = ".pdf,.tex", padding = "32px 20px", hint = "parsed into a structured base_resume.yaml", label = "Drop a .tex or .pdf, or click to browse" }) => {
   const inputRef = React.useRef(null);
   const [over, setOver] = React.useState(false);
   const pick = (file) => { if (file) onUpload(file); };
@@ -304,7 +304,7 @@ const UploadDropzone = ({ onUpload, accept = ".pdf,.tex", padding = "32px 20px",
       <input ref={inputRef} type="file" accept={accept} style={{ display: "none" }}
         onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }}/>
       <Icon name="upload" size={22} stroke={1.6}/>
-      <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginTop: 8 }}>Drop a .tex or .pdf, or click to browse</div>
+      <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginTop: 8 }}>{label}</div>
       <div style={{ fontSize: 12, marginTop: 4 }}>{hint}</div>
     </div>
   );

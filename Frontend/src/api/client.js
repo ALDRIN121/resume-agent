@@ -24,6 +24,12 @@ export const createRun = ({ jdText, jdUrl, jdFileId } = {}) => request("/api/run
   body: JSON.stringify({ jd_text: jdText, jd_url: jdUrl, jd_file_id: jdFileId }),
 });
 
+export const uploadJdFile = (file) => {
+  const body = new FormData();
+  body.append("file", file);
+  return request("/api/runs/jd-file", { method: "POST", body });
+};
+
 export const listRuns = () => request("/api/runs");
 export const getRun = (threadId) => request(`/api/runs/${threadId}`);
 export const resumeRun = (threadId, kind, payload) => request(`/api/runs/${threadId}/resume`, {
