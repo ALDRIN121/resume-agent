@@ -5,7 +5,7 @@ import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView
 import { LiveRunView } from "./live-run.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PARSE_STAGES, PROVIDERS } from "./data.jsx";
-import { getSettings, listRuns, uploadResume, runDoctor, getResume } from "./api/client.js";
+import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume } from "./api/client.js";
 import { subscribeResumeParse } from "./api/ws.js";
 
 // True when the viewport is narrow enough that the sidebar should collapse into
@@ -54,10 +54,10 @@ const runsToNotifications = (runs) =>
     }));
 
 const NOTIF_META = {
-  hitl_ask:     { icon: "alert",       color: "var(--warning)", bg: "var(--warning-soft)", verb: "needs your input",     action: "Answer" },
-  hitl_suggest: { icon: "sparkles",    color: "var(--accent)",  bg: "var(--accent-soft)",  verb: "suggestions ready",    action: "Review" },
-  complete:     { icon: "check-circle",color: "var(--success)", bg: "var(--success-soft)", verb: "complete",             action: "Open" },
-  failed:       { icon: "x-circle",    color: "var(--danger)",  bg: "var(--danger-soft)",  verb: "failed",               action: "Retry" },
+  hitl_ask:     { icon: "alert",       color: "#422006",            bg: "var(--warning-chip)", verb: "needs your input",     action: "Answer" },
+  hitl_suggest: { icon: "sparkles",    color: "var(--accent)",      bg: "var(--accent-soft)",  verb: "suggestions ready",    action: "Review" },
+  complete:     { icon: "check-circle",color: "#052E16",            bg: "var(--success-chip)", verb: "complete",             action: "Open" },
+  failed:       { icon: "x-circle",    color: "var(--danger)",      bg: "var(--danger-soft)",  verb: "failed",               action: "Retry" },
 };
 
 // Notification dropdown
@@ -73,14 +73,14 @@ const NotificationCenter = ({ open, items, onClose, onOpenRun, onMarkAllRead }) 
         width: 380, maxWidth: "calc(100vw - 48px)",
         background: "var(--surface)",
         border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
+        borderRadius: "var(--radius-xl)",
         boxShadow: "var(--shadow-lg)",
         overflow: "hidden",
         animation: "panel-slide 200ms",
       }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "12px 14px", borderBottom: "1px solid var(--border)",
+          padding: "16px 20px", borderBottom: "1px solid var(--border)",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="inbox" size={14} style={{ color: "var(--text-muted)" }}/>
@@ -145,7 +145,7 @@ const NotificationCenter = ({ open, items, onClose, onOpenRun, onMarkAllRead }) 
         </div>
 
         <div style={{
-          padding: "8px 14px", borderTop: "1px solid var(--border)", background: "var(--surface-2)",
+          padding: "12px 20px", borderTop: "1px solid var(--border)", background: "var(--surface-2)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
           fontSize: 11.5, color: "var(--text-muted)",
         }}>
@@ -450,7 +450,8 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
   const items = [
     { id: "dashboard", icon: "home", label: "Overview" },
     { id: "new", icon: "play", label: "Create resume" },
-    { id: "library", icon: "folder", label: "Library", badge: activeRunCount || null },
+    { id: "dashboard-active", icon: "zap", label: "Active runs", badge: activeRunCount || null, navTo: "dashboard" },
+    { id: "library", icon: "folder", label: "Library" },
     { id: "companies", icon: "building", label: "Companies" },
     { id: "resume", icon: "file-text", label: "Base resume" },
   ];
@@ -466,7 +467,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
     <div className={"app-sidebar" + (mobileOpen ? " open" : "")} style={{
       width: w, transition: `width var(--t-mid)`,
       borderRight: "1px solid var(--border)",
-      background: "var(--surface)",
+      background: "var(--sidebar-bg)",
       display: "flex", flexDirection: "column",
       flexShrink: 0,
       overflow: "hidden",
@@ -493,11 +494,11 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
               active={route === it.id}
               collapsed={collapsed}
               locked={locked && it.id === "new"}
-              onClick={() => { if (!(locked && it.id === "new")) goto(it.id); }} />
+              onClick={() => { if (!(locked && it.id === "new")) goto(it.navTo || it.id); }} />
           ))}
         </div>
 
-        {!collapsed && <div className="mono" style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, padding: "18px 6px 8px" }}>System</div>}
+        {!collapsed && <div className="mono" style={{ fontSize: 12, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: 2, padding: "18px 6px 8px" }}>System</div>}
         {collapsed && <div style={{ height: 14 }}/>}
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {secondary.map(it => (
@@ -537,10 +538,10 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") goto("settings"); }}
             style={{
             width: "100%", display: "block", textAlign: "left",
-            padding: "10px 11px",
+            padding: "14px 16px",
             background: "var(--surface-2)",
             border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
+            borderRadius: "var(--radius-xl)",
             cursor: "pointer",
             transition: `border-color var(--t-fast), background var(--t-fast)`,
           }}
@@ -595,29 +596,29 @@ const NavItem = ({ icon, label, active, collapsed, onClick, locked, badge }) => 
   <button onClick={onClick} title={collapsed ? (locked ? `${label} — paused while parsing` : label) : (locked ? "Paused while base resume is parsing" : null)}
     disabled={locked}
     style={{
-      display: "flex", alignItems: "center", gap: 10,
-      padding: collapsed ? "9px 0" : "8px 10px",
+      display: "flex", alignItems: "center", gap: 12,
+      height: 40, padding: collapsed ? "8px 0" : "0 12px",
       justifyContent: collapsed ? "center" : "flex-start",
-      background: active ? "var(--accent-soft)" : "transparent",
-      color: locked ? "var(--text-faint)" : active ? "var(--accent)" : "var(--text-muted)",
-      border: "1px solid " + (active ? "var(--accent-ring)" : "transparent"),
-      borderRadius: "var(--radius-md)",
+      background: active ? "var(--surface-2)" : "transparent",
+      color: locked ? "var(--text-faint)" : active ? "var(--text)" : "var(--text-muted)",
+      border: "1px solid " + (active ? "var(--border)" : "transparent"),
+      borderRadius: "var(--radius-sm)",
       cursor: locked ? "not-allowed" : "pointer", textAlign: "left",
       transition: `all var(--t-fast)`,
-      fontWeight: active ? 500 : 400, fontSize: 13.5,
+      fontWeight: active ? 600 : 500, fontSize: 14,
       opacity: locked ? 0.6 : 1,
       position: "relative",
     }}
     onMouseEnter={(e) => { if (!active && !locked) { e.currentTarget.style.background = "var(--surface-2)"; e.currentTarget.style.color = "var(--text)"; } }}
     onMouseLeave={(e) => { if (!active && !locked) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; } }}
   >
-    <Icon name={icon} size={15} stroke={2}/>
+    <Icon name={icon} size={20} stroke={2}/>
     {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
     {!collapsed && locked && (
       <Icon name="loader" size={11} style={{ animation: "spin 1.2s linear infinite", color: "var(--accent)" }}/>
     )}
     {!collapsed && !locked && !!badge && (
-      <span className="mono" style={{ background: "var(--warning-soft)", color: "var(--warning)", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "1px 7px" }}>{badge}</span>
+      <span className="mono" style={{ background: "var(--warning-chip)", color: "#422006", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "1px 7px" }}>{badge}</span>
     )}
   </button>
 );
@@ -660,7 +661,7 @@ const TopBar = ({ goto, openCmdK, openNotifs, unreadCount, bellRef, settings, on
 
       <div style={{ flex: 1 }}/>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 24, flexShrink: 0 }}>
         {/* Active LLM indicator */}
         <button className="hide-mobile" onClick={() => goto("settings")}
           title={`${settings.providerName || settings.provider} · ${settings.defaultModel}${settings.visionEnabled ? ` · vision: ${settings.visionModel}` : ""}${settings.latencyMs != null ? ` · ${settings.latencyMs}ms` : ""}`}
@@ -673,7 +674,7 @@ const TopBar = ({ goto, openCmdK, openNotifs, unreadCount, bellRef, settings, on
           onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
           onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
         >
-          <Logo size={17}/>
+          <Icon name="zap" size={17}/>
           <span style={{ position: "absolute", top: 7, right: 7, width: 7, height: 7, borderRadius: 99, background: "var(--success)", border: "2px solid var(--surface)" }}/>
         </button>
 
@@ -700,7 +701,7 @@ const TopBar = ({ goto, openCmdK, openNotifs, unreadCount, bellRef, settings, on
           )}
         </button>
 
-        <span className="hide-mobile" style={{ width: 1, height: 24, background: "var(--border)" }}/>
+        <span className="hide-mobile" style={{ width: 1, height: 28, background: "var(--border)" }}/>
 
         {/* Avatar */}
         <button className="hide-mobile" onClick={() => goto("settings")} title="Settings" style={{
@@ -708,10 +709,10 @@ const TopBar = ({ goto, openCmdK, openNotifs, unreadCount, bellRef, settings, on
           background: "transparent", border: "none", cursor: "pointer", padding: 0,
         }}>
           <span style={{
-            width: 34, height: 34, borderRadius: 99,
+            width: 40, height: 40, borderRadius: 99,
             background: "var(--accent)", color: "var(--accent-contrast)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 12.5, fontWeight: 700,
+            fontSize: 14, fontWeight: 700,
           }}>{initials || "··"}</span>
           <Icon name="chevron-down" size={14} style={{ color: "var(--text-muted)" }}/>
         </button>
@@ -842,6 +843,13 @@ const TWEAK_DEFAULTS = {
   doctorBanner: false,
 };
 
+const TWEAK_STORE = "rg.tweaks";
+// Captured before first render: the write-through effect below creates this
+// key on mount, so "was empty at boot" must be read here, not inside the app.
+const bootTweaks = (() => {
+  try { return JSON.parse(localStorage.getItem(TWEAK_STORE)); } catch { return null; }
+})();
+
 // Tweaks panel content
 const TweaksContent = ({ t, setTweak }) => (
   <>
@@ -896,14 +904,31 @@ export const App = () => {
   const [lastRun, setLastRun] = useState(null);
   const [appSettings, setAppSettings] = useState(ACTIVE_LLM);
   const [runs, setRuns] = useState([]);
-  const [readNotifIds, setReadNotifIds] = useState(() => new Set());
+  const [readNotifIds, setReadNotifIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("rg.readNotifs")) || []); } catch { return new Set(); }
+  });
   const [doctor, setDoctor] = useState(null);
-  const [doctorDismissed, setDoctorDismissed] = useState(false);
+  const [doctorDismissed, setDoctorDismissed] = useState(() => localStorage.getItem("rg.doctorDismissed") === "1");
   const bellRef = useRef(null);
   const parseUnsubRef = useRef(null);
   const toastedRef = useRef(new Set());
+  const uiSyncReady = useRef(false);
 
-  useEffect(() => { getSettings().then(setAppSettings).catch(() => {}); }, []);
+  useEffect(() => {
+    try { localStorage.setItem("rg.readNotifs", JSON.stringify([...readNotifIds].slice(-200))); } catch {}
+  }, [readNotifIds]);
+
+  useEffect(() => {
+    try { localStorage.setItem("rg.doctorDismissed", doctorDismissed ? "1" : "0"); } catch {}
+  }, [doctorDismissed]);
+
+  useEffect(() => {
+    getSettings().then(s => {
+      setAppSettings(s);
+      if (!bootTweaks && s.uiTheme) setTweak({ theme: s.uiTheme, accent: s.uiAccent, density: s.uiDensity });
+      uiSyncReady.current = true;
+    }).catch(() => { uiSyncReady.current = true; });
+  }, []);
   useEffect(() => { runDoctor().then(setDoctor).catch(() => setDoctor(null)); }, []);
 
   // Avatar initials, derived from the real base résumé owner (no auth/user model here).
@@ -972,13 +997,31 @@ export const App = () => {
   const isLocked = !!parsing && !parsing.completed && !parsing.failed;
 
   // Tweaks
-  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [tweaks, setTweak] = useTweaks({ ...TWEAK_DEFAULTS, ...(bootTweaks || {}) });
 
   // Apply theme + accent to <html>
   useEffect(() => {
     document.documentElement.dataset.theme = tweaks.theme;
     document.documentElement.dataset.accent = tweaks.accent;
   }, [tweaks.theme, tweaks.accent]);
+
+  // Write-through cache so the boot inline-script + next reload apply instantly.
+  useEffect(() => {
+    try {
+      localStorage.setItem(TWEAK_STORE, JSON.stringify({
+        theme: tweaks.theme, accent: tweaks.accent, density: tweaks.density, sidebar: tweaks.sidebar,
+      }));
+    } catch {}
+  }, [tweaks.theme, tweaks.accent, tweaks.density, tweaks.sidebar]);
+
+  // Sync durable appearance prefs (theme/accent/density) to config.yaml, debounced.
+  useEffect(() => {
+    if (!uiSyncReady.current) return;
+    const id = setTimeout(() => {
+      updateSettings({ ui_theme: tweaks.theme, ui_accent: tweaks.accent, ui_density: tweaks.density }).catch(() => {});
+    }, 600);
+    return () => clearTimeout(id);
+  }, [tweaks.theme, tweaks.accent, tweaks.density]);
 
   // Sidebar mirror from tweak
   const [sidebarCollapsed, setSidebarCollapsed] = useState(tweaks.sidebar === "collapsed");
