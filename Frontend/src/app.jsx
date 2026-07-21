@@ -8,6 +8,20 @@ import { ACTIVE_LLM, PARSE_STAGES, PROVIDERS } from "./data.jsx";
 import { getSettings, listRuns, uploadResume, runDoctor } from "./api/client.js";
 import { subscribeResumeParse } from "./api/ws.js";
 
+// True when the viewport is narrow enough that the sidebar should collapse into
+// an off-canvas drawer (kept in sync with the 860px breakpoint in styles.css).
+const useIsMobile = (breakpoint = 860) => {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth <= breakpoint,
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+  return isMobile;
+};
+
 // Root app: sidebar + top bar + routing + tweaks.
 
 // Relative time from a unix timestamp (seconds).
@@ -432,7 +446,7 @@ const ReplaceBaseResumeModal = ({ open, onClose, onUpload }) => {
 };
 
 // Sidebar
-const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, settings = ACTIVE_LLM }) => {
+const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = false, settings = ACTIVE_LLM }) => {
   const items = [
     { id: "new", icon: "play", label: "Create" },
     { id: "library", icon: "folder", label: "Résumé library" },
@@ -448,7 +462,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, settings = ACTI
   const w = collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w)";
 
   return (
-    <div style={{
+    <div className={"app-sidebar" + (mobileOpen ? " open" : "")} style={{
       width: w, transition: `width var(--t-mid)`,
       borderRight: "1px solid var(--border)",
       background: "var(--surface)",
@@ -502,7 +516,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, settings = ACTI
       }}>
         {collapsed ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-            <button onClick={() => goto("settings")} title={`${provider.name} · ${settings.defaultModel}\nvision: ${settings.visionEnabled ? settings.visionModel : "off"}\n${ACTIVE_LLM.status} · ${settings.latencyMs} ms`}
+            <button onClick={() => goto("settings")} title={`${provider.name} · ${settings.defaultModel}\nvision: ${settings.visionEnabled ? settings.visionModel : "off"}\n${settings.status || "connected"}${settings.latencyMs != null ? ` · ${settings.latencyMs} ms` : ""}`}
               style={{
                 position: "relative", width: 32, height: 32, borderRadius: 7,
                 background: "var(--accent)", color: "var(--accent-contrast)",
@@ -608,7 +622,7 @@ const NavItem = ({ icon, label, active, collapsed, onClick, locked }) => (
 );
 
 // Top bar
-const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCount, bellRef, settings }) => {
+const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCount, bellRef, settings, onOpenNav }) => {
   const titles = {
     dashboard: "Overview", new: "Create", library: "Résumé library", companies: "Companies",
     resume: "Base resume", history: "History", settings: "Settings", setup: "Setup",
@@ -618,23 +632,32 @@ const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCou
     new: "Workroom", library: "Library", companies: "Cabinet", resume: "Workroom",
     settings: "System", setup: "System", run: "Library", dashboard: "Overview", history: "Library",
   };
+  const provider = PROVIDERS.find(p => p.id === settings.providerId) || PROVIDERS[0];
   return (
-    <div style={{
+    <div className="topbar" style={{
       height: "var(--topbar-h)", flexShrink: 0,
       borderBottom: "1px solid var(--border)",
       background: "var(--surface)",
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "0 24px", gap: 12,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", letterSpacing: 0.8, textTransform: "uppercase" }}>{sections[route] || "Workroom"}</span>
-        <span style={{ color: "var(--text-faint)" }}>/</span>
-        <span className="serif" style={{ fontSize: 16, fontWeight: 600 }}>{titles[route] || route}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+        <button className="mobile-only" onClick={onOpenNav} aria-label="Open navigation" style={{
+          alignItems: "center", justifyContent: "center",
+          width: 34, height: 34, flexShrink: 0,
+          background: "var(--surface)", border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-md)", color: "var(--text-muted)", cursor: "pointer",
+        }}>
+          <Icon name="menu" size={16}/>
+        </button>
+        <span className="mono hide-mobile" style={{ fontSize: 10.5, color: "var(--text-faint)", letterSpacing: 0.8, textTransform: "uppercase" }}>{sections[route] || "Workroom"}</span>
+        <span className="hide-mobile" style={{ color: "var(--text-faint)" }}>/</span>
+        <span className="serif truncate" style={{ fontSize: 16, fontWeight: 600, minWidth: 0 }}>{titles[route] || route}</span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         {/* Active LLM pill */}
-        <button onClick={() => { /* could open command palette/settings */ }} title={`provider: ${ACTIVE_LLM.providerName} · default: ${settings.defaultModel}${settings.visionEnabled ? ` · vision: ${settings.visionModel}` : ""} · ${settings.latencyMs}ms`}
+        <button className="hide-mobile" onClick={() => { /* could open command palette/settings */ }} title={`provider: ${settings.providerName || provider?.name || settings.provider} · default: ${settings.defaultModel}${settings.visionEnabled ? ` · vision: ${settings.visionModel}` : ""}${settings.latencyMs != null ? ` · ${settings.latencyMs}ms` : ""}`}
           style={{
             display: "inline-flex", alignItems: "center", gap: 8,
             height: 30, padding: "0 10px",
@@ -664,7 +687,7 @@ const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCou
           padding: "4px 10px",
           background: doctorBanner ? "var(--danger-soft)" : "var(--success-soft)",
           color: doctorBanner ? "var(--danger)" : "var(--success)",
-          borderRadius: 99, fontSize: 11.5, fontWeight: 500,
+          borderRadius: 99, fontSize: 11.5, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0,
           border: `1px solid ${doctorBanner ? "var(--danger)" : "var(--success)"}1f`,
         }}>
           <span style={{ width: 6, height: 6, borderRadius: 99, background: "currentColor", animation: doctorBanner ? "none" : "blink 2s infinite" }}/>
@@ -717,8 +740,8 @@ const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCou
           color: "var(--text-muted)", fontSize: 12.5, cursor: "pointer",
         }}>
           <Icon name="search" size={13}/>
-          <span>Search…</span>
-          <Kbd>⌘</Kbd><Kbd>K</Kbd>
+          <span className="hide-mobile">Search…</span>
+          <span className="hide-mobile" style={{ display: "inline-flex", gap: 4 }}><Kbd>⌘</Kbd><Kbd>K</Kbd></span>
         </button>
       </div>
     </div>
@@ -888,6 +911,8 @@ const TweaksContent = ({ t, setTweak }) => (
 // Root app
 export const App = () => {
   const [route, setRoute] = useState("library"); // library | new | companies | resume | history | settings | setup | run | dashboard
+  const isMobile = useIsMobile();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [cmdK, setCmdK] = useState(false);
   const [notifsOpen, setNotifsOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1003,7 +1028,10 @@ export const App = () => {
 
   const markNotifRead = (id) => setReadNotifIds(s => { const next = new Set(s); next.add(id); return next; });
 
-  const goto = (id) => setRoute(id);
+  // Close the mobile drawer once we grow back to a desktop width.
+  useEffect(() => { if (!isMobile) setMobileNavOpen(false); }, [isMobile]);
+
+  const goto = (id) => { setRoute(id); setMobileNavOpen(false); };
 
   const openRun = (threadId, state = "running", run = null) => {
     if (!threadId) { setRoute("run"); return; }
@@ -1039,7 +1067,8 @@ export const App = () => {
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar route={route} goto={goto} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} locked={isLocked} settings={appSettings}/>
+      <Sidebar route={route} goto={goto} collapsed={isMobile ? false : sidebarCollapsed} setCollapsed={setSidebarCollapsed} locked={isLocked} mobileOpen={mobileNavOpen} settings={appSettings}/>
+      {isMobile && mobileNavOpen && <div className="sidebar-backdrop" onClick={() => setMobileNavOpen(false)}/>}
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg)" }}>
         <TopBar route={route} runTitle={selectedRunTitle} doctorBanner={doctorHasIssue || tweaks.doctorBanner}
@@ -1047,6 +1076,7 @@ export const App = () => {
           openNotifs={() => setNotifsOpen(o => !o)}
           unreadCount={unreadCount}
           bellRef={bellRef}
+          onOpenNav={() => setMobileNavOpen(true)}
           settings={appSettings}/>
         <ParsingBanner parsing={parsing} onOpen={() => setParsing(p => p ? { ...p, modalOpen: true } : null)}/>
         {(doctorHasIssue || tweaks.doctorBanner) && !doctorDismissed && <DoctorBanner doctor={doctor} goto={goto} onDismiss={() => setDoctorDismissed(true)}/>}
