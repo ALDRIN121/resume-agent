@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
-import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, pdfUrl } from "./api/client.js";
+import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, pdfUrl, uploadJdFile } from "./api/client.js";
 import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS, PARSE_STAGES } from "./data.jsx";
 
 // Fetch the live provider catalogue (A4); fall back to the static data.jsx
@@ -87,16 +87,6 @@ const resumeForUi = (resume) => {
 
 // ============== DASHBOARD ==============
 
-// Sparkle decoration SVG for hero
-const HeroSparkle = ({ size = 24, x, y, delay = 0, opacity = 0.6 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{
-    position: "absolute", top: y, left: x, opacity,
-    animation: `sparkle-twinkle 3s ${delay}s ease-in-out infinite`,
-  }}>
-    <path d="M12 0 L13.5 10.5 L24 12 L13.5 13.5 L12 24 L10.5 13.5 L0 12 L10.5 10.5 Z" fill="white"/>
-  </svg>
-);
-
 // 14-day run history
 const computeActivity = (runs, days = 14) => {
   const now = Date.now();
@@ -109,188 +99,20 @@ const computeActivity = (runs, days = 14) => {
   return buckets;
 };
 
-const KpiCard = ({ label, value, sub, trend, accent = false, icon }) => (
-  <div style={{
-    background: accent ? "var(--accent)" : "var(--surface)",
-    color: accent ? "var(--accent-contrast)" : "var(--text)",
-    border: "1px solid " + (accent ? "var(--accent)" : "var(--border)"),
-    borderRadius: "var(--radius-lg)",
-    padding: 18,
-    minWidth: 0,
-    transition: "border-color var(--t-fast)",
-    position: "relative",
-  }}>
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-      <span style={{ fontSize: 12, fontWeight: 500, color: accent ? "var(--accent-contrast)" : "var(--text-muted)", opacity: accent ? 0.85 : 1 }}>{label}</span>
-      <span style={{
-        width: 26, height: 26, borderRadius: 99,
-        background: accent ? "rgba(255,255,255,0.18)" : "var(--surface-2)",
-        border: accent ? "none" : "1px solid var(--border)",
-        color: accent ? "var(--accent-contrast)" : "var(--text-muted)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        <Icon name={icon || "arrow-right"} size={12} style={{ transform: "rotate(-45deg)" }}/>
-      </span>
-    </div>
-    <div style={{ fontSize: 36, fontWeight: 600, letterSpacing: -1.4, lineHeight: 1, fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" }}>{value}</div>
-    {sub && (
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 11.5, color: accent ? "var(--accent-contrast)" : "var(--text-muted)", opacity: accent ? 0.9 : 1 }}>
-        {trend && (
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: 2,
-            padding: "1px 6px",
-            background: accent ? "rgba(255,255,255,0.18)" : (trend > 0 ? "var(--success-soft)" : "var(--surface-2)"),
-            color: accent ? "var(--accent-contrast)" : (trend > 0 ? "var(--success)" : "var(--text-muted)"),
-            borderRadius: 4, fontSize: 10.5, fontWeight: 600,
-          }} className="mono">
-            <Icon name="arrow-right" size={9} style={{ transform: `rotate(${trend > 0 ? -45 : 45}deg)` }}/>
-            {Math.abs(trend)}
-          </span>
-        )}
-        <span>{sub}</span>
-      </div>
-    )}
-  </div>
-);
-
-const ActivityChart = ({ data }) => {
-  const max = Math.max(...data, 1);
-  return (
-    <Card padding={18}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Activity</div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>runs over the last 14 days</div>
-        </div>
-        <Tabs value="14d" onChange={() => {}} options={[{ value: "7d", label: "7d" }, { value: "14d", label: "14d" }, { value: "30d", label: "30d" }]}/>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${data.length}, 1fr)`, gap: 4, height: 90, alignItems: "flex-end" }}>
-        {data.map((v, i) => (
-          <div key={i} style={{
-            height: `${Math.max(8, (v / max) * 100)}%`,
-            background: v === 0 ? "var(--surface-2)" : v >= 3 ? "var(--accent)" : "color-mix(in oklab, var(--accent) 45%, var(--surface-2))",
-            borderRadius: 3,
-            transition: "height 320ms var(--ease-spring)",
-            position: "relative",
-          }} title={`${v} run${v === 1 ? "" : "s"}`}/>
-        ))}
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "var(--text-faint)" }} className="mono">
-        <span>2 weeks ago</span><span>today</span>
-      </div>
-    </Card>
-  );
-};
-
-const RightNowCard = ({ locked, goto, openRun, setRunState, runs = [] }) => {
-  const items = runs
-    .filter(r => r.status === "running" || r.status === "awaiting-input")
-    .map(r => ({
-      kind: r.status,
-      company: r.company,
-      role: r.role,
-      elapsed: r.duration !== "-" ? r.duration : null,
-      hitlDetail: r.hitlDetail,
-      id: r.id,
-    }));
-
-  const needsYouCount = items.filter(i => i.kind === "awaiting-input").length;
-
-  const open = (item) => {
-    if (openRun) {
-      openRun(item.id, item.kind === "awaiting-input" ? "awaiting-input" : "running");
-    } else {
-      setRunState?.(item.kind === "awaiting-input" ? "awaiting-input" : "running");
-      goto("run");
-    }
-  };
-
-  return (
-    <Card padding={0} style={{ overflow: "hidden" }}>
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
-            <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--info)" }}/>
-            <span style={{ position: "absolute", inset: -3, borderRadius: 99, border: "1px solid var(--info)", animation: "pulse-ring 1.6s ease-out infinite", opacity: 0.6 }}/>
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>Right now</span>
-          {needsYouCount > 0 && (
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 4,
-              padding: "1px 7px",
-              background: "var(--warning)", color: "white",
-              borderRadius: 99, fontSize: 10, fontWeight: 600, letterSpacing: 0.3,
-              textTransform: "uppercase",
-              flexShrink: 0,
-            }}>
-              {needsYouCount} for you
-            </span>
-          )}
-        </div>
-        <Badge tone="info" style={{ flexShrink: 0 }}>{items.length}</Badge>
-      </div>
-
-      {items.length === 0 ? (
-        <div style={{ padding: "28px 16px", textAlign: "center" }}>
-          <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>No active runs</div>
-          <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 4 }}>Start a new run to see live progress here.</div>
-        </div>
-      ) : items.map((it, i) => {
-        const needsYou = it.kind === "awaiting-input";
-        return (
-          <div key={it.id || i} style={{
-            borderBottom: i < items.length - 1 ? "1px solid var(--border)" : "none",
-            position: "relative",
-          }}>
-            {needsYou && (
-              <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--warning)" }}/>
-            )}
-            <button onClick={() => open(it)} style={{
-              width: "100%", textAlign: "left",
-              padding: needsYou ? "14px 14px 14px 17px" : "14px 16px",
-              background: needsYou ? "var(--warning-soft)" : "transparent",
-              border: "none", cursor: "pointer", transition: "background var(--t-fast)", display: "block",
-            }}
-              onMouseEnter={(e) => e.currentTarget.style.background = needsYou ? "color-mix(in oklab, var(--warning) 14%, var(--surface))" : "var(--surface-2)"}
-              onMouseLeave={(e) => e.currentTarget.style.background = needsYou ? "var(--warning-soft)" : "transparent"}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, minWidth: 0 }}>
-                {needsYou && (
-                  <span style={{ width: 18, height: 18, borderRadius: 99, background: "var(--warning)", color: "white", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <Icon name="alert" size={10} stroke={2.8}/>
-                  </span>
-                )}
-                <span style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }} className="truncate">{it.company}</span>
-              </div>
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 10, paddingLeft: needsYou ? 26 : 0 }} className="truncate">{it.role}</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                <StatusPill status={it.kind}/>
-                {it.elapsed && <span style={{ fontSize: 11, color: "var(--text-faint)", flexShrink: 0 }} className="mono">{it.elapsed}</span>}
-              </div>
-              {needsYou && it.hitlDetail && (
-                <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--surface)", border: "1px solid color-mix(in oklab, var(--warning) 30%, transparent)", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text)" }}>
-                    <Icon name="alert" size={12} stroke={2.4} style={{ color: "var(--warning)", flexShrink: 0 }}/>
-                    <span style={{ flex: 1 }}>{it.hitlDetail}</span>
-                  </div>
-                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 10px", background: "var(--warning)", color: "white", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, width: "100%" }}>
-                    Answer now <Icon name="arrow-right" size={11}/>
-                  </span>
-                </div>
-              )}
-            </button>
-          </div>
-        );
-      })}
-    </Card>
-  );
-};
-
 const parseDurationSecs = (d) => {
   if (!d || d === "-") return null;
   const m = parseInt(d.match(/(\d+)m/)?.[1] || 0);
   const s = parseInt(d.match(/(\d+)s/)?.[1] || 0);
   return m * 60 + s;
+};
+
+const timeAgo = (ts) => {
+  if (!ts) return "";
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (secs < 60) return "just now";
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
 };
 
 const useSettings = () => {
@@ -302,18 +124,7 @@ const useSettings = () => {
 const Dashboard = ({ goto, openRun, locked, doctor }) => {
   const runs = useRuns();
   const settings = useSettings();
-  const [resumeMeta, setResumeMeta] = React.useState(null);
-  React.useEffect(() => {
-    getResume().then(data => {
-      const exp = data.experience?.length || 0;
-      const proj = data.projects?.length || 0;
-      const edu = data.education?.length || 0;
-      const skills = Object.keys(data.skills || {}).length;
-      const certs = data.certifications?.length || 0;
-      const sectionCount = [exp, proj, edu, skills, certs].filter(Boolean).length + 1;
-      setResumeMeta({ firstName: data.personal?.full_name?.split(" ")[0] || "there", sectionCount });
-    }).catch(() => {});
-  }, []);
+  const [tab, setTab] = React.useState("overview");
 
   const totalRuns = runs.length;
   const activityData = computeActivity(runs);
@@ -327,285 +138,284 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
   const doctorOk = doctor ? doctor.ok : true;
   const doctorFailing = (doctor?.checks || []).filter(c => !c.ok).length;
 
-  return (
-    <div className="two-col-grid" style={{ padding: "28px 32px 64px", maxWidth: 1380, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 24 }}>
+  const weekCount = activityData.slice(-7).reduce((a, b) => a + b, 0);
+  const needsInput = runs.filter(r => r.status === "awaiting-input").length;
+  const successRate = totalRuns ? Math.round((completed / totalRuns) * 100) : 0;
+  // Full lists for tab content (no artificial cap)
+  const activeRuns = runs.filter(r => ["running", "awaiting-input", "queued", "retrying"].includes(r.status));
+  const activeRunsSummary = activeRuns.slice(0, 3);
+  const completedRuns = runs.filter(r => r.status === "complete");
+  const recentDone = completedRuns.slice(0, 4);
+  const needsRuns = runs.filter(r => r.status === "awaiting-input");
+  const failedRuns = runs.filter(r => r.status === "failed");
+  const activityFeed = [...runs].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 5);
+  const maxBar = Math.max(1, ...activityData);
 
-      {/* ===== MAIN COLUMN ===== */}
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
+  const Stat = ({ icon, label, value, sub, alert }) => (
+    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)", padding: "15px 16px 13px", boxShadow: alert ? "0 0 0 1px var(--text) inset" : "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-muted)", fontWeight: 500 }}>
+        <Icon name={icon} size={15} style={{ color: "var(--text-faint)" }}/>{label}
+      </div>
+      <div className="serif" style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1, lineHeight: 1.15, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ marginTop: 3, fontSize: 12, color: "var(--text-faint)" }}>{sub}</div>
+    </div>
+  );
 
-        {/* HERO */}
-        <div style={{
-          position: "relative", overflow: "hidden",
-          background: "linear-gradient(135deg, var(--accent) 0%, color-mix(in oklab, var(--accent) 70%, black) 100%)",
-          color: "var(--accent-contrast)",
-          borderRadius: "var(--radius-xl)",
-          padding: "28px 28px",
-          boxShadow: "var(--shadow-md)",
-          minHeight: 160,
-          display: "flex", flexDirection: "column", justifyContent: "space-between",
-          gap: 18,
-        }}>
-          {/* Sparkles */}
-          <HeroSparkle size={20} x="78%" y="18%" delay={0} opacity={0.6}/>
-          <HeroSparkle size={36} x="86%" y="55%" delay={1.2} opacity={0.5}/>
-          <HeroSparkle size={14} x="68%" y="74%" delay={0.6} opacity={0.4}/>
-          <HeroSparkle size={28} x="92%" y="28%" delay={1.8} opacity={0.35}/>
-          <HeroSparkle size={16} x="58%" y="32%" delay={2.4} opacity={0.3}/>
-
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.78 }} className="mono">
-              Welcome back{resumeMeta ? `, ${resumeMeta.firstName}` : ""}
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: -0.6, lineHeight: 1.2, marginTop: 6, maxWidth: 520 }}>
-              Tailor your next resume in under a minute.
-            </div>
-            <div style={{ fontSize: 13.5, opacity: 0.82, marginTop: 6, maxWidth: 480 }}>
-              Drop a JD, answer a couple of clarifying questions, get a polished PDF.
-            </div>
+  const RunRow = ({ r }) => {
+    const needsYou = r.status === "awaiting-input";
+    const done = r.status === "complete";
+    const bad = r.status === "failed";
+    const tone = needsYou ? { bg: "var(--warning-soft)", fg: "var(--warning)", ic: "alert" }
+      : bad ? { bg: "var(--danger-soft)", fg: "var(--danger)", ic: "x" }
+      : done ? { bg: "var(--success-soft)", fg: "var(--success)", ic: "file-text" }
+      : { bg: "var(--info-soft)", fg: "var(--info)", ic: "loader" };
+    return (
+      <div onClick={() => openRun(r.id, r.status, r)} style={{
+        display: "flex", alignItems: "center", gap: 13, flexWrap: "wrap",
+        border: "1px solid " + (needsYou ? "var(--border-strong)" : "var(--border)"),
+        borderRadius: "var(--radius-lg)", padding: "13px 15px", background: "var(--surface)", cursor: "pointer",
+      }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--border-strong)"}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = needsYou ? "var(--border-strong)" : "var(--border)"}
+      >
+        <span style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: tone.bg, color: tone.fg }}>
+          <Icon name={tone.ic} size={16}/>
+        </span>
+        <div style={{ minWidth: 150, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 14, fontWeight: 600 }}>
+            <span className={r.pdf ? "mono" : ""} style={{ fontSize: r.pdf ? 12.5 : 14 }}>{r.pdf || `${r.company} — ${r.role}`}</span>
+            <StatusPill status={r.status} size="sm"/>
           </div>
+          <div style={{ fontSize: 12.5, color: "var(--text-faint)", marginTop: 2 }}>
+            {r.company} · {r.role}<span className="mono"> · {r.duration !== "-" ? r.duration : r.date}</span>
+          </div>
+        </div>
+        {needsYou
+          ? <Button size="sm" variant="primary" iconRight="arrow-right">Answer</Button>
+          : bad ? <Button size="sm" variant="secondary" icon="refresh">Retry</Button>
+          : done && r.pdf_url ? <IconButton name="download" label="Download" onClick={(e) => { e.stopPropagation(); window.open(pdfUrl(r.id), "_blank"); }}/>
+          : <IconButton name="arrow-right" label="Open" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }}/>}
+      </div>
+    );
+  };
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 1 }}>
-            <button onClick={() => !locked && goto("new")} disabled={locked} style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              padding: "10px 8px 10px 18px",
-              background: locked ? "rgba(255,255,255,0.18)" : "var(--text)",
-              color: locked ? "var(--accent-contrast)" : "var(--bg)",
-              border: "none", borderRadius: 99,
-              fontSize: 13.5, fontWeight: 500,
-              cursor: locked ? "not-allowed" : "pointer",
-              transition: "transform 220ms var(--ease-bounce)",
-            }}
-              onMouseDown={(e) => !locked && (e.currentTarget.style.transform = "scale(0.95)")}
-              onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
-              onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
-            >
-              {locked ? "Parsing resume…" : "Start new run"}
-              <span style={{
-                width: 22, height: 22, borderRadius: 99,
-                background: locked ? "rgba(255,255,255,0.2)" : "var(--bg)",
-                color: locked ? "var(--accent-contrast)" : "var(--text)",
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <Icon name={locked ? "loader" : "arrow-right"} size={11} stroke={2.6} style={locked ? { animation: "spin 1.2s linear infinite" } : {}}/>
-              </span>
-            </button>
+  const kvRow = (k, v, last) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderBottom: last ? "none" : "1px dashed var(--border)", fontSize: 13 }}>
+      <span style={{ color: "var(--text-muted)" }}>{k}</span><span className="mono truncate" style={{ fontWeight: 600, maxWidth: 160, textAlign: "right" }}>{v}</span>
+    </div>
+  );
 
-            <button onClick={() => goto("resume")} style={{
-              background: "transparent", color: "var(--accent-contrast)",
-              border: "1px solid rgba(255,255,255,0.3)",
-              padding: "9px 16px", borderRadius: 99,
-              fontSize: 13, fontWeight: 500, cursor: "pointer",
-              transition: "background var(--t-fast)",
-            }}
-              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.12)"}
-              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-            >
-              Edit base resume
-            </button>
+  // ── Tab definitions ──
+  const TABS = [
+    { id: "overview", label: "Overview", count: null },
+    { id: "active", label: "Active runs", count: activeRuns.length },
+    { id: "final", label: "Resumes", count: completedRuns.length },
+    { id: "needs", label: "Questions asked", count: needsRuns.length },
+    { id: "failed", label: "Failures", count: failedRuns.length },
+  ];
 
-            {/* Quick stat embedded in hero */}
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14, position: "relative", zIndex: 1 }}>
-              <div style={{ textAlign: "right" }}>
-                <div className="mono" style={{ fontSize: 11, opacity: 0.78, letterSpacing: 0.5, textTransform: "uppercase" }}>this month</div>
-                <div className="mono" style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{totalRuns} runs</div>
+  // ── Run-list view (used by active / final / needs / failed tabs) ──
+  const RunListView = ({ items, emptyIcon, emptyTitle, emptySub, fullLibraryLink }) => {
+    if (items.length === 0) {
+      return (
+        <Card padding={0}>
+          <EmptyState icon={emptyIcon} title={emptyTitle} sub={emptySub}
+            action={fullLibraryLink ? <Button variant="secondary" iconRight="arrow-right" onClick={() => goto("library")}>Open full library</Button> : null}/>
+        </Card>
+      );
+    }
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {items.map(r => <RunRow key={r.id} r={r}/>)}
+      </div>
+    );
+  };
+
+  // ── Render tab content ──
+  const renderTabContent = () => {
+    switch (tab) {
+      case "active":
+        return <RunListView items={activeRuns} emptyIcon="check-circle" emptyTitle="No active runs" emptySub="Start a tailored resume and it will show up here live." fullLibraryLink/>;
+      case "final":
+        return <RunListView items={completedRuns} emptyIcon="folder" emptyTitle="No resumes filed yet" emptySub="Your generated PDFs will be filed here by company." fullLibraryLink/>;
+      case "needs":
+        return <RunListView items={needsRuns} emptyIcon="check-circle" emptyTitle="Nothing needs your attention" emptySub="All questions have been answered. Good work." fullLibraryLink/>;
+      case "failed":
+        return <RunListView items={failedRuns} emptyIcon="check-circle" emptyTitle="No failures" emptySub="Every run has succeeded so far." fullLibraryLink/>;
+      default: // overview
+        return (
+          <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.9fr) minmax(280px, 1fr)", gap: 24, alignItems: "start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 12px" }}>
+                <span style={{ fontSize: 16, fontWeight: 700 }}>Active runs</span>
+                <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", background: "var(--surface-2)", borderRadius: 99, padding: "2px 9px" }}>{activeRuns.length} live</span>
               </div>
+              {activeRunsSummary.length === 0
+                ? <Card padding={0}><EmptyState icon="check-circle" title="No active runs" sub="Start a tailored resume and it will show up here live."/></Card>
+                : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{activeRunsSummary.map(r => <RunRow key={r.id} r={r}/>)}</div>}
+
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "26px 0 12px" }}>
+                <span style={{ fontSize: 16, fontWeight: 700 }}>Recent resumes</span>
+                <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", background: "var(--surface-2)", borderRadius: 99, padding: "2px 9px" }}>{completed} filed</span>
+              </div>
+              {recentDone.length === 0
+                ? <Card padding={0}><EmptyState icon="folder" title="No resumes filed yet" sub="Your generated PDFs will be filed here by company." action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>Create a résumé</Button>}/></Card>
+                : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{recentDone.map(r => <RunRow key={r.id} r={r}/>)}</div>}
             </div>
-          </div>
-        </div>
 
-        {/* KPI ROW */}
-        <div className="kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-          <KpiCard accent label="Total runs"  value={totalRuns}  sub="all time" icon="play"/>
-          <KpiCard       label="Completed"    value={completed}  sub="all time" icon="check"/>
-          <KpiCard       label="Failed"       value={failed}     sub="all time" icon="x"/>
-          <KpiCard       label="Avg duration" value={avgDuration} sub="across all runs"            icon="loader"/>
-        </div>
-
-        {/* Activity chart */}
-        <ActivityChart data={activityData}/>
-
-        {/* Recent runs */}
-        <div>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Recent runs</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>last 6 runs across all companies</div>
-            </div>
-            <button onClick={() => goto("history")} style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-              View all <Icon name="arrow-right" size={12}/>
-            </button>
-          </div>
-          <Card padding={0}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ textAlign: "left", fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  <th style={{ padding: "10px 16px", fontWeight: 500 }}>Company · role</th>
-                  <th style={{ padding: "10px 16px", fontWeight: 500 }}>Status</th>
-                  <th style={{ padding: "10px 16px", fontWeight: 500 }}>Duration</th>
-                  <th style={{ padding: "10px 16px", fontWeight: 500 }}>Started</th>
-                  <th style={{ padding: "10px 16px", fontWeight: 500 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.slice(0, 6).map(r => {
-                  const needsYou = r.status === "awaiting-input";
-                  return (
-                    <tr key={r.id} style={{
-                      borderTop: "1px solid var(--border)",
-                      cursor: "pointer",
-                      background: needsYou ? "var(--warning-soft)" : "transparent",
-                      position: "relative",
-                    }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = needsYou ? "color-mix(in oklab, var(--warning) 14%, var(--surface))" : "var(--surface-2)"}
-                      onMouseLeave={(e) => e.currentTarget.style.background = needsYou ? "var(--warning-soft)" : "transparent"}
-                      onClick={() => openRun(r.id, needsYou ? "awaiting-input" : r.status, r)}
-                    >
-                      <td style={{ padding: "12px 16px", borderLeft: needsYou ? "3px solid var(--warning)" : "3px solid transparent" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontWeight: 500 }}>{r.company}</span>
-                          {needsYou && (
-                            <span style={{
-                              display: "inline-flex", alignItems: "center", gap: 3,
-                              padding: "1px 6px",
-                              background: "var(--warning)", color: "white",
-                              borderRadius: 99, fontSize: 9.5, fontWeight: 600, letterSpacing: 0.3,
-                              textTransform: "uppercase",
-                            }}>
-                              <Icon name="alert" size={8} stroke={2.8}/> Needs you
-                            </span>
-                          )}
+            {/* right column */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+              <Card padding={18}>
+                <div style={{ display: "flex", alignItems: "center", fontSize: 15, fontWeight: 700 }}>
+                  Activity
+                  <button onClick={() => goto("library")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>See all</button>
+                </div>
+                {activityFeed.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: "var(--text-faint)", marginTop: 12 }}>No activity yet — start a run to see it here.</div>
+                ) : (
+                  <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+                    {activityFeed.map(r => {
+                      const tone = r.status === "awaiting-input" ? { bg: "var(--warning-soft)", fg: "var(--warning)", ic: "alert" }
+                        : r.status === "failed" ? { bg: "var(--danger-soft)", fg: "var(--danger)", ic: "x" }
+                        : r.status === "complete" ? { bg: "var(--success-soft)", fg: "var(--success)", ic: "check" }
+                        : { bg: "var(--info-soft)", fg: "var(--info)", ic: "loader" };
+                      const verb = r.status === "awaiting-input" ? "is waiting on your input"
+                        : r.status === "failed" ? "failed to generate"
+                        : r.status === "complete" ? "filed — ready to send"
+                        : "is generating";
+                      return (
+                        <div key={r.id} onClick={() => openRun(r.id, r.status, r)} style={{ display: "flex", gap: 10, cursor: "pointer" }}>
+                          <span style={{ width: 26, height: 26, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: tone.bg, color: tone.fg }}>
+                            <Icon name={tone.ic} size={12} stroke={2.4}/>
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, lineHeight: 1.4 }}><b style={{ fontWeight: 600 }}>{r.company}</b> {verb}</div>
+                            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", marginTop: 2 }}>{r.role} · {timeAgo(r.ts)}</div>
+                          </div>
                         </div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{r.role}</div>
-                      </td>
-                      <td style={{ padding: "12px 16px" }}><StatusPill status={r.status} size="sm"/></td>
-                      <td style={{ padding: "12px 16px" }} className="mono"><span style={{ color: "var(--text-muted)", fontSize: 12 }}>{r.duration}</span></td>
-                      <td style={{ padding: "12px 16px", color: "var(--text-muted)", fontSize: 12 }}>{r.date}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                        {needsYou
-                          ? <Button size="sm" variant="primary" iconRight="arrow-right" style={{ background: "var(--warning)", borderColor: "var(--warning)", color: "white" }}>Answer</Button>
-                          : r.pdf ? <Button size="sm" variant="ghost" icon="download">PDF</Button> : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+
+              <Card padding={18}>
+                <div style={{ display: "flex", alignItems: "center", fontSize: 15, fontWeight: 700 }}>
+                  This week
+                  <button onClick={() => goto("library")} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>Details</button>
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 74, marginTop: 14 }}>
+                  {activityData.map((v, i) => (
+                    <div key={i} title={`${v} run${v === 1 ? "" : "s"}`} style={{ flex: 1, height: `${Math.max(6, (v / maxBar) * 100)}%`, borderRadius: "4px 4px 2px 2px", background: i >= activityData.length - 3 ? "var(--text)" : "var(--surface-3)" }}/>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  {kvRow("Completed", completed)}
+                  {kvRow("Failed", failed)}
+                  {kvRow("Avg generation", avgDuration, true)}
+                </div>
+              </Card>
+
+              <Card padding={18}>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Engine</div>
+                {kvRow("Provider", settings.providerName || settings.provider)}
+                {kvRow("Model", settings.defaultModel)}
+                {kvRow("Doctor", doctor ? (doctorOk ? "all checks ok" : `${doctorFailing} issue${doctorFailing === 1 ? "" : "s"}`) : "checking…", true)}
+                <Button variant="secondary" onClick={() => goto("settings")} style={{ width: "100%", marginTop: 12, justifyContent: "center" }}>Open settings</Button>
+              </Card>
+
+              {companies.length > 0 && (
+                <Card padding={18}>
+                  <div style={{ display: "flex", alignItems: "baseline", marginBottom: 12 }}><span style={{ fontSize: 15, fontWeight: 700 }}>Companies</span><span className="mono" style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-faint)" }}>{companies.length}</span></div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {companies.map(c => (
+                      <button key={c} onClick={() => goto("companies")} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 99, fontSize: 11.5, cursor: "pointer" }}>
+                        <span style={{ width: 15, height: 15, borderRadius: 4, background: "var(--accent-soft)", color: "var(--accent)", display: "grid", placeItems: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700 }}>{c[0]}</span>
+                        {c}<span className="mono" style={{ fontSize: 10, color: "var(--text-faint)" }}>{runs.filter(r => r.company === c).length}</span>
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+              )}
+            </div>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="page-pad" style={{ padding: "24px 32px 48px", maxWidth: 1500, margin: "0 auto" }}>
+      <div className="mono" style={{ fontSize: 11, letterSpacing: 0.6, color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 8 }}>Workspace / Overview</div>
+
+      {/* head */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 18, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="serif" style={{ fontSize: 34, fontWeight: 800, letterSpacing: -1.2, lineHeight: 1.05 }}>
+            Job hunt, on autopilot.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10, fontSize: 13, color: "var(--text-muted)" }}>
+            {new Date().toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
+            <span style={{ color: "var(--border-strong)" }}>·</span>
+            {weekCount} this week
+            {needsInput > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--warning-soft)", color: "var(--warning)", fontWeight: 600, fontSize: 12, padding: "3px 10px", borderRadius: 7 }}>{needsInput} need{needsInput === 1 ? "s" : ""} your input</span>}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--border)", borderRadius: 7, padding: "3px 10px", fontSize: 12 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--success)" }}/>
+              <span className="mono truncate" style={{ maxWidth: 180 }}>{settings.defaultModel}{settings.latencyMs != null ? ` · ${settings.latencyMs}ms` : ""}</span>
+            </span>
+          </div>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Button variant="secondary" icon="upload" onClick={() => goto("resume")}>Replace base resume</Button>
+          <Button variant="primary" icon="play" disabled={locked} onClick={() => !locked && goto("new")}>New tailored resume</Button>
         </div>
       </div>
 
-      {/* ===== RIGHT COLUMN ===== */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-
-        {/* Right now (live run snapshot) */}
-        <RightNowCard locked={locked} goto={goto} openRun={openRun} runs={runs}/>
-
-        {/* Base resume + Doctor combined */}
-        <Card padding={0}>
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Workspace</div>
-          </div>
-
-          <button onClick={() => goto("resume")} style={{
-            width: "100%", textAlign: "left", background: "transparent", border: "none",
-            padding: "12px 16px", borderBottom: "1px solid var(--border)", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-            transition: "background var(--t-fast)",
-          }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <span style={{ width: 26, height: 26, borderRadius: 6, background: "var(--surface-2)", color: "var(--text)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--border)" }}>
-                <Icon name="file-text" size={13}/>
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500 }}>Base resume</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }} className="mono">{resumeMeta ? `${resumeMeta.sectionCount} sections` : "—"}</div>
-              </div>
-            </div>
-            <Icon name="arrow-right" size={12} style={{ color: "var(--text-faint)" }}/>
+      {/* In-page tabs — switch content within the Dashboard, no navigation away. */}
+      <div style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--border)", marginTop: 22, overflowX: "auto" }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            display: "inline-flex", alignItems: "center", gap: 7,
+            padding: "10px 14px", background: "transparent", border: "none",
+            cursor: "pointer", fontSize: 13.5, fontWeight: tab === t.id ? 600 : 500, whiteSpace: "nowrap",
+            color: tab === t.id ? "var(--text)" : "var(--text-muted)",
+            borderBottom: "2px solid " + (tab === t.id ? "var(--text)" : "transparent"), marginBottom: -1,
+            transition: `color var(--t-fast), border-color var(--t-fast)`,
+          }}>
+            {t.label}
+            {t.count != null && (
+              <span className="mono" style={{
+                fontSize: 10.5, padding: "1px 6px", borderRadius: 99,
+                background: tab === t.id ? "var(--text)" : "var(--surface-2)",
+                color: tab === t.id ? "var(--bg)" : "var(--text-muted)",
+                fontWeight: 600,
+              }}>{t.count}</span>
+            )}
           </button>
+        ))}
+        <span style={{ flex: 1, borderBottom: "2px solid transparent", marginBottom: -1 }}/>
+        <button onClick={() => goto("companies")} style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          padding: "10px 14px", background: "transparent", border: "none",
+          cursor: "pointer", fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap",
+          color: "var(--text-muted)", marginBottom: -1,
+        }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
+        >Companies <Icon name="arrow-right" size={12} style={{ opacity: 0.5 }}/></button>
+      </div>
 
-          <button onClick={() => goto("settings")} style={{
-            width: "100%", textAlign: "left", background: "transparent", border: "none",
-            padding: "12px 16px", borderBottom: "1px solid var(--border)", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-          }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <span style={{ width: 26, height: 26, borderRadius: 6, background: doctorOk ? "var(--success-soft)" : "var(--danger-soft)", color: doctorOk ? "var(--success)" : "var(--danger)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Icon name="stethoscope" size={13}/>
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500 }}>Doctor</div>
-                <div style={{ fontSize: 11, color: doctorOk ? "var(--success)" : "var(--danger)" }} className="mono">
-                  {doctor ? (doctorOk ? "all checks passing" : `${doctorFailing} issue${doctorFailing === 1 ? "" : "s"}`) : "checking…"}
-                </div>
-              </div>
-            </div>
-            <Icon name="arrow-right" size={12} style={{ color: "var(--text-faint)" }}/>
-          </button>
+      {/* KPI stats — visible on every tab */}
+      <div className="kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, margin: "22px 0" }}>
+        <Stat icon="file-text" label="Resumes generated" value={completed} sub={<><span style={{ color: "var(--success)", fontWeight: 600 }}>+{weekCount}</span> this week</>}/>
+        <Stat icon="check-circle" label="Success rate" value={`${successRate}%`} sub={`${completed} of ${totalRuns || 0} compiled`}/>
+        <Stat icon="loader" label="Avg generation" value={avgDuration} sub="across all runs"/>
+        <Stat icon="alert" label="Needs your input" value={needsInput} alert sub={needsInput ? <span style={{ color: "var(--warning)", fontWeight: 600 }}>waiting on you</span> : "all clear"}/>
+        <Stat icon="building" label="Companies" value={companies.length} sub="targeted"/>
+      </div>
 
-          <button onClick={() => goto("settings")} style={{
-            width: "100%", textAlign: "left", background: "transparent", border: "none",
-            padding: "12px 16px", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-          }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <span style={{ width: 26, height: 26, borderRadius: 6, background: "var(--accent)", color: "var(--accent-contrast)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 13 }}>A</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500 }} className="truncate">{settings.providerName}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }} className="mono truncate">{settings.defaultModel}</div>
-              </div>
-            </div>
-            <Icon name="arrow-right" size={12} style={{ color: "var(--text-faint)" }}/>
-          </button>
-        </Card>
-
-        {/* Companies you've targeted */}
-        <Card padding={18}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Companies</span>
-            <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>{companies.length} unique</span>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {companies.map(c => (
-              <span key={c} style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "5px 10px",
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                borderRadius: 99,
-                fontSize: 11.5, color: "var(--text)",
-              }}>
-                <span style={{ width: 14, height: 14, borderRadius: 4, background: "var(--accent-soft)", color: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700 }}>{c[0]}</span>
-                {c}
-                <span style={{ fontSize: 10, color: "var(--text-faint)" }} className="mono">{runs.filter(r => r.company === c).length}</span>
-              </span>
-            ))}
-          </div>
-        </Card>
-
-        {/* Cmd-K shortcut hint */}
-        <div style={{
-          padding: "12px 14px",
-          background: "var(--surface-2)",
-          border: "1px dashed var(--border-strong)",
-          borderRadius: "var(--radius-md)",
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <Icon name="command" size={14} style={{ color: "var(--text-muted)" }}/>
-          <div style={{ flex: 1, fontSize: 11.5, color: "var(--text-muted)" }}>
-            <div style={{ color: "var(--text)", fontWeight: 500 }}>Quick access</div>
-            <div>Press <Kbd>⌘</Kbd>+<Kbd>K</Kbd> for everything</div>
-          </div>
-        </div>
+      {/* Tab content */}
+      <div key={tab} className="route-in">
+        {renderTabContent()}
       </div>
     </div>
   );
@@ -748,7 +558,7 @@ const SetupWizard = ({ goto, startParse, parsing }) => {
           {step === 1 && (
             <div>
               <SectionHeader eyebrow={`Step 1 of ${TOTAL} · Provider`} title="Pick a model provider" sub="Any of these work — you can change later in Settings."/>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10, marginBottom: 8 }}>
                 {providers.map(p => (
                   <button key={p.id} onClick={() => selectProvider(p.id)}
                     style={{
@@ -1177,11 +987,11 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   ];
 
   return (
-    <div style={{ display: "flex", height: "100%", minHeight: 0 }}>
+    <div className="editor-layout" style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 1fr)", height: "100%", minHeight: 0 }}>
       {/* Left nav */}
       <div style={{
-        width: 280, borderRight: "1px solid var(--border)", background: "var(--surface)",
-        padding: "20px 16px", flexShrink: 0, overflow: "auto",
+        borderRight: "1px solid var(--border)", background: "var(--surface)",
+        padding: "20px 16px", overflow: "auto",
       }}>
         <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>Sections</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1433,10 +1243,37 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
   const [tab, setTab] = React.useState("text");
   const [text, setText] = React.useState("");
   const [url, setUrl] = React.useState("");
+  const [jdFileId, setJdFileId] = React.useState(null);
+  const [jdFileName, setJdFileName] = React.useState(null);
+  const [uploadingFile, setUploadingFile] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
-  const runs = useRuns();
   const switchTab = (v) => { setTab(v); setError(null); };
+  const handleJdFile = async (file) => {
+    if (!file) return;
+    if (/\.txt$/i.test(file.name)) {
+      const reader = new FileReader();
+      reader.onload = () => { setText(String(reader.result || "")); setJdFileId(null); setJdFileName(null); setTab("text"); setError(null); };
+      reader.onerror = () => setError("Could not read that file.");
+      reader.readAsText(file);
+      return;
+    }
+    if (/\.pdf$/i.test(file.name)) {
+      setUploadingFile(true);
+      setError(null);
+      try {
+        const { file_id } = await uploadJdFile(file);
+        setJdFileId(file_id);
+        setJdFileName(file.name);
+      } catch (err) {
+        setError(err.message || "Could not extract text from that PDF.");
+      } finally {
+        setUploadingFile(false);
+      }
+      return;
+    }
+    setError("Only .txt and .pdf files are supported.");
+  };
   const charCount = text.length;
   const tone = charCount > 8000 ? "danger" : charCount > 7000 ? "warning" : "neutral";
   const startRun = async () => {
@@ -1446,6 +1283,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
       const result = await createRun({
         jdText: tab === "text" ? text : undefined,
         jdUrl: tab === "url" ? url : undefined,
+        jdFileId: tab === "file" ? jdFileId : undefined,
       });
       onRunStarted?.(result.thread_id);
     } catch (err) {
@@ -1483,60 +1321,124 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
     );
   }
 
-  return (
-    <div className="two-col-grid" style={{ padding: "32px 40px", maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 24 }}>
-      <div>
-        <Masthead eyebrow="A new commission" title="Tailor a résumé, step by step"
-          sub="Hand over the posting; the agent reads it against your base résumé, asks only what it can't infer, then files the finished PDF under the company automatically."/>
-        <StepSpine current={1}/>
+  const detected = tab === "text" && text.trim().length > 200;
+  const step = (n, title, sub, you) => (
+    <div style={{ display: "flex", gap: 11, padding: "9px 0" }}>
+      <span style={{ width: 24, height: 24, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700, background: you ? "var(--accent)" : "var(--surface-2)", color: you ? "var(--accent-contrast)" : "var(--text)" }}>{n}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 600 }}>{title}{you && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", borderRadius: 99, padding: "0 7px" }}>you</span>}</div>
+        <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 1 }}>{sub}</div>
+      </div>
+    </div>
+  );
+  const optRow = (title, sub, last) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: last ? "none" : "1px dashed var(--border)" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{title}</div>
+        <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{sub}</div>
+      </div>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, color: "var(--success)", background: "var(--success-soft)", borderRadius: 99, padding: "3px 9px", flexShrink: 0 }}><Icon name="check" size={11} stroke={3}/>On</span>
+    </div>
+  );
 
-        <Card padding={24}>
-          <Tabs value={tab} onChange={switchTab} options={[{value:"text",label:"Paste text"},{value:"url",label:"From URL"}]}/>
+  return (
+    <div className="page-pad" style={{ padding: "24px 32px 48px", maxWidth: 1280, margin: "0 auto" }}>
+      <div className="mono" style={{ fontSize: 11, letterSpacing: 0.6, color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 8 }}>Workspace / Create</div>
+      <div className="serif" style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1.1, lineHeight: 1.05 }}>Tailor a resume to a job</div>
+      <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginTop: 8, maxWidth: 620 }}>Paste the posting or drop a URL — the agents read it against your base résumé, ask only what they can't infer, and file the finished PDF under the company.</div>
+
+      <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)", gap: 24, alignItems: "start", marginTop: 24 }}>
+        {/* input card */}
+        <Card padding={22}>
+          <div style={{ display: "inline-flex", background: "var(--surface-2)", borderRadius: "var(--radius-md)", padding: 3, gap: 2 }}>
+            {[["text", "Paste text", "file-text"], ["url", "From URL", "link"], ["file", "Upload file", "upload"]].map(([id, label, ic]) => (
+              <button key={id} onClick={() => switchTab(id)} style={{
+                display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px",
+                background: tab === id ? "var(--surface)" : "transparent",
+                color: tab === id ? "var(--text)" : "var(--text-muted)",
+                border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                boxShadow: tab === id ? "var(--shadow-sm)" : "none",
+              }}><Icon name={ic} size={14}/>{label}</button>
+            ))}
+          </div>
+
           <div style={{ marginTop: 16 }}>
             {tab === "text" ? (
               <>
                 <Textarea value={text} onChange={(e) => setText(e.target.value)}
                   placeholder="Paste the full job description here…"
-                  style={{ minHeight: 280, fontSize: 13, lineHeight: 1.55 }}/>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                  <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{text ? "Paste the full job description" : "Paste the full job description above"}</span>
-                  <span className="mono" style={{ fontSize: 11.5, color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-muted)" }}>{charCount.toLocaleString()} / 8,000</span>
+                  style={{ minHeight: 300, fontFamily: "var(--font-mono)", fontSize: 12.5, lineHeight: 1.7 }}/>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: detected ? "var(--success)" : "var(--text-faint)" }}>
+                    <Icon name={detected ? "check-circle" : "info"} size={14}/>{detected ? "Looks like a full posting — company & role detected" : "Paste the full job description above"}
+                  </span>
+                  <span className="mono" style={{ fontSize: 11.5, color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-faint)" }}>{charCount.toLocaleString()} / 8,000</span>
                 </div>
               </>
-            ) : (
+            ) : tab === "url" ? (
               <>
-                <Input icon="link" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://jobs.example.com/staff-engineer"/>
+                <Input icon="link" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://jobs.example.com/staff-engineer" style={{ height: 44 }}/>
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
                   The posting is fetched and parsed when the run starts (the <span className="mono">scrape_url</span> → <span className="mono">extract_jd</span> steps). Some sites block automated fetches — if scraping fails, paste the text instead.
                 </div>
               </>
+            ) : (
+              <>
+                {jdFileId ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--success-soft)" }}>
+                    <Icon name="check-circle" size={18} style={{ color: "var(--success)", flexShrink: 0 }}/>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="mono truncate" style={{ fontSize: 13, fontWeight: 600 }}>{jdFileName}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Extracted on the server — ready to generate</div>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => { setJdFileId(null); setJdFileName(null); }}>Change</Button>
+                  </div>
+                ) : (
+                  <UploadDropzone onUpload={handleJdFile} accept=".txt,.pdf"
+                    label={uploadingFile ? "Extracting…" : "Drop a .txt or .pdf file, or click to browse"}
+                    hint="Job descriptions — .txt loads instantly, .pdf is extracted on the server"/>
+                )}
+              </>
             )}
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
-            {error && <span style={{ marginRight: 12, fontSize: 12, color: "var(--danger)" }}>{error}</span>}
-            <Button variant="primary" iconRight="zap" onClick={startRun} disabled={tone === "danger" || submitting || (tab === "text" ? !text.trim() : !url.trim())}>
-              {submitting ? "Starting..." : "Generate resume"}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+            <span style={{ flex: 1, minWidth: 180, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-faint)" }}>
+              {error ? <span style={{ color: "var(--danger)" }}>{error}</span> : <><Icon name="loader" size={13} style={{ animation: "none" }}/>Runs take ~45s — you can leave and come back</>}
+            </span>
+            <Button variant="primary" iconRight="zap" onClick={startRun} disabled={tone === "danger" || submitting || (tab === "text" ? !text.trim() : tab === "url" ? !url.trim() : !jdFileId)} style={{ height: 44 }}>
+              {submitting ? "Starting…" : "Generate tailored resume"}
             </Button>
           </div>
         </Card>
-      </div>
 
-      <div>
-        <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Recent runs</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {runs.slice(0, 5).map(r => (
-            <Card key={r.id} padding={12} hover onClick={() => openRun(r.id, r.status, r)}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }} className="truncate">{r.company}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 1 }} className="truncate">{r.role}</div>
-                </div>
-                <StatusPill status={r.status} size="sm"/>
+        {/* right column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <Card padding={18}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>What happens next</div>
+            {step(1, "Understand the role", "Company, seniority & must-haves extracted")}
+            {step(2, "Gap analysis", "Your resume compared against the posting")}
+            {step(3, "Your review", "Answer gap questions, approve bullet rewrites", true)}
+            {step(4, "Generate & validate", "LaTeX written, linted, compiled, layout-checked")}
+            {step(5, "Filed to library", "PDF saved under the company folder")}
+          </Card>
+          <Card padding={18}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Run options</div>
+            {optRow("Ask me about gaps", "Pause to add missing experience")}
+            {optRow("Review rewrites", "Approve each bullet before compiling")}
+            {optRow("Vision layout check", "opus reviews the final PDF", true)}
+          </Card>
+          <Card padding={18}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Base resume</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: "var(--success-soft)", color: "var(--success)" }}><Icon name="file-text" size={16}/></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Ready</div>
+                <div className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>base_resume.yaml</div>
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 6 }} className="mono">{r.date}</div>
-            </Card>
-          ))}
+              <Button size="sm" variant="secondary" onClick={() => goto("resume")}>Change</Button>
+            </div>
+          </Card>
         </div>
       </div>
     </div>
@@ -1563,7 +1465,7 @@ const HistoryView = ({ goto, openRun }) => {
   const groups = Object.entries(grouped);
 
   return (
-    <div style={{ padding: "32px 40px", maxWidth: 1180, margin: "0 auto" }}>
+    <div className="page-pad" style={{ padding: "32px 40px", maxWidth: 1180, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
           <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>History</div>
@@ -1707,10 +1609,10 @@ const SettingsView = ({ tweaks, setTweak }) => {
 
   const sectionStyle = { marginBottom: 22 };
   const labelStyle = { fontSize: 11.5, color: "var(--text-muted)", marginBottom: 6 };
-  const accentSwatches = [["emerald", "#059669"], ["indigo", "#4f46e5"], ["amber", "#b45309"], ["graphite", "#1c1917"]];
+  const accentSwatches = [["graphite", "#0A0A0B"], ["indigo", "#2563EB"], ["pine", "#16A34A"], ["oxblood", "#DC2626"]];
 
   return (
-    <div style={{ padding: "32px 40px", maxWidth: 760, margin: "0 auto" }}>
+    <div className="page-pad" style={{ padding: "32px 40px", maxWidth: 820, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 22 }}>
         <div>
           <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Settings</div>
@@ -1726,7 +1628,7 @@ const SettingsView = ({ tweaks, setTweak }) => {
 
       {/* Active connection summary */}
       <Card style={sectionStyle} padding={0}>
-        <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: "1px solid var(--border)", flexWrap: "nowrap" }}>
+        <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
             <span style={{
               width: 36, height: 36, borderRadius: 8,
@@ -1760,13 +1662,13 @@ const SettingsView = ({ tweaks, setTweak }) => {
             {retesting ? "Testing…" : "Re-test"}
           </Button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", borderBottom: "1px solid var(--border)" }}>
           {[
             { l: "Latency", v: connection.latencyMs ? `${connection.latencyMs} ms` : "-" },
             { l: "Last test", v: connection.lastTested || "-" },
             { l: "Reply", v: connection.testReply ? `"${connection.testReply}"` : "-" },
-          ].map(s => (
-            <div key={s.l} style={{ padding: "10px 20px", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 2 }}>
+          ].map((s, i, arr) => (
+            <div key={s.l} style={{ padding: "10px 20px", borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none", display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }} className="mono">{s.l}</span>
               <span className="mono" style={{ fontSize: 12.5, color: "var(--text)" }}>{s.v}</span>
             </div>
@@ -1780,7 +1682,7 @@ const SettingsView = ({ tweaks, setTweak }) => {
       {/* Provider picker */}
       <Card style={sectionStyle} padding={22}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Provider</div>
-        <div className="provider-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        <div className="provider-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
           {providers.map(p => (
             <button key={p.id} onClick={() => selectProvider(p.id)} style={{
               display: "flex", alignItems: "center", gap: 9, padding: "10px 12px",
@@ -1859,10 +1761,10 @@ const SettingsView = ({ tweaks, setTweak }) => {
 
       <Card style={sectionStyle} padding={22}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Retries &amp; budget</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-          <div><div style={labelStyle}>Generator (1–10)</div><Input value={generatorMax} onChange={(e) => { setGeneratorMax(e.target.value); mark(); }} style={{ width: 90 }}/></div>
-          <div><div style={labelStyle}>Compile timeout (s)</div><Input value={compileTimeout} onChange={(e) => { setCompileTimeout(e.target.value); mark(); }} style={{ width: 90 }}/></div>
-          <div><div style={labelStyle}>Scrape timeout (s)</div><Input value={scrapeTimeout} onChange={(e) => { setScrapeTimeout(e.target.value); mark(); }} style={{ width: 90 }}/></div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+          <div><div style={labelStyle}>Generator (1–10)</div><Input value={generatorMax} onChange={(e) => { setGeneratorMax(e.target.value); mark(); }}/></div>
+          <div><div style={labelStyle}>Compile timeout (s)</div><Input value={compileTimeout} onChange={(e) => { setCompileTimeout(e.target.value); mark(); }}/></div>
+          <div><div style={labelStyle}>Scrape timeout (s)</div><Input value={scrapeTimeout} onChange={(e) => { setScrapeTimeout(e.target.value); mark(); }}/></div>
         </div>
       </Card>
 
@@ -1932,52 +1834,26 @@ const SettingsView = ({ tweaks, setTweak }) => {
 const LIB_STATUS = {
   complete:         { key: "final",  label: "Final",      color: "var(--success)", soft: "var(--success-soft)", icon: "check" },
   "awaiting-input": { key: "needs",  label: "Needs you",  color: "var(--warning)", soft: "var(--warning-soft)", icon: "alert" },
-  running:          { key: "draft",  label: "Drafting",   color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
-  queued:           { key: "draft",  label: "Queued",     color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
-  retrying:         { key: "draft",  label: "Retrying",   color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "refresh" },
+  running:          { key: "active", label: "Active",     color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
+  queued:           { key: "active", label: "Queued",     color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "loader" },
+  retrying:         { key: "active", label: "Retrying",   color: "var(--accent)",  soft: "var(--accent-soft)",  icon: "refresh" },
   failed:           { key: "failed", label: "Failed",     color: "var(--danger)",  soft: "var(--danger-soft)",  icon: "x" },
   cancelled:        { key: "failed", label: "Cancelled",  color: "var(--danger)",  soft: "var(--danger-soft)",  icon: "x" },
 };
 const libMeta = (status) => LIB_STATUS[status] || LIB_STATUS.queued;
 
-const Masthead = ({ eyebrow, title, sub, action }) => (
-  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", borderBottom: "2px solid var(--text)", paddingBottom: 16, marginBottom: 22 }}>
-    <div style={{ minWidth: 0 }}>
-      <div className="mono" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 2, color: "var(--stamp)", fontWeight: 600 }}>{eyebrow}</div>
-      <div className="serif" style={{ fontSize: 30, fontWeight: 600, letterSpacing: -0.2, lineHeight: 1.08, margin: "9px 0 8px" }}>{title}</div>
-      {sub && <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.55, maxWidth: "62ch" }}>{sub}</div>}
+const Masthead = ({ crumb, title, sub, action }) => (
+  <div style={{ marginBottom: 22 }}>
+    {crumb && <div className="mono" style={{ fontSize: 11, letterSpacing: 0.6, color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 8 }}>{crumb}</div>}
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: "clamp(24px, 3vw, 34px)", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1.1 }}>{title}</div>
+        {sub && <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginTop: 8, maxWidth: "70ch" }}>{sub}</div>}
+      </div>
+      {action}
     </div>
-    {action}
   </div>
 );
-
-// The five-step spine shown atop Create — gives the flow a visible direction.
-const StepSpine = ({ current = 1 }) => {
-  const steps = ["Job posting", "Answer gaps", "Approve rewrites", "Generate", "Filed by company"];
-  return (
-    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0, marginBottom: 22 }}>
-      {steps.map((label, i) => {
-        const n = i + 1;
-        const done = n < current, now = n === current;
-        return (
-          <React.Fragment key={label}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, color: now ? "var(--text)" : "var(--text-faint)", fontSize: 12.5, fontWeight: now ? 600 : 400 }}>
-              <span className="mono" style={{
-                width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700,
-                background: done ? "var(--success)" : now ? "var(--stamp)" : "var(--surface-2)",
-                color: done || now ? "#fff" : "var(--text-muted)",
-                border: "1px solid " + (done ? "var(--success)" : now ? "var(--stamp)" : "var(--border-strong)"),
-                boxShadow: now ? "0 0 0 4px var(--stamp-soft)" : "none",
-              }}>{done ? <Icon name="check" size={12} stroke={3}/> : n}</span>
-              {label}
-            </div>
-            {n < steps.length && <span style={{ width: 26, height: 1, background: "var(--border-strong)", margin: "0 8px" }}/>}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-};
 
 const Stamp = ({ status, size = 34 }) => {
   const m = libMeta(status);
@@ -2148,18 +2024,55 @@ const ShelvesBoard = ({ groups, openRun }) => (
   </div>
 );
 
-const LibraryView = ({ goto, openRun, locked }) => {
+// Small mock document preview for the grid card's thumbnail.
+const PageMock = () => (
+  <div style={{ width: 96, height: 124, background: "var(--surface)", borderRadius: 4, boxShadow: "var(--shadow-md)", padding: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ height: 5, width: "58%", borderRadius: 2, background: "var(--text)" }}/>
+    <div style={{ height: 3, width: "80%", borderRadius: 2, background: "var(--surface-3)", marginTop: 3 }}/>
+    <div style={{ height: 3, width: "68%", borderRadius: 2, background: "var(--surface-3)" }}/>
+    <div style={{ height: 3, width: "42%", borderRadius: 2, background: "var(--text)", opacity: 0.5, marginTop: 7 }}/>
+    <div style={{ height: 3, width: "86%", borderRadius: 2, background: "var(--surface-3)" }}/>
+    <div style={{ height: 3, width: "64%", borderRadius: 2, background: "var(--surface-3)" }}/>
+  </div>
+);
+
+const GridCard = ({ r, openRun }) => {
+  const m = libMeta(r.status);
+  return (
+    <Card padding={0} hover onClick={() => openRun(r.id, r.status, r)} style={{ overflow: "hidden" }}>
+      <div style={{ height: 150, background: m.key === "failed" ? "var(--danger-soft)" : "var(--surface-2)", display: "grid", placeItems: "center", borderBottom: "1px solid var(--border)" }}>
+        {m.key === "failed" ? <Icon name="x" size={32} style={{ color: "var(--danger)" }}/> : <PageMock/>}
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        <div className="mono truncate" style={{ fontSize: 12.5, fontWeight: 600 }}>{r.pdf || `${r.company} — ${r.role}`}</div>
+        <div className="truncate" style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 3 }}>{r.company} · {r.role}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          <LibPill status={r.status}/>
+          {r.retries > 0 && <Badge>{r.retries} retr{r.retries === 1 ? "y" : "ies"}</Badge>}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const GridBoard = ({ rows, openRun }) => (
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 16 }}>
+    {rows.map(r => <GridCard key={r.id} r={r} openRun={openRun}/>)}
+  </div>
+);
+
+const LibraryView = ({ goto, openRun, locked, initialFilter }) => {
   const rows = useLibrary();
   const [company, setCompany] = React.useState(null);
-  const [status, setStatus] = React.useState("all");
-  const [layout, setLayout] = React.useState("table");
+  const [status, setStatus] = React.useState(initialFilter || "all");
+  const [layout, setLayout] = React.useState("grid");
 
   const all = rows || [];
   const counts = {
     all: all.length,
     final: all.filter(r => libMeta(r.status).key === "final").length,
     needs: all.filter(r => libMeta(r.status).key === "needs").length,
-    draft: all.filter(r => libMeta(r.status).key === "draft").length,
+    active: all.filter(r => libMeta(r.status).key === "active").length,
     failed: all.filter(r => libMeta(r.status).key === "failed").length,
   };
   const companyList = groupByCompany(all).map(([name, rs]) => ({ name, count: rs.length }));
@@ -2180,19 +2093,19 @@ const LibraryView = ({ goto, openRun, locked }) => {
   );
 
   return (
-    <div style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
-      <Masthead eyebrow="The library" title="Every résumé, filed by company"
-        sub="A records room for your applications. Each tailored résumé is a stamped, dated document filed under the company you made it for — browse, preview and download. All saved to your local database."
+    <div className="page-pad" style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
+      <Masthead crumb="Workspace / Library" title="Résumé library"
+        sub={`${counts.all} résumé${counts.all === 1 ? "" : "s"} across ${companyList.length} compan${companyList.length === 1 ? "y" : "ies"}`}
         action={<Button variant="primary" iconRight="arrow-right" disabled={locked} onClick={() => goto("new")}>New résumé</Button>}
       />
 
       {/* Summary strip */}
-      <Card padding={0} style={{ display: "flex", overflow: "hidden", marginBottom: 18 }}>
+      <Card className="lib-summary" padding={0} style={{ display: "flex", flexWrap: "wrap", overflow: "hidden", marginBottom: 18 }}>
         {[
           { k: "Filed", v: counts.all, tone: "var(--text)" },
           { k: "Final & ready", v: counts.final, tone: "var(--success)" },
           { k: "Needs you", v: counts.needs, tone: "var(--warning)" },
-          { k: "In progress", v: counts.draft, tone: "var(--accent)" },
+          { k: "Active", v: counts.active, tone: "var(--accent)" },
           { k: "Failed", v: counts.failed, tone: "var(--danger)" },
         ].map((c, i) => (
           <div key={c.k} style={{ flex: 1, padding: "13px 20px", borderRight: i < 4 ? "1px solid var(--border)" : "none", display: "flex", flexDirection: "column", gap: 3 }}>
@@ -2205,10 +2118,10 @@ const LibraryView = ({ goto, openRun, locked }) => {
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ display: "inline-flex", gap: 2 }}>
-          {chip("all", "All")}{chip("final", "Final")}{chip("needs", "Needs you")}{chip("draft", "Draft")}{chip("failed", "Failed")}
+          {chip("all", "All")}{chip("final", "Final")}{chip("needs", "Needs you")}{chip("active", "Active")}{chip("failed", "Failed")}
         </div>
         <div style={{ marginLeft: "auto", display: "inline-flex", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
-          {[["table", "list", "Ledger"], ["board", "columns", "Shelves"]].map(([id, icon, label], i) => (
+          {[["grid", "grid", "Grid"], ["table", "list", "Ledger"], ["board", "columns", "Shelves"]].map(([id, icon, label], i) => (
             <button key={id} onClick={() => setLayout(id)} style={{
               border: "none", borderLeft: i ? "1px solid var(--border)" : "none",
               background: layout === id ? "var(--accent)" : "var(--surface)", color: layout === id ? "var(--accent-contrast)" : "var(--text-muted)",
@@ -2237,6 +2150,8 @@ const LibraryView = ({ goto, openRun, locked }) => {
             <Card padding={0}><EmptyState icon="folder" title={all.length ? "Nothing matches this filter" : "No resumes filed yet"}
               sub={all.length ? "Try a different company or status." : "Create your first tailored résumé and it will be filed here by company."}
               action={all.length ? null : <Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>Create a résumé</Button>}/></Card>
+          ) : layout === "grid" ? (
+            <GridBoard rows={visible} openRun={openRun}/>
           ) : layout === "table" ? (
             <LedgerTable groups={groups} openRun={openRun}/>
           ) : (
@@ -2271,9 +2186,9 @@ const CompaniesView = ({ goto, openRun }) => {
   const groups = groupByCompany(all);
 
   return (
-    <div style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
-      <Masthead eyebrow="The cabinet" title="Companies"
-        sub="Each company is a folder in your cabinet. Open one to see its tailored resumes, the roles you targeted, and where each stands."
+    <div className="page-pad" style={{ padding: "28px 32px 64px", maxWidth: 1240, margin: "0 auto" }}>
+      <Masthead crumb="Workspace / Companies" title="Companies"
+        sub={`${groups.length} compan${groups.length === 1 ? "y" : "ies"} you've applied to`}
         action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>New résumé</Button>}
       />
       {rows === null ? (

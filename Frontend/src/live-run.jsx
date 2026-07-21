@@ -355,203 +355,6 @@ const SuggestionList = ({ suggestions = SAMPLE_SUGGESTIONS, onContinue }) => {
   );
 };
 
-// Fake PDF preview — HTML rendered to look like a tailored resume page
-const FakePDFPage = ({ scale = 1 }) => (
-  <div style={{
-    width: 612 * scale, height: 792 * scale, // letter
-    background: "white",
-    boxShadow: "var(--shadow-md)",
-    borderRadius: 3,
-    padding: `${48 * scale}px ${48 * scale}px`,
-    color: "#111",
-    fontFamily: "'Times New Roman', Georgia, serif",
-    fontSize: 10.5 * scale,
-    lineHeight: 1.35,
-    overflow: "hidden",
-  }}>
-    <div style={{ textAlign: "center", marginBottom: 12 * scale }}>
-      <div style={{ fontSize: 18 * scale, fontWeight: 700, letterSpacing: -0.2 }}>Aldrin Carlos</div>
-      <div style={{ fontSize: 9.5 * scale, marginTop: 4 * scale, color: "#333" }}>
-        aldrin@hey.com · +1-415-555-0142 · San Francisco, CA · linkedin.com/in/aldrincarlos · github.com/aldrincarlos
-      </div>
-    </div>
-
-    <div style={{ borderTop: "1px solid #aaa", paddingTop: 8 * scale, marginBottom: 10 * scale }}>
-      <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10 * scale, letterSpacing: 0.6, marginBottom: 4 * scale }}>Summary</div>
-      <div>Backend engineer (6 yrs) building distributed data infrastructure — high-throughput services in Python, observability-first, comfortable on-call. Shipped products serving millions of users.</div>
-    </div>
-
-    <div style={{ borderTop: "1px solid #aaa", paddingTop: 8 * scale, marginBottom: 10 * scale }}>
-      <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10 * scale, letterSpacing: 0.6, marginBottom: 4 * scale }}>Experience</div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600 }}>
-        <span>Software Engineer II · Acme Corp</span>
-        <span style={{ color: "#555" }}>Jan 2022 — Present</span>
-      </div>
-      <div style={{ fontStyle: "italic", color: "#555", fontSize: 9.5 * scale, marginBottom: 3 * scale }}>San Francisco, CA</div>
-      <ul style={{ margin: 0, paddingLeft: 14 * scale }}>
-        <li>Built a Python-based microservices platform handling 2M requests/day</li>
-        <li>Cut p99 latency 80% (450ms → 90ms) on a distributed Python/FastAPI service handling 2M req/day, via Redis caching and a query-plan rewrite</li>
-        <li>Migrated monolith to Docker containers, enabling 10× faster deployments</li>
-        <li>Mentored 2 junior engineers through code review and pair programming</li>
-      </ul>
-      <div style={{ fontStyle: "italic", color: "#444", fontSize: 9.5 * scale, marginTop: 3 * scale }}>Tech: Python, FastAPI, PostgreSQL, Docker, AWS ECS, Redis</div>
-
-      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600, marginTop: 8 * scale }}>
-        <span>Software Engineer · StartupXYZ</span>
-        <span style={{ color: "#555" }}>Mar 2019 — Dec 2021</span>
-      </div>
-      <div style={{ fontStyle: "italic", color: "#555", fontSize: 9.5 * scale, marginBottom: 3 * scale }}>Remote</div>
-      <ul style={{ margin: 0, paddingLeft: 14 * scale }}>
-        <li>Built a real-time event-processing pipeline (Python, Celery, Redis Streams) — 12k events/sec sustained, exactly-once semantics, backpressure handling</li>
-        <li>Built CI/CD pipelines with GitHub Actions, cutting deployment time by 60%</li>
-        <li>Owned the data ingestion API used by 50+ enterprise customers</li>
-        <li>Collaborated with data science team to productionize ML model serving</li>
-      </ul>
-    </div>
-
-    <div style={{ borderTop: "1px solid #aaa", paddingTop: 8 * scale, marginBottom: 10 * scale }}>
-      <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10 * scale, letterSpacing: 0.6, marginBottom: 4 * scale }}>Projects</div>
-      <div style={{ fontWeight: 600 }}>pystream <span style={{ fontWeight: 400, color: "#444" }}>(github.com/aldrincarlos/pystream) — Python, Kafka, asyncio</span></div>
-      <ul style={{ margin: 0, paddingLeft: 14 * scale }}>
-        <li>Open-source library for building event-driven microservices in Python</li>
-        <li>800+ GitHub stars; used in production by 3 companies</li>
-        <li>Implemented backpressure handling and exactly-once delivery semantics</li>
-      </ul>
-    </div>
-
-    <div style={{ borderTop: "1px solid #aaa", paddingTop: 8 * scale, marginBottom: 10 * scale }}>
-      <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10 * scale, letterSpacing: 0.6, marginBottom: 4 * scale }}>Skills</div>
-      <div><b>Languages:</b> Python, SQL, Go, Bash</div>
-      <div><b>Frameworks:</b> FastAPI, Flask, SQLAlchemy, Celery, asyncio</div>
-      <div><b>Infrastructure:</b> Docker, Kubernetes (EKS), Terraform, AWS (EKS, ECS, S3, RDS, SQS), Helm</div>
-      <div><b>Databases:</b> PostgreSQL, MySQL, Redis, MongoDB</div>
-    </div>
-
-    <div style={{ borderTop: "1px solid #aaa", paddingTop: 8 * scale }}>
-      <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10 * scale, letterSpacing: 0.6, marginBottom: 4 * scale }}>Education</div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span><b>University of California, Berkeley</b> — B.S. Computer Science</span>
-        <span style={{ color: "#555" }}>May 2019 · GPA 3.7</span>
-      </div>
-    </div>
-  </div>
-);
-
-const PDFPreviewPane = ({ visible, scale, setScale, page, setPage, onCollapse, pdfUrl, pdfName, isDemo }) => {
-  const wrapRef = React.useRef(null);
-  if (!visible) {
-    // Shimmer placeholder
-    return (
-      <div style={{
-        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-        background: "var(--surface-2)",
-        flexDirection: "column", gap: 18, padding: 24,
-        position: "relative",
-      }}>
-        {onCollapse && (
-          <button onClick={onCollapse} title="Hide PDF pane"
-            style={{
-              position: "absolute", top: 10, right: 12,
-              width: 26, height: 26,
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              background: "var(--surface)", border: "1px solid var(--border)",
-              borderRadius: "var(--radius-md)", color: "var(--text-muted)",
-              cursor: "pointer",
-            }}>
-            <Icon name="chevron-right" size={12}/>
-          </button>
-        )}
-        <div style={{ width: 220, height: 286, position: "relative" }}>
-          {[0, 1].map(k => (
-            <div key={k} style={{
-              position: "absolute",
-              top: 8 + k * 4, left: 8 + k * 4, right: 8 - k * 4, bottom: 8 - k * 4,
-              background: "linear-gradient(110deg, var(--surface) 30%, var(--surface-3) 50%, var(--surface) 70%)",
-              backgroundSize: "200% 100%",
-              animation: "shimmer 2.4s linear infinite",
-              border: "1px solid var(--border)",
-              borderRadius: 3,
-              boxShadow: "var(--shadow-sm)",
-            }}/>
-          ))}
-        </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>PDF preview will appear here</div>
-          <div className="mono" style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>waiting for compile_pdf →</div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      {/* Header bar */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 14px", borderBottom: "1px solid var(--border)",
-        background: "var(--surface)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span style={{ width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center",
-            background: "var(--danger-soft)", color: "var(--danger)", borderRadius: 4, flexShrink: 0 }}>
-            <Icon name="file-text" size={13}/>
-          </span>
-          <div style={{ minWidth: 0 }}>
-            <div className="mono truncate" style={{ fontSize: 12, color: "var(--text)" }}>{pdfName}</div>
-            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)" }}>{isDemo ? "1 page · 84 KB" : "PDF document"}</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <Button size="sm" variant="secondary" icon="download" onClick={() => pdfUrl && window.open(pdfUrl, "_blank")}>Download</Button>
-          {onCollapse && (
-            <IconButton name="chevron-right" label="Hide PDF pane" onClick={onCollapse}/>
-          )}
-        </div>
-      </div>
-
-      {/* Scrollable preview */}
-      <div ref={wrapRef} style={{
-        flex: 1, overflow: "auto",
-        background: "var(--surface-2)",
-        display: "flex", justifyContent: "center", padding: 20,
-      }}>
-        {pdfUrl ? (
-          <iframe
-            title="Generated PDF"
-            src={pdfUrl}
-            style={{ width: "100%", minHeight: "100%", border: "none", background: "white" }}
-          />
-        ) : isDemo ? (
-          <div style={{ transformOrigin: "top center" }}>
-            <FakePDFPage scale={scale}/>
-          </div>
-        ) : (
-          <div className="mono" style={{ alignSelf: "center", color: "var(--text-faint)", fontSize: 12 }}>
-            PDF preview unavailable
-          </div>
-        )}
-      </div>
-
-      {/* Footer controls */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "8px 14px", borderTop: "1px solid var(--border)", background: "var(--surface)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <IconButton name="chevron-up" label="Prev page" />
-          <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", padding: "0 6px" }}>1 / 1</span>
-          <IconButton name="chevron-down" label="Next page" />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <IconButton name="x" label="Zoom out" onClick={() => setScale(s => Math.max(0.4, s - 0.1))} />
-          <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", width: 40, textAlign: "center" }}>{Math.round(scale * 100)}%</span>
-          <IconButton name="plus" label="Zoom in" onClick={() => setScale(s => Math.min(1.4, s + 0.1))} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // Log tail
 const LogTail = ({ visibleLines, density }) => (
   <div style={{
@@ -585,15 +388,16 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   // Local state for advancing through nodes (simulation)
   const [manualIdx, setManualIdx] = React.useState(null); // when set, overrides tweakRunState
   const [autoplay, setAutoplay] = React.useState(false);
-  const [pdfScale, setPdfScale] = React.useState(0.55);
-  const [pdfPage, setPdfPage] = React.useState(1);
   const [selectedIdx, setSelectedIdx] = React.useState(null);
   const [tickMs, setTickMs] = React.useState(0); // live elapsed counter
-  const [pdfCollapsed, setPdfCollapsed] = React.useState(false);
   const [apiEvents, setApiEvents] = React.useState([]);
   const [runDetail, setRunDetail] = React.useState(null);
   const [wsStatus, setWsStatus] = React.useState("offline");
   const [cancelling, setCancelling] = React.useState(false);
+  // Real gap-analysis signal for this run — set from the user's own actions,
+  // never fabricated (the backend doesn't emit a matched/missing skill tally).
+  const [gapAnswered, setGapAnswered] = React.useState(false);
+  const [approvedCount, setApprovedCount] = React.useState(null);
 
   // When tweakRunState changes externally, drop manualIdx
   React.useEffect(() => { setManualIdx(null); }, [tweakRunState]);
@@ -640,13 +444,6 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
     ? fmtElapsed(sim.elapsedMs + tickMs)
     : (tweakRunState === "complete" ? "0:47.00" : fmtElapsed(sim.elapsedMs));
 
-  // Auto-collapse PDF pane during HITL — the input is the focus, not a non-existent PDF.
-  React.useEffect(() => {
-    if (sim.hitlState) setPdfCollapsed(true);
-    else if (sim.completed) setPdfCollapsed(false);
-  }, [sim.hitlState, sim.completed]);
-
-  const pdfVisible = sim.completed;
   const runStatusForPill = sim.failed ? "failed" : sim.completed ? "complete" : sim.isPaused ? "awaiting-input" : "running";
   const company = runDetail?.company || "Unknown";
   const role = runDetail?.role || "Unknown";
@@ -660,7 +457,6 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   const completeEvent = apiEvents.find(e => e.type === "complete");
   const failedEvent = apiEvents.find(e => e.type === "failed");
   const isDemo = !threadId;
-  const pdfName = isDemo ? "aldrin_techcorp_2026-05-17.pdf" : (runDetail?.pdf || "resume.pdf");
 
   // Real header values for real runs; demo placeholders otherwise (C7).
   const startedLabel = isDemo
@@ -671,6 +467,19 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   const viaModel = isDemo ? (ACTIVE_LLM.defaultModel || "claude-sonnet-4-6") : (settings?.defaultModel || "model");
   const downloadUrl = completeEvent?.pdf_url || (isDemo ? null : (threadId ? pdfUrl(threadId) : null));
   const debugPath = failedEvent?.debug_path || (isDemo ? FAILED_DEBUG_PATH : null);
+  const outputSlug = company.toLowerCase().replace(/[^a-z0-9]+/g, "") || "run";
+
+  // Gap-analysis stats — real counts from this run's own HITL events/actions.
+  // The backend doesn't emit a matched/missing skill tally, so we only show what
+  // we can actually know (questions asked/answered, rewrites suggested/approved).
+  const hitlAskEvent = apiEvents.find(e => e.type === "hitl_pending" && e.kind === "ask_missing");
+  const hitlSuggestEvent = apiEvents.find(e => e.type === "hitl_pending" && e.kind === "present_suggestions");
+  const gapStats = isDemo ? GAP_ANALYSIS_STATS : {
+    questions: hitlAskEvent?.questions?.length ?? 0,
+    answered: gapAnswered ? (hitlAskEvent?.questions?.length ?? 0) : 0,
+    suggestions: hitlSuggestEvent?.suggestions?.length ?? 0,
+    approved: approvedCount ?? 0,
+  };
 
   const cancel = async () => {
     if (!threadId) return;
@@ -680,6 +489,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   };
 
   const submitMissing = async (answers) => {
+    setGapAnswered(true);
     if (!threadId) {
       setManualIdx(6);
       return;
@@ -689,6 +499,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   };
 
   const submitSuggestions = async (approvedIds) => {
+    setApprovedCount(approvedIds.length);
     if (!threadId) {
       setManualIdx(7);
       return;
@@ -958,28 +769,33 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
 
       {/* Top bar of run page */}
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 24px", borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+        padding: "16px 24px", borderBottom: "1px solid var(--border)",
         background: "var(--surface)", flexShrink: 0,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-          <StatusPill status={runStatusForPill}/>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: -0.1 }}>{company} · {role}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2, flexWrap: "wrap" }}>
-              <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>{threadId || "thr_8af2c01d"}</span>
-              {startedLabel && <><span style={{ fontSize: 11, color: "var(--text-faint)" }}>·</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{startedLabel}</span></>}
-              <span style={{ fontSize: 11, color: "var(--text-faint)" }}>·</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--success)" }}/>
-                <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>via {viaModel} · {wsStatus}</span>
-              </span>
-            </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 0.6, color: "var(--text-faint)", textTransform: "uppercase" }}>Library / {company}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 3, flexWrap: "wrap" }}>
+            <span className="serif" style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.6 }}>{role}</span>
+            <StatusPill status={runStatusForPill}/>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+            <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>{threadId || "thr_8af2c01d"}</span>
+            {startedLabel && <><span style={{ fontSize: 11, color: "var(--text-faint)" }}>·</span>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{startedLabel}</span></>}
+            <span style={{ fontSize: 11, color: "var(--text-faint)" }}>·</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--success)" }}/>
+              <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>via {viaModel} · {wsStatus}</span>
+            </span>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 12px", background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)" }}>
+            <Icon name="history" size={13} style={{ color: "var(--text-faint)" }}/>
+            <MonoTicker style={{ fontSize: 12.5, color: "var(--text)" }}>{elapsedDisplay}</MonoTicker>
+          </span>
           {/* Mini playback controls — demo simulation only */}
           {isDemo && (
             <div style={{
@@ -999,16 +815,14 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
       </div>
 
       {/* Three columns */}
-      <div style={{
+      <div className="live-run-cols" style={{
         display: "grid",
-        gridTemplateColumns: pdfCollapsed ? "minmax(240px, 320px) minmax(0, 1fr) 36px"
-                                          : "minmax(240px, 320px) minmax(0, 1fr) minmax(320px, 520px)",
+        gridTemplateColumns: "minmax(240px, 320px) minmax(0, 1fr) minmax(280px, 360px)",
         gap: 1,
         flex: 1, minHeight: 0,
         background: "var(--border)",
-        transition: "grid-template-columns 320ms var(--ease-spring)",
       }}>
-        {/* LEFT — timeline */}
+        {/* LEFT — pipeline */}
         <div style={{ background: "var(--bg)", display: "flex", flexDirection: "column", minHeight: 0 }}>
           <div style={{ padding: density === "compact" ? "10px 14px" : "14px 16px 8px", flexShrink: 0 }}>
             <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>Pipeline</div>
@@ -1028,7 +842,6 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
               onNodeClick={(i) => setSelectedIdx(i === selectedIdx ? null : i)}
             />
           </div>
-          <LogTail visibleLines={visibleLogs} density={density}/>
         </div>
 
         {/* MIDDLE — activity / HITL */}
@@ -1038,32 +851,40 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
           {renderActivity()}
         </div>
 
-        {/* RIGHT — PDF preview (collapsible) */}
-        <div style={{ background: "var(--bg)", display: "flex", flexDirection: "column", minHeight: 0, position: "relative" }}>
-          {pdfCollapsed ? (
-            <button onClick={() => setPdfCollapsed(false)} title="Show PDF preview"
-              style={{
-                width: "100%", height: "100%", background: "var(--surface)",
-                border: "none", cursor: "pointer",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
-                padding: "16px 0", color: "var(--text-muted)",
-                transition: "background var(--t-fast), color var(--t-fast)",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-2)"; e.currentTarget.style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--surface)"; e.currentTarget.style.color = "var(--text-muted)"; }}
-            >
-              <Icon name="chevron-up" size={14} style={{ transform: "rotate(-90deg)" }}/>
-              <span style={{
-                writingMode: "vertical-rl", transform: "rotate(180deg)",
-                fontSize: 11.5, fontWeight: 500, letterSpacing: 0.5,
-              }} className="mono">
-                {sim.completed ? "PDF preview" : "PDF (pending)"}
-              </span>
-              <Icon name="file-text" size={14}/>
-            </button>
-          ) : (
-            <PDFPreviewPane visible={pdfVisible} scale={pdfScale} setScale={setPdfScale} page={pdfPage} setPage={setPdfPage} onCollapse={() => setPdfCollapsed(true)} pdfUrl={downloadUrl} pdfName={pdfName} isDemo={isDemo}/>
-          )}
+        {/* RIGHT — run details / gap analysis / live log */}
+        <div style={{ background: "var(--bg)", display: "flex", flexDirection: "column", minHeight: 0, overflow: "auto" }}>
+          <div style={{ padding: 16, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>Run details</div>
+            {[
+              ["Thread", threadId || "—"],
+              ["Model", viaModel],
+              ["Started", startedLabel || "—"],
+              ["Retries", `${effectiveRetries.length} / 3`],
+              ["Output", `${outputSlug}/`],
+            ].map(([k, v], i) => (
+              <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderTop: i ? "1px dashed var(--border)" : "none", fontSize: 13 }}>
+                <span style={{ color: "var(--text-muted)" }}>{k}</span>
+                <span className="mono truncate" style={{ fontWeight: 600, maxWidth: 170, textAlign: "right" }}>{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding: 16, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>Gap analysis</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {[["questions", gapStats.questions], ["answered", gapStats.answered], ["suggestions", gapStats.suggestions], ["approved", gapStats.approved]].map(([label, v]) => (
+                <div key={label} style={{ padding: "10px 12px", background: "var(--surface-2)", borderRadius: "var(--radius-md)" }}>
+                  <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{v}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, padding: "16px 16px 0" }}>Live log</div>
+            <LogTail visibleLines={visibleLogs} density={density}/>
+          </div>
         </div>
       </div>
     </div>

@@ -1,41 +1,44 @@
 :root {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-  --font-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* .serif class is repointed to Inter so the old "Filing Room" serif headings
+     now render in the new monochrome SaaS type system without touching markup. */
+  --font-serif: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
 
-  /* THE FILING ROOM — stone paper, ink-indigo accent, vermilion stamp signature */
-  --bg: #e7e6e0;
-  --surface: #f6f5f1;
-  --surface-2: #eceae2;
-  --surface-3: #e0ddd2;
-  --text: #1f2124;
-  --text-muted: #5d5f63;
-  --text-faint: #90918b;
-  --border: #d5d3c9;
-  --border-strong: #bab7a9;
-  --accent: #31507e;
+  /* MODERN SAAS — white surfaces on hairline borders, ink-black primary,
+     functional color only (blue/green/amber/red). */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #ececee;
+  --text: #0a0a0b;
+  --text-muted: #55555c;
+  --text-faint: #8e8e96;
+  --border: #e8e8ea;
+  --border-strong: #d9d9dc;
+  --accent: #0a0a0b;
   --accent-contrast: #ffffff;
-  --accent-soft: #e0e6f1;
-  --accent-ring: #a9bdda;
-  --stamp: #c8462d;
-  --stamp-soft: #f4ddd6;
-  --success: #3a7d44;
-  --success-soft: #dcefdd;
-  --warning: #a76a12;
-  --warning-soft: #f6e9cf;
-  --danger: #a5342a;
-  --danger-soft: #f3dcd7;
-  --info: #3a6091;
-  --info-soft: #e2eaf3;
+  --accent-soft: #f4f4f5;
+  --accent-ring: #d9d9dc;
+  --stamp: #dc2626;
+  --stamp-soft: #fee2e2;
+  --success: #16a34a;
+  --success-soft: #dcfce7;
+  --warning: #a16207;
+  --warning-soft: #fef9c3;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --info: #2563eb;
+  --info-soft: #e4edff;
   --sidebar-w: 246px;
   --sidebar-w-collapsed: 60px;
-  --topbar-h: 56px;
-  --radius-md: 6px;
-  --radius-lg: 9px;
-  --radius-xl: 12px;
-  --shadow-sm: 0 1px 0 rgba(31, 33, 36, 0.04), 0 1px 2px rgba(31, 33, 36, 0.06);
-  --shadow-md: 0 12px 28px rgba(31, 33, 36, 0.10);
-  --shadow-lg: 0 26px 60px rgba(31, 33, 36, 0.16);
+  --topbar-h: 60px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(10, 10, 11, 0.05);
+  --shadow-md: 0 8px 24px rgba(10, 10, 11, 0.08);
+  --shadow-lg: 0 24px 56px rgba(10, 10, 11, 0.16);
   --t-fast: 140ms ease;
   --t-mid: 240ms ease;
   --ease-spring: cubic-bezier(.2,.7,.2,1);
@@ -43,49 +46,49 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #17181b;
-  --surface: #1e2024;
-  --surface-2: #26282d;
-  --surface-3: #31343a;
-  --text: #ecebe4;
-  --text-muted: #a7a89f;
-  --text-faint: #74756d;
-  --border: #2f3238;
-  --border-strong: #494d55;
-  --accent: #7ea3d6;
-  --accent-contrast: #10151f;
-  --accent-soft: #1c2740;
-  --accent-ring: #38507a;
-  --stamp: #e0765c;
-  --stamp-soft: #3a201a;
-  --success: #63b96f;
-  --success-soft: #17301c;
-  --warning: #d69a3c;
-  --warning-soft: #362610;
-  --danger: #d9695c;
-  --danger-soft: #371c18;
-  --info: #7aa4ff;
-  --info-soft: #1a2540;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 26px 60px rgba(0, 0, 0, 0.6);
+  --bg: #0b0b0c;
+  --surface: #141416;
+  --surface-2: #1c1c1f;
+  --surface-3: #26262a;
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-faint: #71717a;
+  --border: #26262a;
+  --border-strong: #3a3a40;
+  --accent: #fafafa;
+  --accent-contrast: #0a0a0b;
+  --accent-soft: #26262a;
+  --accent-ring: #3a3a40;
+  --stamp: #f87171;
+  --stamp-soft: #3a1a1a;
+  --success: #4ade80;
+  --success-soft: #14321f;
+  --warning: #eab308;
+  --warning-soft: #362a0e;
+  --danger: #f87171;
+  --danger-soft: #3a1a1a;
+  --info: #60a5fa;
+  --info-soft: #14233f;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.65);
 }
 
-/* Accent choices (Settings › Appearance). Default is ink-indigo. */
-:root[data-accent="indigo"]   { --accent: #31507e; --accent-soft: #e0e6f1; --accent-ring: #a9bdda; }
-:root[data-accent="pine"]     { --accent: #1f6f5c; --accent-soft: #d9f0e8; --accent-ring: #93d3c2; }
-:root[data-accent="oxblood"]  { --accent: #8a2f2a; --accent-soft: #f2ddda; --accent-ring: #dda9a4; }
-:root[data-accent="graphite"] { --accent: #33312b; --accent-soft: #e6e3da; --accent-ring: #c3bcaa; }
+/* Accent choices (Settings › Appearance). Default is ink (graphite). */
+:root[data-accent="graphite"] { --accent: #0a0a0b; --accent-soft: #f4f4f5; --accent-ring: #d9d9dc; }
+:root[data-accent="indigo"]   { --accent: #2563eb; --accent-soft: #e4edff; --accent-ring: #a9c4f5; }
+:root[data-accent="pine"]     { --accent: #16a34a; --accent-soft: #dcfce7; --accent-ring: #92e3ac; }
+:root[data-accent="oxblood"]  { --accent: #dc2626; --accent-soft: #fee2e2; --accent-ring: #f2a9a4; }
 /* Legacy keys kept so older saved prefs still resolve to a sensible hue. */
-:root[data-accent="emerald"]  { --accent: #1f6f5c; --accent-soft: #d9f0e8; --accent-ring: #93d3c2; }
-:root[data-accent="amber"]    { --accent: #a76a12; --accent-soft: #f6e9cf; --accent-ring: #e3c489; }
+:root[data-accent="emerald"]  { --accent: #16a34a; --accent-soft: #dcfce7; --accent-ring: #92e3ac; }
+:root[data-accent="amber"]    { --accent: #a16207; --accent-soft: #fef9c3; --accent-ring: #e3c489; }
 
-:root[data-theme="dark"][data-accent="indigo"]   { --accent: #7ea3d6; --accent-soft: #1c2740; --accent-ring: #38507a; }
-:root[data-theme="dark"][data-accent="pine"]     { --accent: #5cc0a6; --accent-soft: #10312a; --accent-ring: #205046; }
-:root[data-theme="dark"][data-accent="oxblood"]  { --accent: #d98a83; --accent-soft: #331917; --accent-ring: #5a2c28; }
-:root[data-theme="dark"][data-accent="graphite"] { --accent: #cfc9bb; --accent-soft: #2a2822; --accent-ring: #4c483e; }
-:root[data-theme="dark"][data-accent="emerald"]  { --accent: #5cc0a6; --accent-soft: #10312a; --accent-ring: #205046; }
-:root[data-theme="dark"][data-accent="amber"]    { --accent: #e3b063; --accent-soft: #322510; --accent-ring: #5a4520; }
+:root[data-theme="dark"][data-accent="graphite"] { --accent: #fafafa; --accent-soft: #26262a; --accent-ring: #3a3a40; }
+:root[data-theme="dark"][data-accent="indigo"]   { --accent: #60a5fa; --accent-soft: #14233f; --accent-ring: #2f4d7a; }
+:root[data-theme="dark"][data-accent="pine"]     { --accent: #4ade80; --accent-soft: #14321f; --accent-ring: #206a3a; }
+:root[data-theme="dark"][data-accent="oxblood"]  { --accent: #f87171; --accent-soft: #3a1a1a; --accent-ring: #6a2c2c; }
+:root[data-theme="dark"][data-accent="emerald"]  { --accent: #4ade80; --accent-soft: #14321f; --accent-ring: #206a3a; }
+:root[data-theme="dark"][data-accent="amber"]    { --accent: #eab308; --accent-soft: #362a0e; --accent-ring: #5a4520; }
 
 * { box-sizing: border-box; }
 body {
@@ -131,11 +134,35 @@ button, input, textarea { font: inherit; }
 @media (max-width: 1000px) {
   .two-col-grid { grid-template-columns: 1fr !important; }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-  .provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .org-grid { grid-template-columns: 1fr !important; }
+  .editor-layout { grid-template-columns: 1fr !important; }
+  .editor-layout > div:first-child { border-right: none !important; border-bottom: 1px solid var(--border); max-height: 200px; }
+}
+/* Stack the live-run 3-column layout sooner so the pipeline/activity/details
+   panes never feel crushed on a typical laptop screen. */
+@media (max-width: 1060px) {
+  .live-run-cols {
+    grid-template-columns: 1fr !important;
+    grid-auto-rows: minmax(340px, auto);
+    overflow-y: auto;
+  }
 }
 @media (max-width: 560px) {
-  .kpi-grid, .provider-grid { grid-template-columns: 1fr !important; }
+  .kpi-grid { grid-template-columns: 1fr !important; }
+  /* Shrink the generous desktop side padding on the main page grids so
+     content isn't cramped against phone edges. */
+  .two-col-grid, .org-grid, .page-pad { padding-left: 16px !important; padding-right: 16px !important; }
+  .live-run-cols { grid-auto-rows: minmax(280px, auto); }
+}
+
+/* Library summary strip: 5 fixed cells overflow narrow screens — reflow it
+   into a grid and drop the internal dividers so it wraps cleanly. */
+@media (max-width: 780px) {
+  .lib-summary { display: grid !important; grid-template-columns: repeat(3, 1fr); }
+  .lib-summary > div { border-right: none !important; }
+}
+@media (max-width: 500px) {
+  .lib-summary { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* App shell: below the drawer breakpoint the sidebar slides in as an overlay

@@ -5,7 +5,7 @@ import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView
 import { LiveRunView } from "./live-run.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PARSE_STAGES, PROVIDERS } from "./data.jsx";
-import { getSettings, listRuns, uploadResume, runDoctor } from "./api/client.js";
+import { getSettings, listRuns, uploadResume, runDoctor, getResume } from "./api/client.js";
 import { subscribeResumeParse } from "./api/ws.js";
 
 // True when the viewport is narrow enough that the sidebar should collapse into
@@ -446,16 +446,17 @@ const ReplaceBaseResumeModal = ({ open, onClose, onUpload }) => {
 };
 
 // Sidebar
-const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = false, settings = ACTIVE_LLM }) => {
+const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = false, settings = ACTIVE_LLM, activeRunCount = 0 }) => {
   const items = [
-    { id: "new", icon: "play", label: "Create" },
-    { id: "library", icon: "folder", label: "Résumé library" },
+    { id: "dashboard", icon: "home", label: "Overview" },
+    { id: "new", icon: "play", label: "Create resume" },
+    { id: "library", icon: "folder", label: "Library", badge: activeRunCount || null },
     { id: "companies", icon: "building", label: "Companies" },
     { id: "resume", icon: "file-text", label: "Base resume" },
   ];
   const secondary = [
     { id: "settings", icon: "settings", label: "Settings" },
-    { id: "setup", icon: "stethoscope", label: "Setup" },
+    { id: "setup", icon: "stethoscope", label: "Doctor & setup" },
   ];
 
   const provider = PROVIDERS.find(p => p.id === settings.providerId) || PROVIDERS[0];
@@ -479,16 +480,13 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
       }}>
         <Logo size={24}/>
         {!collapsed && (
-          <div style={{ minWidth: 0 }}>
-            <div className="serif" style={{ fontSize: 15, fontWeight: 600, letterSpacing: 0, lineHeight: 1.15 }}>Resume Generator</div>
-            <div className="mono" style={{ fontSize: 9.5, color: "var(--text-faint)", letterSpacing: 1, textTransform: "uppercase" }}>Filing room</div>
-          </div>
+          <div style={{ minWidth: 0, fontSize: 18, fontWeight: 800, letterSpacing: "-0.04em" }}>Resume</div>
         )}
       </div>
 
       {/* Main nav */}
-      <div style={{ flex: 1, overflow: "auto", padding: collapsed ? "10px 6px" : "12px 10px" }}>
-        {!collapsed && <div className="mono" style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, padding: "4px 6px 8px" }}>Workroom</div>}
+      <div style={{ flex: 1, overflow: "auto", padding: collapsed ? "10px 6px" : "12px 10px 12px" }}>
+        <div style={{ height: collapsed ? 4 : 8 }}/>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {items.map(it => (
             <NavItem key={it.id} {...it}
@@ -593,7 +591,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
   );
 };
 
-const NavItem = ({ icon, label, active, collapsed, onClick, locked }) => (
+const NavItem = ({ icon, label, active, collapsed, onClick, locked, badge }) => (
   <button onClick={onClick} title={collapsed ? (locked ? `${label} — paused while parsing` : label) : (locked ? "Paused while base resume is parsing" : null)}
     disabled={locked}
     style={{
@@ -618,130 +616,104 @@ const NavItem = ({ icon, label, active, collapsed, onClick, locked }) => (
     {!collapsed && locked && (
       <Icon name="loader" size={11} style={{ animation: "spin 1.2s linear infinite", color: "var(--accent)" }}/>
     )}
+    {!collapsed && !locked && !!badge && (
+      <span className="mono" style={{ background: "var(--warning-soft)", color: "var(--warning)", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "1px 7px" }}>{badge}</span>
+    )}
   </button>
 );
 
-// Top bar
-const TopBar = ({ route, runTitle, doctorBanner, openCmdK, openNotifs, unreadCount, bellRef, settings, onOpenNav }) => {
-  const titles = {
-    dashboard: "Overview", new: "Create", library: "Résumé library", companies: "Companies",
-    resume: "Base resume", history: "History", settings: "Settings", setup: "Setup",
-    run: runTitle || "Run",
-  };
-  const sections = {
-    new: "Workroom", library: "Library", companies: "Cabinet", resume: "Workroom",
-    settings: "System", setup: "System", run: "Library", dashboard: "Overview", history: "Library",
-  };
-  const provider = PROVIDERS.find(p => p.id === settings.providerId) || PROVIDERS[0];
+// Top bar — mirrors the app.html mockup: a prominent search bar on the left,
+// a few compact icon buttons and a user avatar on the right. Per-screen
+// breadcrumbs/titles live in each screen's own page header instead (also
+// matching the mockup), not in this bar.
+const TopBar = ({ goto, openCmdK, openNotifs, unreadCount, bellRef, settings, onOpenNav, initials }) => {
   return (
     <div className="topbar" style={{
       height: "var(--topbar-h)", flexShrink: 0,
       borderBottom: "1px solid var(--border)",
       background: "var(--surface)",
-      display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "0 24px", gap: 12,
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "0 24px",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
-        <button className="mobile-only" onClick={onOpenNav} aria-label="Open navigation" style={{
-          alignItems: "center", justifyContent: "center",
-          width: 34, height: 34, flexShrink: 0,
-          background: "var(--surface)", border: "1px solid var(--border-strong)",
-          borderRadius: "var(--radius-md)", color: "var(--text-muted)", cursor: "pointer",
-        }}>
-          <Icon name="menu" size={16}/>
-        </button>
-        <span className="mono hide-mobile" style={{ fontSize: 10.5, color: "var(--text-faint)", letterSpacing: 0.8, textTransform: "uppercase" }}>{sections[route] || "Workroom"}</span>
-        <span className="hide-mobile" style={{ color: "var(--text-faint)" }}>/</span>
-        <span className="serif truncate" style={{ fontSize: 16, fontWeight: 600, minWidth: 0 }}>{titles[route] || route}</span>
-      </div>
+      <button className="mobile-only" onClick={onOpenNav} aria-label="Open navigation" style={{
+        alignItems: "center", justifyContent: "center",
+        width: 38, height: 38, flexShrink: 0,
+        background: "var(--surface)", border: "1px solid var(--border-strong)",
+        borderRadius: "var(--radius-md)", color: "var(--text-muted)", cursor: "pointer",
+      }}>
+        <Icon name="menu" size={16}/>
+      </button>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        {/* Active LLM pill */}
-        <button className="hide-mobile" onClick={() => { /* could open command palette/settings */ }} title={`provider: ${settings.providerName || provider?.name || settings.provider} · default: ${settings.defaultModel}${settings.visionEnabled ? ` · vision: ${settings.visionModel}` : ""}${settings.latencyMs != null ? ` · ${settings.latencyMs}ms` : ""}`}
+      {/* Search / command bar */}
+      <button onClick={openCmdK} style={{
+        flex: "0 1 420px", minWidth: 0, display: "flex", alignItems: "center", gap: 10,
+        height: 40, padding: "0 13px",
+        background: "var(--surface-2)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-md)",
+        color: "var(--text-faint)", fontSize: 13.5, cursor: "text", textAlign: "left",
+      }}>
+        <Icon name="search" size={16}/>
+        <span className="hide-mobile truncate" style={{ flex: 1 }}>Search companies, runs, or type a command</span>
+        <span className="hide-mobile" style={{ display: "inline-flex", gap: 3, flexShrink: 0 }}><Kbd>⌘</Kbd><Kbd>K</Kbd></span>
+      </button>
+
+      <div style={{ flex: 1 }}/>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        {/* Active LLM indicator */}
+        <button className="hide-mobile" onClick={() => goto("settings")}
+          title={`${settings.providerName || settings.provider} · ${settings.defaultModel}${settings.visionEnabled ? ` · vision: ${settings.visionModel}` : ""}${settings.latencyMs != null ? ` · ${settings.latencyMs}ms` : ""}`}
           style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            height: 30, padding: "0 10px",
-            background: "var(--surface)",
-            border: "1px solid var(--border-strong)",
-            borderRadius: "var(--radius-md)",
-            cursor: "pointer", transition: `background var(--t-fast)`,
+            position: "relative", width: 38, height: 38,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            background: "transparent", border: "none", borderRadius: "var(--radius-md)",
+            color: "var(--text)", cursor: "pointer",
           }}
           onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
-          onMouseLeave={(e) => e.currentTarget.style.background = "var(--surface)"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
         >
-          <span style={{ position: "relative", display: "inline-flex" }}>
-            <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--success)" }}/>
-            <span style={{ position: "absolute", inset: -2, borderRadius: 99, background: "var(--success)", opacity: 0.35, animation: "pulse-ring 2s ease-out infinite" }}/>
-          </span>
-          <span className="mono" style={{ fontSize: 11.5, color: "var(--text)", fontWeight: 500, whiteSpace: "nowrap" }}>{settings.defaultModel}</span>
-          {settings.visionEnabled && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--text-faint)" }} title={`vision: ${settings.visionModel}`}>
-              <Icon name="eye" size={11}/>
-            </span>
-          )}
+          <Logo size={17}/>
+          <span style={{ position: "absolute", top: 7, right: 7, width: 7, height: 7, borderRadius: 99, background: "var(--success)", border: "2px solid var(--surface)" }}/>
         </button>
-
-        {/* Doctor pill */}
-        <span style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          padding: "4px 10px",
-          background: doctorBanner ? "var(--danger-soft)" : "var(--success-soft)",
-          color: doctorBanner ? "var(--danger)" : "var(--success)",
-          borderRadius: 99, fontSize: 11.5, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0,
-          border: `1px solid ${doctorBanner ? "var(--danger)" : "var(--success)"}1f`,
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: 99, background: "currentColor", animation: doctorBanner ? "none" : "blink 2s infinite" }}/>
-          Doctor {doctorBanner ? "issue" : "ok"}
-        </span>
 
         {/* Notification bell */}
         <button ref={bellRef} onClick={openNotifs} aria-label="Notifications" style={{
-          position: "relative", width: 30, height: 30,
+          position: "relative", width: 38, height: 38,
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          background: "var(--surface)",
-          border: "1px solid var(--border-strong)",
-          borderRadius: "var(--radius-md)",
-          color: "var(--text-muted)",
-          cursor: "pointer",
-          transition: `color var(--t-fast), background var(--t-fast)`,
+          background: "transparent", border: "none", borderRadius: "var(--radius-md)",
+          color: "var(--text)", cursor: "pointer",
         }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-2)"; e.currentTarget.style.color = "var(--text)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "var(--surface)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+          onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
         >
-          <Icon name="bell" size={14}/>
+          <Icon name="bell" size={17}/>
           {unreadCount > 0 && (
-            <span style={{
-              position: "absolute", top: -4, right: -4,
-              minWidth: 16, height: 16, padding: "0 4px",
+            <span className="mono" style={{
+              position: "absolute", top: 5, right: 5,
+              minWidth: 15, height: 15, padding: "0 3px",
               background: "var(--accent)", color: "var(--accent-contrast)",
-              borderRadius: 99, fontSize: 10, fontWeight: 600,
+              borderRadius: 99, fontSize: 9.5, fontWeight: 700,
               display: "inline-flex", alignItems: "center", justifyContent: "center",
               border: "2px solid var(--surface)",
-              boxShadow: "0 0 0 2px var(--accent-ring)",
-            }} className="mono">{unreadCount}</span>
-          )}
-          {unreadCount > 0 && (
-            <span style={{
-              position: "absolute", inset: -1, borderRadius: "var(--radius-md)",
-              border: "1px solid var(--accent-ring)",
-              animation: "pulse-ring 2s ease-out infinite",
-              pointerEvents: "none",
-            }}/>
+            }}>{unreadCount}</span>
           )}
         </button>
 
-        {/* Cmd-K button */}
-        <button onClick={openCmdK} style={{
-          display: "inline-flex", alignItems: "center", gap: 8,
-          height: 30, padding: "0 8px 0 10px",
-          background: "var(--surface)",
-          border: "1px solid var(--border-strong)",
-          borderRadius: "var(--radius-md)",
-          color: "var(--text-muted)", fontSize: 12.5, cursor: "pointer",
+        <span className="hide-mobile" style={{ width: 1, height: 24, background: "var(--border)" }}/>
+
+        {/* Avatar */}
+        <button className="hide-mobile" onClick={() => goto("settings")} title="Settings" style={{
+          display: "flex", alignItems: "center", gap: 7,
+          background: "transparent", border: "none", cursor: "pointer", padding: 0,
         }}>
-          <Icon name="search" size={13}/>
-          <span className="hide-mobile">Search…</span>
-          <span className="hide-mobile" style={{ display: "inline-flex", gap: 4 }}><Kbd>⌘</Kbd><Kbd>K</Kbd></span>
+          <span style={{
+            width: 34, height: 34, borderRadius: 99,
+            background: "var(--accent)", color: "var(--accent-contrast)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 12.5, fontWeight: 700,
+          }}>{initials || "··"}</span>
+          <Icon name="chevron-down" size={14} style={{ color: "var(--text-muted)" }}/>
         </button>
       </div>
     </div>
@@ -859,11 +831,11 @@ const CommandPalette = ({ open, onClose, goto, openRun, lastRun }) => {
 };
 
 // Map hex <-> accent key (so the existing TweakColor swatch UI can drive our data-attribute)
-const ACCENT_HEX = { indigo: "#31507E", pine: "#1F6F5C", oxblood: "#8A2F2A", graphite: "#33312B" };
+const ACCENT_HEX = { graphite: "#0A0A0B", indigo: "#2563EB", pine: "#16A34A", oxblood: "#DC2626" };
 const HEX_TO_ACCENT = Object.fromEntries(Object.entries(ACCENT_HEX).map(([k, v]) => [v.toLowerCase(), k]));
 const TWEAK_DEFAULTS = {
   theme: "light",
-  accent: "indigo",
+  accent: "graphite",
   sidebar: "expanded",
   density: "comfortable",
   runState: "running",
@@ -910,7 +882,8 @@ const TweaksContent = ({ t, setTweak }) => (
 
 // Root app
 export const App = () => {
-  const [route, setRoute] = useState("library"); // library | new | companies | resume | history | settings | setup | run | dashboard
+  const [route, setRoute] = useState("dashboard"); // dashboard | library | new | companies | resume | history | settings | setup | run
+  const [libraryFilter, setLibraryFilter] = useState(null); // status filter to seed LibraryView with (set via goto(id, {libraryFilter}))
   const isMobile = useIsMobile();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [cmdK, setCmdK] = useState(false);
@@ -932,6 +905,17 @@ export const App = () => {
 
   useEffect(() => { getSettings().then(setAppSettings).catch(() => {}); }, []);
   useEffect(() => { runDoctor().then(setDoctor).catch(() => setDoctor(null)); }, []);
+
+  // Avatar initials, derived from the real base résumé owner (no auth/user model here).
+  const [ownerInitials, setOwnerInitials] = useState(null);
+  useEffect(() => {
+    getResume().then(data => {
+      const name = data?.personal?.full_name;
+      if (!name) return;
+      const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+      setOwnerInitials(initials || null);
+    }).catch(() => {});
+  }, []);
 
   // ----- Poll runs: drives lastRun (cmd palette) + the notification inbox -----
   useEffect(() => {
@@ -1024,6 +1008,7 @@ export const App = () => {
   }, [notifications]);
 
   const unreadCount = notifications.filter(n => n.unread).length;
+  const activeRunCount = runs.filter(r => ["running", "awaiting-input", "queued", "retrying"].includes(r.status)).length;
   const doctorHasIssue = doctor ? !doctor.ok : false;
 
   const markNotifRead = (id) => setReadNotifIds(s => { const next = new Set(s); next.add(id); return next; });
@@ -1031,7 +1016,7 @@ export const App = () => {
   // Close the mobile drawer once we grow back to a desktop width.
   useEffect(() => { if (!isMobile) setMobileNavOpen(false); }, [isMobile]);
 
-  const goto = (id) => { setRoute(id); setMobileNavOpen(false); };
+  const goto = (id, opts = {}) => { setRoute(id); setMobileNavOpen(false); setLibraryFilter(opts.libraryFilter ?? null); };
 
   const openRun = (threadId, state = "running", run = null) => {
     if (!threadId) { setRoute("run"); return; }
@@ -1052,7 +1037,7 @@ export const App = () => {
 
   const renderRoute = () => {
     switch (route) {
-      case "library":   return <LibraryView goto={goto} openRun={openRun} locked={isLocked}/>;
+      case "library":   return <LibraryView goto={goto} openRun={openRun} locked={isLocked} initialFilter={libraryFilter}/>;
       case "companies": return <CompaniesView goto={goto} openRun={openRun}/>;
       case "dashboard": return <Dashboard goto={goto} openRun={openRun} locked={isLocked} doctor={doctor}/>;
       case "new":       return <NewRun goto={goto} openRun={openRun} locked={isLocked} onRunStarted={(id) => openRun(id, "running")}/>;
@@ -1067,17 +1052,18 @@ export const App = () => {
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar route={route} goto={goto} collapsed={isMobile ? false : sidebarCollapsed} setCollapsed={setSidebarCollapsed} locked={isLocked} mobileOpen={mobileNavOpen} settings={appSettings}/>
+      <Sidebar route={route} goto={goto} collapsed={isMobile ? false : sidebarCollapsed} setCollapsed={setSidebarCollapsed} locked={isLocked} mobileOpen={mobileNavOpen} settings={appSettings} activeRunCount={activeRunCount}/>
       {isMobile && mobileNavOpen && <div className="sidebar-backdrop" onClick={() => setMobileNavOpen(false)}/>}
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg)" }}>
-        <TopBar route={route} runTitle={selectedRunTitle} doctorBanner={doctorHasIssue || tweaks.doctorBanner}
+        <TopBar goto={goto}
           openCmdK={() => setCmdK(true)}
           openNotifs={() => setNotifsOpen(o => !o)}
           unreadCount={unreadCount}
           bellRef={bellRef}
           onOpenNav={() => setMobileNavOpen(true)}
-          settings={appSettings}/>
+          settings={appSettings}
+          initials={ownerInitials}/>
         <ParsingBanner parsing={parsing} onOpen={() => setParsing(p => p ? { ...p, modalOpen: true } : null)}/>
         {(doctorHasIssue || tweaks.doctorBanner) && !doctorDismissed && <DoctorBanner doctor={doctor} goto={goto} onDismiss={() => setDoctorDismissed(true)}/>}
         <div style={{ flex: 1, overflow: "auto", minHeight: 0, position: "relative" }}>
