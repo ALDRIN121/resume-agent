@@ -60,6 +60,25 @@ def get_chat_model(
             api_key=api_key,  # type: ignore[arg-type]
         )
 
+    if provider == "openrouter":
+        from langchain_openai import ChatOpenAI
+
+        # OpenRouter is OpenAI-compatible — one key routes to hundreds of models.
+        # The key is provisioned via the in-app "Sign in with OpenRouter" OAuth flow.
+        api_key = settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY")
+        return ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            max_tokens=MAX_LLM_OUTPUT_TOKENS,
+            api_key=api_key,  # type: ignore[arg-type]
+            base_url=settings.openrouter_base_url,
+            # OpenRouter ranking/attribution headers (optional but recommended).
+            default_headers={
+                "HTTP-Referer": "https://github.com/resume-generator",
+                "X-Title": "resume-generator",
+            },
+        )
+
     if provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
