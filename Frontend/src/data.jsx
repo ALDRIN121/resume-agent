@@ -197,6 +197,7 @@ Must-Have Skills:
 
 // ─── Provider catalogue (mirrors src/resume_agent/ui/setup_wizard.py) ────────
 export const PROVIDERS = [
+  { id: "openrouter",     name: "OpenRouter",        sub: "One-click sign-in",      cost: "Free models", url: "openrouter.ai/keys",               needsKey: true,  hint: "Fastest setup", logo: "O" },
   { id: "gemini",         name: "Gemini",            sub: "Google",                 cost: "Free tier", url: "aistudio.google.com/apikey",        needsKey: true,  hint: "Best free option", logo: "G" },
   { id: "nvidia",         name: "NVIDIA NIM",        sub: "Hosted endpoints",       cost: "Free tier", url: "build.nvidia.com",                   needsKey: true,  hint: "Free playground", logo: "N" },
   { id: "ollama_local",   name: "Ollama",            sub: "Local — runs offline",   cost: "Free",      url: null,                                  needsKey: false, hint: "No internet", logo: "○" },

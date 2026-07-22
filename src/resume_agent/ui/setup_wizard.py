@@ -58,7 +58,7 @@ _PROVIDERS: list[tuple[str, str, str, bool]] = [
 ]
 
 _MODELS: dict[str, list[str]] = {
-    "openrouter": ["meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-r1:free", "google/gemini-2.0-flash-exp:free", "anthropic/claude-sonnet-4", "openai/gpt-4o-mini"],
+    "openrouter": ["nvidia/nemotron-3-super-120b-a12b:free", "openai/gpt-oss-20b:free", "google/gemma-4-31b-it:free", "anthropic/claude-sonnet-4-6", "openai/gpt-5.4-mini"],
     "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
     "nvidia":    ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
     "anthropic": ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
@@ -67,7 +67,7 @@ _MODELS: dict[str, list[str]] = {
 }
 
 _VISION: dict[str, list[str]] = {
-    "openrouter": ["google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.2-11b-vision-instruct:free", "anthropic/claude-sonnet-4"],
+    "openrouter": ["google/gemma-4-31b-it:free", "nvidia/nemotron-nano-12b-v2-vl:free", "anthropic/claude-sonnet-4-6"],
     "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro"],
     "nvidia":    ["meta/llama-3.2-11b-vision-instruct", "microsoft/phi-3.5-vision-instruct"],
     "anthropic": ["claude-opus-4-8", "claude-sonnet-4-6"],
