@@ -1,5 +1,8 @@
 # Resume Generator
 
+[![CI](https://github.com/ALDRIN121/resume-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ALDRIN121/resume-agent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An AI-powered CLI tool that reads a job description and your existing resume, then produces a professionally formatted, tailored PDF — ready to send.
 
 ```
@@ -529,3 +532,9 @@ npm run build           # rebuild Frontend/dist/ before committing
 ```
 
 To add a new LaTeX template, copy `src/resume_agent/templates/default.tex.jinja` and update `config.yaml` to point to it.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
