@@ -26,6 +26,7 @@ env/
 # Resume Agent runtime files
 output/
 *.pdf
+!examples/sample_resume.pdf
 *.aux
 *.log
 *.synctex.gz
