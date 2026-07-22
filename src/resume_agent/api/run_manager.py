@@ -223,10 +223,13 @@ class RunManager:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            from ..llm import describe_llm_error
+
+            reason = describe_llm_error(exc)
             session.status = "failed"
-            session.error = str(exc)
+            session.error = reason
             session.stored_duration_s = session.get_duration_s()
-            await self._publish(session, FailedEvent(reason=str(exc)))
+            await self._publish(session, FailedEvent(reason=reason))
             await self._close_subscribers(session)
             self._save_run(session)
 
