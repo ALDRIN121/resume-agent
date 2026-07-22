@@ -7,8 +7,8 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
-from .console import console
 from ..schemas import Question, Suggestion
+from .console import console
 
 
 def prompt_hitl_questions(questions: list[Question]) -> dict[str, str]:
@@ -42,7 +42,7 @@ def prompt_hitl_questions(questions: list[Question]) -> dict[str, str]:
             )
         )
         answer = Prompt.ask(
-            f"  [yellow]Your answer[/yellow]",
+            "  [yellow]Your answer[/yellow]",
             console=console,
             default="",
         )

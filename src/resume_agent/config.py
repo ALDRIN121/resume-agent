@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -90,12 +90,12 @@ class ResumeAgentSettings(BaseSettings):
     ui: UIConfig = Field(default_factory=UIConfig)
 
     # Passed via env or ~/.resume_generator/.env
-    anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
-    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
-    gemini_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
-    nvidia_api_key: Optional[str] = Field(default=None, alias="NVIDIA_API_KEY")
-    ollama_api_key: Optional[str] = Field(default=None, alias="OLLAMA_API_KEY")
-    openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    gemini_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
+    nvidia_api_key: str | None = Field(default=None, alias="NVIDIA_API_KEY")
+    ollama_api_key: str | None = Field(default=None, alias="OLLAMA_API_KEY")
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     nvidia_base_url: str = Field(default="", alias="NVIDIA_BASE_URL")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL")
@@ -112,7 +112,7 @@ class ResumeAgentSettings(BaseSettings):
     )
 
     @classmethod
-    def load(cls) -> "ResumeAgentSettings":
+    def load(cls) -> ResumeAgentSettings:
         """Load from ~/.resume_generator/config.yaml, overlaid with env vars and SECRETS_FILE."""
         migrate_config_dir()
         file_data: dict = {}

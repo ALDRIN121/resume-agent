@@ -137,7 +137,7 @@ def _parse_tectonic_errors(log: str) -> list[str]:
     errors: list[str] = []
     lines = log.splitlines()
 
-    _NOISE_PREFIXES = ("note:", "warning:", "i searched for")
+    _NOISE_PREFIXES = ("note:", "warning:", "i searched for")  # noqa: N806
 
     def _is_noise(line: str) -> bool:
         low = line.lower().lstrip()

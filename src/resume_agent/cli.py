@@ -21,7 +21,6 @@ import uuid
 import warnings
 import webbrowser
 from pathlib import Path
-from typing import Optional
 
 # Silence LangGraph's noisy "Deserializing unregistered type" messages.
 # These fire every time a checkpoint is loaded and are not actionable.
@@ -90,7 +89,6 @@ def run_interactive() -> None:
       3. Run init if no base resume exists yet.
       4. Loop: ask for JD → generate → ask to continue.
     """
-    from .ui.setup_wizard import run_setup_wizard
 
     settings = _load_settings_gracefully()
     print_banner(provider=settings.provider, model=settings.model.default)
@@ -180,16 +178,16 @@ def _interactive_init_resume(settings: ResumeAgentSettings) -> None:
     print_success(f"Base resume saved for: [bold]{resume.personal.full_name}[/bold]")
 
 
-def _prompt_for_resume_file() -> Optional[Path]:
+def _prompt_for_resume_file() -> Path | None:
     """
     Interactive loop: keep prompting until the user provides a valid .pdf/.tex file.
     Returns the resolved Path, or None if the user types 'q' to abort.
     """
     from rich.markup import escape as _esc
 
-    _VALID_EXTS = {".pdf", ".tex"}
+    _VALID_EXTS = {".pdf", ".tex"}  # noqa: N806
     # All quote variants a user might wrap a path in (regular + curly + backtick)
-    _QUOTES = '"\'`\u2018\u2019\u201c\u201d'
+    _QUOTES = '"\'`\u2018\u2019\u201c\u201d'  # noqa: N806
 
     while True:
         # Re-check source folder on each iteration (user may have just dropped a file in)
@@ -396,13 +394,13 @@ def setup() -> None:
 
 @app.command()
 def init(
-    source: Optional[Path] = typer.Option(
+    source: Path | None = typer.Option(
         None,
         "--source",
         "-s",
         help=(
             "Path to your resume (.tex or .pdf). "
-            f"If omitted, auto-detects from ~/.resume_generator/source/"
+            "If omitted, auto-detects from ~/.resume_generator/source/"
         ),
     ),
 ) -> None:
@@ -444,7 +442,7 @@ def init(
             source = candidates[0]
     else:
         source = Path(source).expanduser().resolve()
-        if not source.suffix.lower() in {".pdf", ".tex"}:
+        if source.suffix.lower() not in {".pdf", ".tex"}:
             print_error(f"Unsupported format '{source.suffix}'. Only .pdf and .tex are accepted.")
             raise typer.Exit(1)
         if not source.exists():
@@ -476,23 +474,23 @@ def init(
 
 @app.command()
 def generate(
-    jd_text: Optional[str] = typer.Option(
+    jd_text: str | None = typer.Option(
         None, "--jd-text", help="Paste the full job description text"
     ),
-    jd_url: Optional[str] = typer.Option(
+    jd_url: str | None = typer.Option(
         None, "--jd-url", help="URL of the job posting to scrape"
     ),
-    jd_file: Optional[Path] = typer.Option(
+    jd_file: Path | None = typer.Option(
         None, "--jd-file", help="Path to a text file containing the job description",
         exists=True, file_okay=True, dir_okay=False, resolve_path=True,
     ),
-    provider: Optional[str] = typer.Option(
+    provider: str | None = typer.Option(
         None, "--provider", "-p", help="LLM provider: anthropic | openai | ollama | gemini | nvidia"
     ),
-    model_name: Optional[str] = typer.Option(
+    model_name: str | None = typer.Option(
         None, "--model", "-m", help="Override model name"
     ),
-    thread_id: Optional[str] = typer.Option(
+    thread_id: str | None = typer.Option(
         None, "--thread", help="Thread ID to resume an interrupted session"
     ),
 ) -> None:
@@ -550,7 +548,6 @@ def generate(
 
     if final_pdf:
         jd = final_state.get("jd")
-        resume = final_state.get("tailored_resume") or final_state.get("base_resume")
         final_pdf = _prompt_save_and_open(final_pdf)
         print_final_summary(
             company=jd.company if jd else "Unknown",

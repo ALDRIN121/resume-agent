@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Optional
 
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from resume_agent import __version__
+
 from .console import console
 
 _LOGO = """\
@@ -26,7 +26,7 @@ _LOGO = """\
 def print_banner(
     provider: str = "anthropic",
     model: str = "",
-    source_dir: Optional[Path] = None,
+    source_dir: Path | None = None,
 ) -> None:
     """Print the startup banner — two-column layout with info and quick-start tips."""
     from resume_agent.config import BASE_RESUME_FILE, SOURCE_DIR
@@ -106,7 +106,7 @@ def print_banner(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _get_user_name(base_resume_file: Path) -> Optional[str]:
+def _get_user_name(base_resume_file: Path) -> str | None:
     """Read full_name from the parsed base resume YAML."""
     try:
         import yaml
@@ -119,7 +119,7 @@ def _get_user_name(base_resume_file: Path) -> Optional[str]:
     return None
 
 
-def _get_source_pdf(source_dir: Path) -> Optional[str]:
+def _get_source_pdf(source_dir: Path) -> str | None:
     """Return the filename of the first PDF/TEX in the source folder."""
     try:
         candidates = sorted(source_dir.glob("*.pdf")) + sorted(source_dir.glob("*.tex"))
@@ -130,7 +130,7 @@ def _get_source_pdf(source_dir: Path) -> Optional[str]:
     return None
 
 
-def _get_last_updated(base_resume_file: Path) -> Optional[str]:
+def _get_last_updated(base_resume_file: Path) -> str | None:
     """Return a human-readable age of the base resume YAML."""
     try:
         if not base_resume_file.exists():

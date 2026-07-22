@@ -47,7 +47,7 @@ def describe_llm_error(exc: Exception) -> str:
 
 
 def get_chat_model(
-    settings: "ResumeAgentSettings",
+    settings: ResumeAgentSettings,
     task: TaskType = "default",
     *,
     temperature: float = 0.3,

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncGenerator, Generator
 
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from .config import CONFIG_DIR, STATE_DB
 

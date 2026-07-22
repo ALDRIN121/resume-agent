@@ -3,22 +3,21 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
-from pydantic import BaseModel, Field, model_validator
 
+from pydantic import BaseModel, Field, model_validator
 
 # ── User Resume models ─────────────────────────────────────────────────────────
 
 class PersonalInfo(BaseModel):
     full_name: str
     email: str
-    phone: Optional[str] = None
-    location: Optional[str] = None
-    linkedin: Optional[str] = None   # handle only, e.g. "john-doe"
-    github: Optional[str] = None     # handle only, e.g. "johndoe"
-    website: Optional[str] = None
-    portfolio: Optional[str] = None  # portfolio URL, distinct from personal website
-    headline: Optional[str] = None   # e.g. "Open to Remote / Relocation — EU & US"
+    phone: str | None = None
+    location: str | None = None
+    linkedin: str | None = None   # handle only, e.g. "john-doe"
+    github: str | None = None     # handle only, e.g. "johndoe"
+    website: str | None = None
+    portfolio: str | None = None  # portfolio URL, distinct from personal website
+    headline: str | None = None   # e.g. "Open to Remote / Relocation — EU & US"
 
     @model_validator(mode="before")
     @classmethod
@@ -36,8 +35,8 @@ class Role(BaseModel):
     company: str
     title: str
     start: str                       # e.g. "Jan 2022" or "2022-01"
-    end: Optional[str] = None        # None means Present
-    location: Optional[str] = None
+    end: str | None = None        # None means Present
+    location: str | None = None
     bullets: list[str] = Field(default_factory=list)
     tech: list[str] = Field(default_factory=list)
 
@@ -74,7 +73,7 @@ class Project(BaseModel):
     description: str
     bullets: list[str] = Field(default_factory=list)
     tech: list[str] = Field(default_factory=list)
-    url: Optional[str] = None
+    url: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -94,9 +93,9 @@ class Project(BaseModel):
 class Education(BaseModel):
     institution: str
     degree: str
-    field: Optional[str] = None
-    graduation: Optional[str] = None  # e.g. "May 2020"
-    gpa: Optional[str] = None
+    field: str | None = None
+    graduation: str | None = None  # e.g. "May 2020"
+    gpa: str | None = None
     notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
@@ -116,14 +115,14 @@ class Education(BaseModel):
 
 class Certification(BaseModel):
     name: str
-    issuer: Optional[str] = None
-    date: Optional[str] = None
-    url: Optional[str] = None
+    issuer: str | None = None
+    date: str | None = None
+    url: str | None = None
 
 
 class UserResume(BaseModel):
     personal: PersonalInfo
-    summary: Optional[str] = None
+    summary: str | None = None
     experience: list[Role] = Field(default_factory=list)
     projects: list[Project] = Field(default_factory=list)
     education: list[Education] = Field(default_factory=list)
@@ -225,14 +224,14 @@ class UserResume(BaseModel):
 class JobDescription(BaseModel):
     company: str
     role_title: str
-    seniority: Optional[str] = None       # e.g. "Senior", "Staff", "Lead"
-    location: Optional[str] = None
-    remote_policy: Optional[str] = None   # "Remote", "Hybrid", "On-site"
+    seniority: str | None = None       # e.g. "Senior", "Staff", "Lead"
+    location: str | None = None
+    remote_policy: str | None = None   # "Remote", "Hybrid", "On-site"
     must_have_skills: list[str] = Field(default_factory=list)
     nice_to_have_skills: list[str] = Field(default_factory=list)
     responsibilities: list[str] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)
-    raw_text: Optional[str] = None
+    raw_text: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -283,7 +282,7 @@ class Question(BaseModel):
 class Suggestion(BaseModel):
     id: str               # e.g. "s1", "s2"
     section: str          # "experience" | "summary" | "skills" | "projects"
-    role_company: Optional[str] = None   # Which role this applies to, if experience
+    role_company: str | None = None   # Which role this applies to, if experience
     before: str           # Original text
     after: str            # Suggested improved text
     rationale: str        # 1-line reason

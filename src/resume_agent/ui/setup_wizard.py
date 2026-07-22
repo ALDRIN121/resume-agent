@@ -12,15 +12,22 @@ from __future__ import annotations
 
 import os
 import urllib.parse
-from typing import Optional
 
 import questionary
-from questionary import Choice, Style as QStyle
-
+from questionary import Choice
+from questionary import Style as QStyle
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
-from rich.table import Table
+
+from ..config import (
+    CONFIG_DIR,
+    CONFIG_FILE,
+    SECRETS_FILE,
+    ResumeAgentSettings,
+)
+from .console import console
+from .panels import print_error, print_success, print_warning
 
 _Q_STYLE = QStyle([
     ("qmark",        "fg:cyan bold"),
@@ -32,17 +39,6 @@ _Q_STYLE = QStyle([
     ("separator",    "fg:grey"),
     ("instruction",  "fg:grey italic"),
 ])
-
-from ..config import (
-    CONFIG_DIR,
-    CONFIG_FILE,
-    ModelConfig,
-    ResumeAgentSettings,
-    SECRETS_FILE,
-)
-from .console import console
-from .panels import print_error, print_info, print_success, print_warning
-
 
 # ── Provider / model catalogues ────────────────────────────────────────────────
 
@@ -94,7 +90,7 @@ _KEY_URL: dict[str, str] = {
 
 # ── Public entry point ─────────────────────────────────────────────────────────
 
-def run_setup_wizard(existing: Optional[ResumeAgentSettings] = None) -> ResumeAgentSettings:
+def run_setup_wizard(existing: ResumeAgentSettings | None = None) -> ResumeAgentSettings:
     """
     Run the interactive provider-setup wizard.
 
@@ -155,7 +151,7 @@ def run_setup_wizard(existing: Optional[ResumeAgentSettings] = None) -> ResumeAg
 
 # ── Step helpers ───────────────────────────────────────────────────────────────
 
-def _ask_provider(existing: Optional[ResumeAgentSettings]) -> tuple[str, bool]:
+def _ask_provider(existing: ResumeAgentSettings | None) -> tuple[str, bool]:
     """Arrow-key provider selection. Returns (provider_id, is_remote_ollama)."""
     default_idx = 0
     if existing:
@@ -188,14 +184,14 @@ def _ask_provider(existing: Optional[ResumeAgentSettings]) -> tuple[str, bool]:
 def _ask_credentials(
     provider: str,
     is_remote: bool,
-    existing: Optional[ResumeAgentSettings],
-) -> tuple[Optional[str], str]:
+    existing: ResumeAgentSettings | None,
+) -> tuple[str | None, str]:
     """
     Ask for API key (keyed providers) or Ollama URL (ollama).
     Returns (api_key_or_None, ollama_base_url).
     """
     console.print()
-    api_key: Optional[str] = None
+    api_key: str | None = None
     base_url = "http://localhost:11434"
 
     if provider in _KEY_ENV:
@@ -288,9 +284,9 @@ def _ask_model(
     label: str,
     candidates: list[str],
     *,
-    fallback: Optional[str],
+    fallback: str | None,
     base_url: str = "http://localhost:11434",
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> str:
     """Arrow-key model selection, returns the chosen model name."""
     console.print()
@@ -300,7 +296,7 @@ def _ask_model(
         if live:
             candidates = live
 
-    _CUSTOM = "__custom__"
+    _CUSTOM = "__custom__"  # noqa: N806
     choices = [
         Choice(title=f"{name}  (recommended)" if i == 0 else name, value=name)
         for i, name in enumerate(candidates)
@@ -335,10 +331,10 @@ def _ask_model(
 def _ask_vision(
     provider: str,
     default_model: str,
-    existing: Optional[ResumeAgentSettings],
+    existing: ResumeAgentSettings | None,
     *,
     base_url: str = "http://localhost:11434",
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> tuple[bool, str]:
     """Ask whether to enable PDF vision validation and choose the model."""
     console.print()
@@ -376,13 +372,13 @@ def _ask_vision(
 
 def _apply_and_save(
     *,
-    existing: Optional[ResumeAgentSettings],
+    existing: ResumeAgentSettings | None,
     provider: str,
-    api_key: Optional[str],
+    api_key: str | None,
     base_url: str,
     default_model: str,
     vision_model: str,
-) -> Optional[ResumeAgentSettings]:
+) -> ResumeAgentSettings | None:
     """Build the settings object, run a live LLM test, then persist.
 
     Returns the saved settings on success, or None if the LLM test fails
@@ -446,7 +442,7 @@ def _test_llm(settings: ResumeAgentSettings) -> bool:
         return False
 
 
-def _fetch_ollama_models(base_url: str, *, api_key: Optional[str] = None) -> list[str]:
+def _fetch_ollama_models(base_url: str, *, api_key: str | None = None) -> list[str]:
     """Query Ollama /api/tags to get the list of installed models."""
     try:
         import httpx

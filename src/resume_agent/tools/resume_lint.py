@@ -125,7 +125,7 @@ _PAST_TENSE_VERBS = frozenset({
 
 # ── Individual checks ──────────────────────────────────────────────────────────
 
-def metric_density(resume: "UserResume") -> list[LintIssue]:
+def metric_density(resume: UserResume) -> list[LintIssue]:
     """Warn/fail when too many bullets contain a numeric metric."""
     all_bullets = [b for role in resume.experience for b in role.bullets]
     all_bullets += [b for proj in resume.projects for b in proj.bullets]
@@ -155,7 +155,7 @@ def metric_density(resume: "UserResume") -> list[LintIssue]:
     return []
 
 
-def apostrophe_audit(resume: "UserResume") -> list[LintIssue]:
+def apostrophe_audit(resume: UserResume) -> list[LintIssue]:
     """Detect likely dropped apostrophes in possessive constructions."""
     issues: list[LintIssue] = []
     all_text = _collect_all_text(resume)
@@ -175,7 +175,7 @@ def apostrophe_audit(resume: "UserResume") -> list[LintIssue]:
     return issues
 
 
-def tense_audit(resume: "UserResume") -> list[LintIssue]:
+def tense_audit(resume: UserResume) -> list[LintIssue]:
     """Warn when current-role bullets use past tense or past-role bullets use present."""
     issues: list[LintIssue] = []
     for role in resume.experience:
@@ -203,7 +203,7 @@ def tense_audit(resume: "UserResume") -> list[LintIssue]:
     return issues
 
 
-def verb_audit(resume: "UserResume") -> list[LintIssue]:
+def verb_audit(resume: UserResume) -> list[LintIssue]:
     """Warn on bullets starting with weak/banned openers."""
     issues: list[LintIssue] = []
     all_bullets = [
@@ -226,7 +226,7 @@ def verb_audit(resume: "UserResume") -> list[LintIssue]:
     return issues
 
 
-def unicode_quote_scan(resume: "UserResume") -> list[LintIssue]:
+def unicode_quote_scan(resume: UserResume) -> list[LintIssue]:
     """Fail when smart-quote / em-dash characters are present (should be ASCII)."""
     issues: list[LintIssue] = []
     all_text = _collect_all_text(resume)
@@ -247,7 +247,7 @@ def unicode_quote_scan(resume: "UserResume") -> list[LintIssue]:
     return issues
 
 
-def buzzword_density(resume: "UserResume") -> list[LintIssue]:
+def buzzword_density(resume: UserResume) -> list[LintIssue]:
     """Warn when buzzwords make up more than 25% of summary word count."""
     if not resume.summary:
         return []
@@ -270,7 +270,7 @@ def buzzword_density(resume: "UserResume") -> list[LintIssue]:
     return []
 
 
-def github_present(resume: "UserResume") -> list[LintIssue]:
+def github_present(resume: UserResume) -> list[LintIssue]:
     """Warn when a senior-level candidate has no GitHub profile."""
     has_senior_keywords = any(
         kw in (resume.personal.headline or "").lower()
@@ -289,7 +289,7 @@ def github_present(resume: "UserResume") -> list[LintIssue]:
     return []
 
 
-def certification_dates(resume: "UserResume") -> list[LintIssue]:
+def certification_dates(resume: UserResume) -> list[LintIssue]:
     """Warn when certifications are missing dates, without raw Pydantic warnings."""
     issues: list[LintIssue] = []
     for cert in resume.certifications:
@@ -307,7 +307,7 @@ def certification_dates(resume: "UserResume") -> list[LintIssue]:
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-def lint_resume(resume: "UserResume") -> LintResult:
+def lint_resume(resume: UserResume) -> LintResult:
     """Run all deterministic checks and return the aggregated result."""
     result = LintResult()
     checks = [
@@ -327,7 +327,7 @@ def lint_resume(resume: "UserResume") -> LintResult:
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def normalize_ascii_punctuation(resume: "UserResume") -> tuple["UserResume", bool]:
+def normalize_ascii_punctuation(resume: UserResume) -> tuple[UserResume, bool]:
     """
     Return a copy with smart quotes/dashes normalized to ASCII punctuation.
 
@@ -352,7 +352,7 @@ def _normalize_value(value):
         return {key: _normalize_value(val) for key, val in value.items()}
     return value
 
-def _collect_all_text(resume: "UserResume") -> list[str]:
+def _collect_all_text(resume: UserResume) -> list[str]:
     """Return all free-text strings from the resume (bullets, summary, descriptions)."""
     texts: list[str] = []
     if resume.summary:

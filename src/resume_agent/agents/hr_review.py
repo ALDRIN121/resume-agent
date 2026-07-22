@@ -9,7 +9,7 @@ Enabled by default; disable with enable_hr_review=false in config.yaml.
 
 from __future__ import annotations
 
-from typing import Optional, cast
+from typing import cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
@@ -24,7 +24,7 @@ from ..ui.panels import print_agent_step, print_info, print_warning
 class HRReviewScore(BaseModel):
     name: str               # score name
     score: float            # 0.0 – 1.0 (1.0 = best)
-    note: Optional[str] = None  # brief explanation when below threshold
+    note: str | None = None  # brief explanation when below threshold
 
 
 class HRReviewResult(BaseModel):
@@ -34,7 +34,7 @@ class HRReviewResult(BaseModel):
     tense_consistency_ok: bool = True
     overall_pass: bool = True
     scores: list[HRReviewScore] = Field(default_factory=list)
-    feedback: Optional[str] = None  # combined feedback for generator retry
+    feedback: str | None = None  # combined feedback for generator retry
 
 
 # ── Prompts ────────────────────────────────────────────────────────────────────

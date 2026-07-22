@@ -6,7 +6,6 @@ import json
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
 
 GITHUB_REPO = "ALDRIN121/resume-agent"
 _CACHE_FILE_NAME = ".update_cache.json"
@@ -18,7 +17,7 @@ def _cache_file() -> Path:
     return CONFIG_DIR / _CACHE_FILE_NAME
 
 
-def _find_repo_root() -> Optional[Path]:
+def _find_repo_root() -> Path | None:
     """
     Find the git repo root.
 
@@ -55,7 +54,7 @@ def _find_repo_root() -> Optional[Path]:
     return None
 
 
-def _get_local_sha() -> Optional[str]:
+def _get_local_sha() -> str | None:
     repo = _find_repo_root()
     if not repo:
         return None
@@ -71,7 +70,7 @@ def _get_local_sha() -> Optional[str]:
     return None
 
 
-def _get_cached_remote_sha() -> Optional[str]:
+def _get_cached_remote_sha() -> str | None:
     f = _cache_file()
     if not f.exists():
         return None
@@ -96,7 +95,7 @@ def _save_remote_sha(sha: str) -> None:
         pass
 
 
-def _fetch_remote_sha() -> Optional[str]:
+def _fetch_remote_sha() -> str | None:
     """Query GitHub API for the latest commit SHA on main."""
     try:
         import httpx
@@ -112,7 +111,7 @@ def _fetch_remote_sha() -> Optional[str]:
     return None
 
 
-def check_for_update() -> Optional[str]:
+def check_for_update() -> str | None:
     """
     Non-blocking startup check.
     Returns a hint string if an update is available, None if up-to-date or check failed.
@@ -185,6 +184,6 @@ def perform_update(repo: Path) -> tuple[bool, str, str, bool]:
     return False, "", combined, False
 
 
-def _find_uv() -> Optional[str]:
+def _find_uv() -> str | None:
     import shutil as _sh
     return _sh.which("uv")
