@@ -1,7 +1,8 @@
 import React from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
-import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, pdfUrl, uploadJdFile } from "./api/client.js";
+import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, pdfUrl, uploadJdFile, detectProviders } from "./api/client.js";
+import { startOpenRouterSignIn } from "./api/openrouter-oauth.js";
 import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS, PARSE_STAGES } from "./data.jsx";
 
 // Fetch the live provider catalogue (A4); fall back to the static data.jsx
@@ -482,6 +483,18 @@ const SetupWizard = ({ goto, startParse, parsing }) => {
   const [testing, setTesting] = React.useState(null); // null | "running" | "ok" | "fail"
   const [testResult, setTestResult] = React.useState(null);
   const [doctor, setDoctor] = React.useState(null);
+  const [detected, setDetected] = React.useState([]);
+
+  // Detect LLMs already usable on this machine (env keys, local Ollama) so we can
+  // offer one-click "use this" cards instead of manual setup.
+  React.useEffect(() => {
+    detectProviders().then(r => setDetected(r.detected || [])).catch(() => {});
+  }, []);
+
+  const useDetected = async (d) => {
+    await updateSettings({ provider: d.providerId, default_model: d.defaultModel }).catch(() => {});
+    goto("dashboard");
+  };
 
   // Seed from the real configured provider rather than always Anthropic (C6).
   React.useEffect(() => {
@@ -589,7 +602,47 @@ const SetupWizard = ({ goto, startParse, parsing }) => {
           {/* STEP 1 — PROVIDER */}
           {step === 1 && (
             <div>
-              <SectionHeader eyebrow={`Step 1 of ${TOTAL} · Provider`} title="Pick a model provider" sub="Any of these work — you can change later in Settings."/>
+              {/* One-click: sign in with OpenRouter (OAuth) — no key, no picking. */}
+              <div style={{
+                border: "1px solid var(--accent)", background: "var(--accent-soft)",
+                borderRadius: "var(--radius-md)", padding: 16, marginBottom: 18,
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap",
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>Fastest: Sign in with OpenRouter</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
+                    One click sets up your LLM — no API key to paste. Free models work with no card; add credit for premium models.
+                  </div>
+                </div>
+                <Button variant="primary" iconRight="arrow-right" onClick={() => startOpenRouterSignIn()}>Sign in with OpenRouter</Button>
+              </div>
+
+              {/* Anything already usable on this machine → one-click confirm. */}
+              {detected.length > 0 && (
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Found on your machine</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                    {detected.map(d => (
+                      <div key={d.providerId} style={{
+                        padding: 14, borderRadius: "var(--radius-md)",
+                        background: "var(--surface)", border: "1px solid var(--border)",
+                        display: "flex", flexDirection: "column", gap: 8,
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{d.label}</div>
+                          <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
+                            {d.source === "local" ? "Running locally" : "Credential detected"}
+                            {d.defaultModel ? <> · <span className="mono">{d.defaultModel}</span></> : null}
+                          </div>
+                        </div>
+                        <Button size="sm" variant="secondary" onClick={() => useDetected(d)}>Use this</Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <SectionHeader eyebrow={`Step 1 of ${TOTAL} · Provider`} title="Or set one up yourself" sub="Any of these work — you can change later in Settings."/>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10, marginBottom: 8 }}>
                 {providers.map(p => (
                   <button key={p.id} onClick={() => selectProvider(p.id)}

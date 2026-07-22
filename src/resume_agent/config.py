@@ -80,7 +80,7 @@ class UIConfig(BaseModel):
 # ── Main Settings ──────────────────────────────────────────────────────────────
 
 class ResumeAgentSettings(BaseSettings):
-    provider: Literal["anthropic", "openai", "ollama", "gemini", "nvidia"] = "ollama"
+    provider: Literal["anthropic", "openai", "ollama", "gemini", "nvidia", "openrouter"] = "ollama"
     model: ModelConfig = Field(default_factory=ModelConfig)
     scraping: ScrapingConfig = Field(default_factory=ScrapingConfig)
     latex: LatexConfig = Field(default_factory=LatexConfig)
@@ -95,8 +95,10 @@ class ResumeAgentSettings(BaseSettings):
     gemini_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
     nvidia_api_key: Optional[str] = Field(default=None, alias="NVIDIA_API_KEY")
     ollama_api_key: Optional[str] = Field(default=None, alias="OLLAMA_API_KEY")
+    openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     nvidia_base_url: str = Field(default="", alias="NVIDIA_BASE_URL")
+    openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL")
 
     model_config = SettingsConfigDict(
         env_prefix="RESUME_GENERATOR_",
@@ -126,7 +128,7 @@ class ResumeAgentSettings(BaseSettings):
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         # Never write secrets into the YAML — they live in SECRETS_FILE
         data = self.model_dump(
-            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key"},
+            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key", "openrouter_api_key"},
         )
         CONFIG_FILE.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
 
@@ -138,11 +140,12 @@ class ResumeAgentSettings(BaseSettings):
         """Return True if a config file exists and the provider key (if needed) is present."""
         if not CONFIG_FILE.exists():
             return False
-        if self.provider in ("anthropic", "openai", "gemini", "nvidia"):
+        if self.provider in ("anthropic", "openai", "gemini", "nvidia", "openrouter"):
             return bool(
                 self.anthropic_api_key
                 or self.openai_api_key
                 or self.gemini_api_key
                 or self.nvidia_api_key
+                or self.openrouter_api_key
             )
         return True   # ollama needs no key

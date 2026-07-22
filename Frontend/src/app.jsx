@@ -5,7 +5,8 @@ import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView
 import { LiveRunView } from "./live-run.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PARSE_STAGES, PROVIDERS } from "./data.jsx";
-import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume } from "./api/client.js";
+import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume, exchangeOpenRouter } from "./api/client.js";
+import { consumeOpenRouterCallback } from "./api/openrouter-oauth.js";
 import { subscribeResumeParse } from "./api/ws.js";
 
 // True when the viewport is narrow enough that the sidebar should collapse into
@@ -191,6 +192,38 @@ const HitlToast = ({ toast, onClose, onOpenRun }) => {
           <Button size="sm" variant="primary" onClick={() => onOpenRun(toast)}>{m.action}</Button>
           <Button size="sm" variant="ghost" onClick={onClose}>Dismiss</Button>
         </div>
+      </div>
+      <IconButton name="x" label="Close" onClick={onClose}/>
+    </div>
+  );
+};
+
+// Slide-in banner reporting the OpenRouter "Sign in" (OAuth) outcome.
+const OpenRouterSignInBanner = ({ status, onClose }) => {
+  if (!status) return null;
+  const isError = status.state === "error";
+  const label = status.state === "working"
+    ? "Connecting to OpenRouter…"
+    : status.state === "done"
+      ? `Signed in — using ${status.provider}`
+      : "OpenRouter sign-in failed";
+  return (
+    <div style={{
+      position: "fixed", bottom: 24, right: 24, zIndex: 96,
+      width: 380, maxWidth: "calc(100vw - 48px)",
+      background: "var(--surface)",
+      border: "1px solid " + (isError ? "var(--danger, #e5484d)" : "var(--border)"),
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-lg)",
+      padding: 14,
+      display: "grid", gridTemplateColumns: "1fr auto", gap: 12,
+      animation: "toast-in 320ms cubic-bezier(.2,.7,.3,1)",
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+        {isError && (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>{status.error}</div>
+        )}
       </div>
       <IconButton name="x" label="Close" onClick={onClose}/>
     </div>
@@ -922,12 +955,32 @@ export const App = () => {
     try { localStorage.setItem("rg.doctorDismissed", doctorDismissed ? "1" : "0"); } catch {}
   }, [doctorDismissed]);
 
+  const [orStatus, setOrStatus] = useState(null); // OpenRouter sign-in: null | {state, ...}
+
   useEffect(() => {
     getSettings().then(s => {
       setAppSettings(s);
       if (!bootTweaks && s.uiTheme) setTweak({ theme: s.uiTheme, accent: s.uiAccent, density: s.uiDensity });
       uiSyncReady.current = true;
     }).catch(() => { uiSyncReady.current = true; });
+  }, []);
+
+  // Finish the OpenRouter OAuth flow if we've just been redirected back with a code.
+  useEffect(() => {
+    const cb = consumeOpenRouterCallback();
+    if (!cb) return;
+    setOrStatus({ state: "working" });
+    exchangeOpenRouter(cb)
+      .then(r => {
+        if (r.ok) {
+          setAppSettings(r.settings);
+          setOrStatus({ state: "done", provider: r.settings?.providerName || "OpenRouter" });
+          setTimeout(() => setOrStatus(null), 6000);
+        } else {
+          setOrStatus({ state: "error", error: r.error || "Sign-in failed." });
+        }
+      })
+      .catch(e => setOrStatus({ state: "error", error: e.message }));
   }, []);
   useEffect(() => { runDoctor().then(setDoctor).catch(() => setDoctor(null)); }, []);
 
@@ -1125,6 +1178,7 @@ export const App = () => {
 
       <CommandPalette open={cmdK} onClose={() => setCmdK(false)} goto={goto} openRun={openRun} lastRun={lastRun}/>
       <HitlToast toast={toast} onClose={() => setToast(null)} onOpenRun={openRunFromNotif}/>
+      <OpenRouterSignInBanner status={orStatus} onClose={() => setOrStatus(null)}/>
       <ReplaceBaseResumeModal open={replaceOpen} onClose={() => setReplaceOpen(false)} onUpload={startParse}/>
       <BaseResumeParseModal
         parsing={parsing && parsing.modalOpen ? parsing : null}
