@@ -62,6 +62,11 @@ export const testConnection = (settings) => request("/api/settings/test-connecti
   body: JSON.stringify(settings),
 });
 export const runDoctor = () => request("/api/settings/doctor", { method: "POST" });
+export const detectProviders = () => request("/api/settings/detect");
+export const exchangeOpenRouter = ({ code, codeVerifier }) => request("/api/auth/openrouter/exchange", {
+  method: "POST",
+  body: JSON.stringify({ code, code_verifier: codeVerifier }),
+});
 
 export const pdfUrl = (threadId) => `${API_BASE}/api/runs/${threadId}/pdf`;
 

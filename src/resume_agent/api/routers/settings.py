@@ -16,6 +16,8 @@ from ...ui import setup_wizard
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+_PROVIDER_DISPLAY_NAMES = {"ollama": "Ollama", "openrouter": "OpenRouter", "nvidia": "NVIDIA"}
+
 
 class SettingsUpdate(BaseModel):
     provider: str | None = None
@@ -100,11 +102,13 @@ async def test_connection(request: TestConnectionRequest) -> dict[str, Any]:
             "reply": str(response.content).strip()[:120],
         }
     except Exception as exc:
+        from ...llm import describe_llm_error
+
         return {
             "ok": False,
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "reply": "",
-            "error": str(exc),
+            "error": describe_llm_error(exc),
         }
 
 
@@ -153,12 +157,58 @@ async def doctor() -> dict[str, Any]:
     return {"ok": all(item["ok"] for item in checks), "checks": checks}
 
 
+@router.get("/detect")
+async def detect_providers() -> dict[str, Any]:
+    """Detect LLMs that are already usable so onboarding can offer one-click setup.
+
+    Priority: an API key already present in the environment/.env first, then a
+    locally-running Ollama. The frontend shows these as "use this" confirm cards.
+    """
+    settings = ResumeAgentSettings.load()
+    detected: list[dict[str, Any]] = []
+
+    # 1) Keyed providers whose credential is already available (openrouter first).
+    for provider in ("openrouter", "anthropic", "openai", "gemini", "nvidia"):
+        env_name = setup_wizard._KEY_ENV.get(provider, "")
+        has_key = bool(getattr(settings, f"{provider}_api_key", None) or os.environ.get(env_name))
+        if has_key:
+            models = setup_wizard._MODELS.get(provider, [])
+            detected.append(
+                {
+                    "provider": provider,
+                    "providerId": _frontend_provider_id(provider, False),
+                    "label": _PROVIDER_DISPLAY_NAMES.get(provider, provider.title()),
+                    "source": "env",
+                    "defaultModel": models[0] if models else "",
+                    "models": models,
+                }
+            )
+
+    # 2) Local Ollama, if the daemon answers on its base URL.
+    ollama_models = setup_wizard._fetch_ollama_models(
+        settings.ollama_base_url, api_key=settings.ollama_api_key
+    )
+    if ollama_models:
+        detected.append(
+            {
+                "provider": "ollama",
+                "providerId": "ollama_local",
+                "label": "Ollama (local)",
+                "source": "local",
+                "defaultModel": ollama_models[0],
+                "models": ollama_models,
+            }
+        )
+
+    return {"detected": detected}
+
+
 def _settings_payload(settings: ResumeAgentSettings) -> dict[str, Any]:
     provider_id = _frontend_provider_id(settings.provider, False)
     return {
         "provider": settings.provider,
         "providerId": provider_id,
-        "providerName": settings.provider.title() if settings.provider != "ollama" else "Ollama",
+        "providerName": _PROVIDER_DISPLAY_NAMES.get(settings.provider, settings.provider.title()),
         "defaultModel": settings.model.default,
         "visionModel": settings.model.vision,
         "visionEnabled": bool(settings.model.vision),
@@ -226,6 +276,7 @@ def _settings_with_secret(settings: ResumeAgentSettings, api_key: str) -> Resume
         "anthropic": "anthropic_api_key",
         "openai": "openai_api_key",
         "ollama": "ollama_api_key",
+        "openrouter": "openrouter_api_key",
     }.get(settings.provider)
     return settings.model_copy(update={field: api_key}) if field else settings
 

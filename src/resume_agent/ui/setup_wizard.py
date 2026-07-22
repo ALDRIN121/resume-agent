@@ -48,6 +48,7 @@ from .panels import print_error, print_info, print_success, print_warning
 
 # (provider_id, display_label, description, is_remote_ollama)
 _PROVIDERS: list[tuple[str, str, str, bool]] = [
+    ("openrouter", "OpenRouter",       "Free models · one-click sign-in · openrouter.ai", False),
     ("gemini",    "Gemini (Google)",   "Free tier · aistudio.google.com/apikey",  False),
     ("nvidia",    "NVIDIA NIM",        "Free tier · build.nvidia.com",            False),
     ("ollama",    "Ollama — local",    "Free, no internet required",              False),
@@ -57,6 +58,7 @@ _PROVIDERS: list[tuple[str, str, str, bool]] = [
 ]
 
 _MODELS: dict[str, list[str]] = {
+    "openrouter": ["nvidia/nemotron-3-super-120b-a12b:free", "openai/gpt-oss-20b:free", "google/gemma-4-31b-it:free", "anthropic/claude-sonnet-4-6", "openai/gpt-5.4-mini"],
     "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
     "nvidia":    ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
     "anthropic": ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
@@ -65,6 +67,7 @@ _MODELS: dict[str, list[str]] = {
 }
 
 _VISION: dict[str, list[str]] = {
+    "openrouter": ["google/gemma-4-31b-it:free", "nvidia/nemotron-nano-12b-v2-vl:free", "anthropic/claude-sonnet-4-6"],
     "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro"],
     "nvidia":    ["meta/llama-3.2-11b-vision-instruct", "microsoft/phi-3.5-vision-instruct"],
     "anthropic": ["claude-opus-4-8", "claude-sonnet-4-6"],
@@ -73,6 +76,7 @@ _VISION: dict[str, list[str]] = {
 }
 
 _KEY_ENV: dict[str, str] = {
+    "openrouter": "OPENROUTER_API_KEY",
     "gemini":    "GOOGLE_API_KEY",
     "nvidia":    "NVIDIA_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
@@ -80,6 +84,7 @@ _KEY_ENV: dict[str, str] = {
 }
 
 _KEY_URL: dict[str, str] = {
+    "openrouter": "openrouter.ai/keys",
     "gemini":    "aistudio.google.com/apikey",
     "nvidia":    "build.nvidia.com",
     "anthropic": "console.anthropic.com",
