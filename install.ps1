@@ -77,12 +77,42 @@ if ($userPath -notlike "*$uvToolBin*") {
     Write-Host ""
 }
 
+$rgCmd = Get-Command resume-generator -ErrorAction SilentlyContinue
+if ($rgCmd) {
+    $RG_BIN = $rgCmd.Source
+} else {
+    $RG_BIN = "$uvToolBin\resume-generator.exe"
+}
+
+# ── 6. Install system dependencies (Tectonic + Poppler) ───────────────────────
+Write-Step "Installing Tectonic and Poppler (PDF generation tools)..."
+try {
+    & $RG_BIN install-deps
+} catch {
+    Write-Warn "Some dependencies could not be installed automatically. You can retry later with: resume-generator install-deps"
+}
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Next steps:"
-Write-Host "    1.  resume-generator doctor       # verify Tectonic and Poppler are installed"
-Write-Host "    2.  resume-generator install-deps # install missing tools automatically"
-Write-Host "    3.  resume-generator              # first-time setup (choose AI provider)"
-Write-Host ""
+
+# ── 7. Launch the web UI ───────────────────────────────────────────────────────
+if ((Test-Path $RG_BIN) -and [Environment]::UserInteractive) {
+    Write-Host "  Starting the web UI at http://127.0.0.1:8000 ..."
+    Write-Host "  Pick your AI provider and enter your API key on the Settings page."
+    Write-Host "  Press Ctrl+C to stop the server."
+    Write-Host ""
+    Start-Job -ScriptBlock {
+        Start-Sleep -Seconds 3
+        Start-Process "http://127.0.0.1:8000"
+    } | Out-Null
+    & $RG_BIN serve
+} else {
+    Write-Host "  Next steps:"
+    Write-Host "    1.  resume-generator serve   # launch the web UI at http://127.0.0.1:8000"
+    Write-Host "    2.  resume-generator doctor  # verify Tectonic and Poppler are installed"
+    Write-Host ""
+    Write-Host "  To get future updates:  resume-generator update  (or re-run this installer)"
+    Write-Host ""
+}

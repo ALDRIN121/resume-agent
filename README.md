@@ -31,103 +31,51 @@ Two ways to drive it: a **CLI** (the primary interface) and an **optional local 
 
 ---
 
-## Requirements
+## Get started in one line
 
-Before installing, you need these tools on your computer:
+Paste one command. It installs everything and opens the app in your browser.
 
-| What | Why you need it | How to install |
-|------|----------------|----------------|
-| **Python 3.12+** | Runs the tool | [python.org/downloads](https://python.org/downloads) |
-| **Git** | Downloads and updates the project | [git-scm.com/downloads](https://git-scm.com/downloads) |
-| **uv** | Installs the CLI and Python dependencies | The installer adds it automatically if missing |
-| **Tectonic** | Converts the resume to PDF (a LaTeX compiler) | See below |
-| **Poppler** | Reads PDF pages as images so the AI can check the layout | See below |
-
-You also need an API key for at least one AI provider, unless you use local Ollama. The easiest free cloud options are **Google Gemini** (no credit card) and **NVIDIA NIM** (free tier, no credit card).
-
-> **Note:** The one-line installers install `uv` for you, but they do not install Python, Git, Tectonic, or Poppler. If `resume-generator doctor` reports missing tools, follow the hints it prints.
-
-### Installing Tectonic and Poppler
-
-**macOS:**
-```bash
-brew install tectonic poppler
-```
-
-**Ubuntu / Debian:**
-```bash
-sudo apt install tectonic poppler-utils
-```
-
-**Arch Linux:**
-```bash
-sudo pacman -S tectonic poppler
-```
-
-**Fedora / RHEL / CentOS:**
-```bash
-sudo dnf install tectonic poppler-utils
-```
-
-**Windows (via Scoop — recommended):**
-```powershell
-# Install Scoop first (if you don't have it):
-irm get.scoop.sh | iex
-
-# Then install both tools:
-scoop install tectonic poppler
-```
-
-> **Tip:** `resume-generator install-deps` can install both automatically if Scoop is already on your machine. Tectonic downloads font packages from the internet on its **first run** — this can take 2–5 minutes on Windows, which is normal. Subsequent runs are fast.
-
-> **Note:** `winget install TectonicProject.Tectonic` is not available in the winget catalog — use Scoop instead.
-
----
-
-## Installation
-
-### Mac / Linux (one-liner)
-
+**Mac / Linux:**
 ```bash
 curl -sSL https://raw.githubusercontent.com/ALDRIN121/resume-agent/main/install.sh | bash
 ```
 
-This script: checks for `uv` (installs it if missing), clones the repo, and installs the `resume-generator` command.
-
-### Windows (PowerShell one-liner)
-
+**Windows (PowerShell):**
 ```powershell
 irm https://raw.githubusercontent.com/ALDRIN121/resume-agent/main/install.ps1 | iex
 ```
 
-### Manual installation (any OS)
+That single command:
+1. Installs `uv` (a Python package manager) if you don't already have it — `uv` also manages the right Python version for you, so there's nothing else to install there.
+2. Clones the repo and installs the `resume-generator` CLI.
+3. Installs **Tectonic** and **Poppler** (the PDF tools) automatically for your OS.
+4. Opens the web UI at **http://127.0.0.1:8000**, where you pick an AI provider and paste your API key on the Settings page.
+
+The only thing you need beforehand is **Git** ([git-scm.com/downloads](https://git-scm.com/downloads)). Prefer the terminal instead of the browser? See the [Quickstart](#quickstart) below. Want to see every step, or install without the script? See [Manual installation & requirements](#manual-installation--requirements).
+
+---
+
+## Updating
+
+When new code is pushed to GitHub, pull it in with one command:
 
 ```bash
-# 1. Install uv (Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh   # Mac/Linux
-# Windows: irm https://astral.sh/uv/install.ps1 | iex
-
-# 2. Clone the repo
-git clone https://github.com/ALDRIN121/resume-agent.git
-cd resume-agent
-
-# 3. Install the CLI
-uv tool install .
+resume-generator update
 ```
 
-After installation, `resume-generator` should be available in your terminal. If not, add the uv tools directory to your PATH:
+This pulls the latest changes from GitHub and reinstalls the CLI. If you're already on the latest version, it tells you so. Re-running the one-liner above does the same thing — it detects the existing install and updates it in place instead of cloning again.
 
-- **Mac/Linux:** `~/.local/bin`
-- **Windows (PowerShell):**
-  ```powershell
-  $env:PATH += ";$env:APPDATA\uv\bin"
-  [System.Environment]::SetEnvironmentVariable('PATH', "$env:PATH", 'User')
-  ```
-  Then open a new terminal.
+If the web UI is running, stop it (Ctrl+C) and run `resume-generator serve` again afterwards to pick up the update.
+
+Run `resume-generator doctor` once the update finishes to confirm everything still works.
+
+> **Windows:** if the update reports the CLI executable is locked, open a **new** terminal window, `cd` into the install directory it prints, and run `uv tool install . --force`.
 
 ---
 
 ## Quickstart
+
+This is the CLI-driven flow. If you used the one-liner above, the web UI is already open in your browser — configure your provider and generate resumes there instead, and skip straight to [First-time setup in detail](#first-time-setup-in-detail) if you just need the provider/API-key steps.
 
 ### Mac / Linux
 
@@ -244,6 +192,8 @@ Prefer a browser to the terminal? Launch the bundled local web app:
 resume-generator serve            # serves on http://127.0.0.1:8000
 resume-generator serve --port 9000
 ```
+
+If you installed with the one-liner, this already ran automatically and a browser tab should have opened for you.
 
 It runs a FastAPI backend plus a pre-built React frontend entirely on your machine — there is no hosted service and no telemetry. The UI covers the same flow as the CLI: configure your provider, upload/parse a base resume, paste or upload a job description (`.txt`/`.pdf`), watch the pipeline stream live (with the human-in-the-loop questions and suggestion review inline), and download the generated PDF. A dashboard tracks runs per company, and appearance (theme/accent/density) is remembered across reloads.
 
@@ -449,15 +399,83 @@ Input (text / URL)
 
 ---
 
-## Updating
+## Manual installation & requirements
 
+Prefer to see every step, or need to install without the one-liner (e.g. no internet access to raw.githubusercontent.com)? Here's what it does under the hood, plus the underlying requirements.
+
+If the `update` command can't find the repo (e.g., you moved the install folder), re-run the one-liner installer instead — it will pull the latest code and reinstall in one step.
+
+### Requirements
+
+| What | Why you need it | How to install |
+|------|----------------|----------------|
+| **Python 3.12+** | Runs the tool | [python.org/downloads](https://python.org/downloads) |
+| **Git** | Downloads and updates the project | [git-scm.com/downloads](https://git-scm.com/downloads) |
+| **uv** | Installs the CLI and Python dependencies | The installer adds it automatically if missing |
+| **Tectonic** | Converts the resume to PDF (a LaTeX compiler) | See below |
+| **Poppler** | Reads PDF pages as images so the AI can check the layout | See below |
+
+You also need an API key for at least one AI provider, unless you use local Ollama. The easiest free cloud options are **Google Gemini** (no credit card) and **NVIDIA NIM** (free tier, no credit card).
+
+### Installing Tectonic and Poppler manually
+
+**macOS:**
 ```bash
-resume-generator update
+brew install tectonic poppler
 ```
 
-This pulls the latest code from GitHub and reinstalls the tool. If you're already on the latest version it will tell you so. Run `doctor` afterwards to make sure everything still works.
+**Ubuntu / Debian:**
+```bash
+sudo apt install tectonic poppler-utils
+```
 
-If the update command can't find the repo (e.g., you moved the install folder), re-run the original one-liner installer — it will pull the latest code and reinstall in one step.
+**Arch Linux:**
+```bash
+sudo pacman -S tectonic poppler
+```
+
+**Fedora / RHEL / CentOS:**
+```bash
+sudo dnf install tectonic poppler-utils
+```
+
+**Windows (via Scoop — recommended):**
+```powershell
+# Install Scoop first (if you don't have it):
+irm get.scoop.sh | iex
+
+# Then install both tools:
+scoop install tectonic poppler
+```
+
+> **Tip:** `resume-generator install-deps` installs both automatically (the one-liner already runs this for you). Tectonic downloads font packages from the internet on its **first run** — this can take 2–5 minutes on Windows, which is normal. Subsequent runs are fast.
+
+> **Note:** `winget install TectonicProject.Tectonic` is not available in the winget catalog — use Scoop instead.
+
+### Manual installation (any OS)
+
+```bash
+# 1. Install uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh   # Mac/Linux
+# Windows: irm https://astral.sh/uv/install.ps1 | iex
+
+# 2. Clone the repo
+git clone https://github.com/ALDRIN121/resume-agent.git
+cd resume-agent
+
+# 3. Install the CLI
+uv tool install .
+```
+
+After installation, `resume-generator` should be available in your terminal. If not, add the uv tools directory to your PATH:
+
+- **Mac/Linux:** `~/.local/bin`
+- **Windows (PowerShell):**
+  ```powershell
+  $env:PATH += ";$env:APPDATA\uv\bin"
+  [System.Environment]::SetEnvironmentVariable('PATH', "$env:PATH", 'User')
+  ```
+  Then open a new terminal.
 
 ---
 

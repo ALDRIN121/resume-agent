@@ -74,12 +74,40 @@ if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
     echo ""
 fi
 
+RG_BIN="$(command -v resume-generator || true)"
+if [ -z "$RG_BIN" ]; then
+    RG_BIN="$HOME/.local/bin/resume-generator"
+fi
+
+# ── 6. Install system dependencies (Tectonic + Poppler) ───────────────────────
+info "Installing Tectonic and Poppler (PDF generation tools)…"
+"$RG_BIN" install-deps || warn "Some dependencies could not be installed automatically. You can retry later with: resume-generator install-deps"
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${_bold}${_green}Installation complete!${_reset}"
 echo ""
-echo "  Next steps:"
-echo "    1.  resume-generator doctor       # verify Tectonic and Poppler are installed"
-echo "    2.  resume-generator install-deps # install missing tools automatically"
-echo "    3.  resume-generator              # first-time setup (choose AI provider)"
-echo ""
+
+# ── 7. Launch the web UI ───────────────────────────────────────────────────────
+if [ -t 1 ] && [ -x "$RG_BIN" ]; then
+    echo "  Starting the web UI at http://127.0.0.1:8000 …"
+    echo "  Pick your AI provider and enter your API key on the Settings page."
+    echo "  Press Ctrl+C to stop the server."
+    echo ""
+    (
+        sleep 2
+        if command -v open &>/dev/null; then
+            open "http://127.0.0.1:8000" 2>/dev/null
+        elif command -v xdg-open &>/dev/null; then
+            xdg-open "http://127.0.0.1:8000" 2>/dev/null
+        fi
+    ) &
+    exec "$RG_BIN" serve
+else
+    echo "  Next steps:"
+    echo "    1.  resume-generator serve   # launch the web UI at http://127.0.0.1:8000"
+    echo "    2.  resume-generator doctor  # verify Tectonic and Poppler are installed"
+    echo ""
+    echo "  To get future updates:  resume-generator update  (or re-run this installer)"
+    echo ""
+fi
