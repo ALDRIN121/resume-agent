@@ -22,7 +22,7 @@ class CreateRunRequest(BaseModel):
     jd_file_id: str | None = None
 
     @model_validator(mode="after")
-    def _must_have_input(self) -> "CreateRunRequest":
+    def _must_have_input(self) -> CreateRunRequest:
         if not (self.jd_text or self.jd_url or self.jd_file_id):
             raise ValueError("Provide jd_text, jd_url, or jd_file_id.")
         return self

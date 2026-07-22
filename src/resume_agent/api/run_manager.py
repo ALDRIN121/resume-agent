@@ -18,7 +18,15 @@ from ..checkpoint import get_async_checkpointer
 from ..config import CONFIG_DIR, ResumeAgentSettings
 from ..graph import build_graph
 from ..state import STATE_SCHEMA_VERSION, ResumeGenState
-from .events import CompleteEvent, Event, FailedEvent, LogLineEvent, NodeEndEvent, NodeStartEvent, dump_event
+from .events import (
+    CompleteEvent,
+    Event,
+    FailedEvent,
+    LogLineEvent,
+    NodeEndEvent,
+    NodeStartEvent,
+    dump_event,
+)
 from .streaming import StreamTranslator
 
 _HISTORY_FILE = CONFIG_DIR / "run_history.jsonl"
