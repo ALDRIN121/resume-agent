@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from resume_agent.api.app import create_app
 from resume_agent.config import ResumeAgentSettings
-from resume_agent.llm import get_chat_model
+from resume_agent.llm import describe_llm_error, get_chat_model
 
 _KEYS_ENDPOINT = "https://openrouter.ai/api/v1/auth/keys"
 
@@ -98,3 +98,17 @@ def test_llm_openrouter_uses_openai_compatible_client():
     assert llm.__class__.__name__ == "ChatOpenAI"
     # Routed at OpenRouter, not the default OpenAI host.
     assert "openrouter.ai" in str(llm.openai_api_base)
+
+
+@pytest.mark.parametrize(
+    "raw,expected_fragment",
+    [
+        ("Error code: 402 - insufficient credits", "Out of LLM credits"),
+        ("429 Too Many Requests: rate limit exceeded", "Rate limited"),
+        ("openai.RateLimitError: insufficient_quota", "Out of LLM credits"),
+        ("Error code: 401 - invalid api key", "rejected the API key"),
+        ("Some unexpected boom", "Some unexpected boom"),
+    ],
+)
+def test_describe_llm_error_classifies(raw, expected_fragment):
+    assert expected_fragment in describe_llm_error(Exception(raw))

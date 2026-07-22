@@ -102,11 +102,13 @@ async def test_connection(request: TestConnectionRequest) -> dict[str, Any]:
             "reply": str(response.content).strip()[:120],
         }
     except Exception as exc:
+        from ...llm import describe_llm_error
+
         return {
             "ok": False,
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "reply": "",
-            "error": str(exc),
+            "error": describe_llm_error(exc),
         }
 
 

@@ -15,6 +15,37 @@ if TYPE_CHECKING:
 TaskType = Literal["default", "vision", "structured", "fast"]
 
 
+def describe_llm_error(exc: Exception) -> str:
+    """Turn a raw provider exception into a short, actionable message for the UI.
+
+    Covers the common failure modes users hit with OpenRouter / OpenAI-compatible
+    providers — out of credits, rate limited, bad key — and falls back to the raw
+    message for anything unrecognised.
+    """
+    low = str(exc).lower()
+
+    def has(*needles: str) -> bool:
+        return any(n in low for n in needles)
+
+    # Out of credits — OpenAI reports this as 429 "insufficient_quota", OpenRouter as 402.
+    if has("insufficient", "402", "payment required", "not enough credit", "requires more credit"):
+        return (
+            "Out of LLM credits. Add credit to your OpenRouter account, switch to a "
+            "free model (name ends in ':free'), or use local Ollama — then retry."
+        )
+    if has("429", "rate limit", "rate-limit", "too many requests"):
+        return (
+            "Rate limited by the model provider. Wait a moment and retry, pick a "
+            "':free' model, or add $10 of OpenRouter credit to raise the daily limit."
+        )
+    if has("401", "403", "authentication", "unauthorized", "invalid api key", "no auth credentials"):
+        return (
+            'The model provider rejected the API key. Reconnect in Settings '
+            '("Sign in with OpenRouter") or re-enter your key.'
+        )
+    return str(exc)
+
+
 def get_chat_model(
     settings: "ResumeAgentSettings",
     task: TaskType = "default",
