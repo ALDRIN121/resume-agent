@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .. import __version__
 from .routers.auth import router as auth_router
 from .routers.library import router as library_router
 from .routers.resume import router as resume_router
@@ -33,7 +34,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Resume Generator", version="2.0.1", lifespan=_lifespan)
+    app = FastAPI(title="Resume Generator", version=__version__, lifespan=_lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
