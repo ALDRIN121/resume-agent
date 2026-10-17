@@ -9,6 +9,7 @@ Enabled by default; disable with enable_hr_review=false in config.yaml.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -52,6 +53,7 @@ CRITERIA:
    Ideal: 40–60% of experience/project bullets contain one numeric metric.
    < 0.3: too few metrics (vague).  > 0.7: too many metrics (looks fabricated).
    Score 1.0 when density is in the 0.4–0.6 range; scale down towards extremes.
+   This criterion is advisory. Never request invented metrics or alter supplied facts.
 
 2. BUZZWORD DENSITY (name: "buzzword_density")
    Count use of generic filler words in the summary and bullets: synergy, leverage,
@@ -70,6 +72,8 @@ CRITERIA:
 5. TITLE-TO-TENURE PLAUSIBILITY (name: "title_plausibility")
    Are the claimed outcomes plausible given the title and tenure?
    Flag obvious mismatches (e.g. 6-month intern "led company-wide transformation").
+   Use the Current date supplied in the user message for date/tenure judgments.
+   Do not treat source career dates before that date as future dates or rewrite them.
    Score 1.0 if everything is plausible; penalise each mismatch.
 
 RESPONSE FORMAT — respond ONLY with a JSON object matching this schema:
@@ -88,10 +92,12 @@ RESPONSE FORMAT — respond ONLY with a JSON object matching this schema:
 }
 
 Set *_ok to false when the corresponding score is below 0.6.
-Set overall_pass to false when 2 or more criteria score below 0.6.
+Set overall_pass to false when 2 or more non-advisory criteria score below 0.6.
 """
 
 _HUMAN = """\
+Current date: {current_date}
+
 Please evaluate the following LaTeX resume source:
 
 ```latex
@@ -125,7 +131,7 @@ def hr_review_node(
 
     messages = [
         SystemMessage(content=_SYSTEM),
-        HumanMessage(content=_HUMAN.format(latex_source=latex_source[:8000])),
+        HumanMessage(content=_HUMAN.format(latex_source=latex_source, current_date=date.today().isoformat())),
     ]
 
     try:
@@ -134,7 +140,7 @@ def hr_review_node(
         print_warning(f"HR review failed: {exc} — skipping.")
         return {}
 
-    failed = [s for s in result.scores if s.score < 0.6]
+    failed = [s for s in result.scores if s.score < 0.6 and s.name != "metric_density"]
 
     if not result.overall_pass and len(failed) >= _MIN_FAILURES_FOR_RETRY:
         print_warning(

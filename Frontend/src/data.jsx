@@ -197,6 +197,7 @@ Must-Have Skills:
 
 // ─── Provider catalogue (mirrors src/resume_agent/ui/setup_wizard.py) ────────
 export const PROVIDERS = [
+  { id: "commandcode", name: "Command Code", sub: "DeepSeek V4.1 Flash", cost: "API access", url: "commandcode.ai/studio/api-keys", needsKey: true, hint: "Command Code API key", logo: "C" },
   { id: "openrouter",     name: "OpenRouter",        sub: "One-click sign-in",      cost: "Free models", url: "openrouter.ai/keys",               needsKey: true,  hint: "Fastest setup", logo: "O" },
   { id: "gemini",         name: "Gemini",            sub: "Google",                 cost: "Free tier", url: "aistudio.google.com/apikey",        needsKey: true,  hint: "Best free option", logo: "G" },
   { id: "nvidia",         name: "NVIDIA NIM",        sub: "Hosted endpoints",       cost: "Free tier", url: "build.nvidia.com",                   needsKey: true,  hint: "Free playground", logo: "N" },
@@ -207,6 +208,7 @@ export const PROVIDERS = [
 ];
 
 export const PROVIDER_MODELS = {
+  commandcode: ["deepseek/deepseek-v4.1-flash"],
   gemini:        ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
   nvidia:        ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
   anthropic:     ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
@@ -216,6 +218,7 @@ export const PROVIDER_MODELS = {
 };
 
 export const PROVIDER_VISION_MODELS = {
+  commandcode: [],
   gemini:        ["gemini-2.5-flash", "gemini-2.5-pro"],
   nvidia:        ["meta/llama-3.2-11b-vision-instruct", "microsoft/phi-3.5-vision-instruct"],
   anthropic:     ["claude-opus-4-8", "claude-sonnet-4-6"],

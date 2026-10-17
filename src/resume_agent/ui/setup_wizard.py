@@ -44,6 +44,7 @@ _Q_STYLE = QStyle([
 
 # (provider_id, display_label, description, is_remote_ollama)
 _PROVIDERS: list[tuple[str, str, str, bool]] = [
+    ("commandcode", "Command Code", "API access · commandcode.ai/studio/api-keys", False),
     ("openrouter", "OpenRouter",       "Free models · one-click sign-in · openrouter.ai", False),
     ("gemini",    "Gemini (Google)",   "Free tier · aistudio.google.com/apikey",  False),
     ("nvidia",    "NVIDIA NIM",        "Free tier · build.nvidia.com",            False),
@@ -54,6 +55,7 @@ _PROVIDERS: list[tuple[str, str, str, bool]] = [
 ]
 
 _MODELS: dict[str, list[str]] = {
+    "commandcode": ["deepseek/deepseek-v4.1-flash"],
     "openrouter": ["nvidia/nemotron-3-super-120b-a12b:free", "openai/gpt-oss-20b:free", "google/gemma-4-31b-it:free", "anthropic/claude-sonnet-4-6", "openai/gpt-5.4-mini"],
     "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
     "nvidia":    ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
@@ -63,6 +65,7 @@ _MODELS: dict[str, list[str]] = {
 }
 
 _VISION: dict[str, list[str]] = {
+    "commandcode": [],
     "openrouter": ["google/gemma-4-31b-it:free", "nvidia/nemotron-nano-12b-v2-vl:free", "anthropic/claude-sonnet-4-6"],
     "gemini":    ["gemini-2.5-flash", "gemini-2.5-pro"],
     "nvidia":    ["meta/llama-3.2-11b-vision-instruct", "microsoft/phi-3.5-vision-instruct"],
@@ -72,6 +75,7 @@ _VISION: dict[str, list[str]] = {
 }
 
 _KEY_ENV: dict[str, str] = {
+    "commandcode": "COMMAND_CODE_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
     "gemini":    "GOOGLE_API_KEY",
     "nvidia":    "NVIDIA_API_KEY",
@@ -80,6 +84,7 @@ _KEY_ENV: dict[str, str] = {
 }
 
 _KEY_URL: dict[str, str] = {
+    "commandcode": "commandcode.ai/studio/api-keys",
     "openrouter": "openrouter.ai/keys",
     "gemini":    "aistudio.google.com/apikey",
     "nvidia":    "build.nvidia.com",
@@ -132,7 +137,7 @@ def run_setup_wizard(existing: ResumeAgentSettings | None = None) -> ResumeAgent
             api_key=api_key,
             base_url=base_url,
             default_model=default_model,
-            vision_model=vision_model if vision_enabled else default_model,
+            vision_model=vision_model if vision_enabled else "",
         )
 
         if result is not None:
@@ -201,6 +206,7 @@ def _ask_credentials(
         # Check if a key is already in the environment / existing settings
         existing_key = (
             os.environ.get(env_var)
+            or (getattr(existing, f"{provider}_api_key", None) if existing else None)
             or (existing.gemini_api_key    if provider == "gemini"    and existing else None)
             or (existing.nvidia_api_key    if provider == "nvidia"    and existing else None)
             or (existing.anthropic_api_key if provider == "anthropic" and existing else None)
@@ -357,6 +363,9 @@ def _ask_vision(
         return False, default_model
 
     vision_candidates = _VISION.get(provider, [default_model])
+    if not vision_candidates:
+        print_warning("This provider has no configured vision models; skipping vision validation.")
+        return False, ""
     existing_vision = existing.model.vision if existing else vision_candidates[0]
 
     vision_model = _ask_model(
@@ -392,7 +401,7 @@ def _apply_and_save(
     base: dict = {}
     if existing:
         base = existing.model_dump(
-            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key"}
+            exclude={"anthropic_api_key", "openai_api_key", "gemini_api_key", "nvidia_api_key", "ollama_api_key", "openrouter_api_key", "commandcode_api_key"}
         )
     base.update({
         "provider": provider,
@@ -402,7 +411,9 @@ def _apply_and_save(
     settings = ResumeAgentSettings(**base)
 
     # Inject the API key into the in-process object so _test_llm can use it
-    if provider == "gemini" and api_key:
+    if provider == "commandcode" and api_key:
+        settings = settings.model_copy(update={"commandcode_api_key": api_key})
+    elif provider == "gemini" and api_key:
         settings = settings.model_copy(update={"gemini_api_key": api_key})
     elif provider == "nvidia" and api_key:
         settings = settings.model_copy(update={"nvidia_api_key": api_key})

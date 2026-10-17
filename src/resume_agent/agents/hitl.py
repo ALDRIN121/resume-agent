@@ -14,7 +14,7 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import interrupt
 
-from ..config import MAX_RESUME_JSON_CHARS, ResumeAgentSettings
+from ..config import ResumeAgentSettings
 from ..llm import get_chat_model
 from ..schemas import GapAnalysis, UserResume
 from ..state import ResumeGenState
@@ -88,7 +88,7 @@ def hitl_node(
         SystemMessage(content=_SYSTEM),
         HumanMessage(
             content=_HUMAN_TEMPLATE.format(
-                resume_json=json.dumps(base_resume.model_dump(), indent=2)[:MAX_RESUME_JSON_CHARS],
+                resume_json=json.dumps(base_resume.model_dump(), indent=2),
                 qa_pairs="\n\n".join(qa_pairs),
             )
         ),

@@ -313,6 +313,17 @@ class RunManager:
                     error=rec.get("error"),
                     stored_duration_s=rec.get("duration_s"),
                 )
+                # History stores summaries, not the live event stream. Recreate
+                # its terminal event so the UI can replay the final state.
+                if session.status == "complete" and session.pdf_path:
+                    session.events.append(CompleteEvent(
+                        pdf_url=f"/api/runs/{tid}/pdf",
+                        duration_s=session.stored_duration_s or 0.0,
+                    ))
+                elif session.status in {"failed", "cancelled"}:
+                    session.events.append(FailedEvent(
+                        reason=session.error or ("Run cancelled by user." if session.status == "cancelled" else "Generation failed."),
+                    ))
                 self._sessions[tid] = session
         except Exception:
             pass  # corrupted history must not prevent startup

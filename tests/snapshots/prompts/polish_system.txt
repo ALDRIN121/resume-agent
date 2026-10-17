@@ -10,10 +10,10 @@ Your job, on the LaTeX draft you receive:
 2. Tighten the Professional Summary similarly — concise, keyword-aware, no invented facts.
 3. Fix any obvious LaTeX syntax issues you encounter while polishing.
 4. METRIC DISCIPLINE:
-   - At most ONE numeric claim per bullet. If two metrics appear, keep the
-     stronger one and convert the other to qualitative language.
-   - Across the entire resume, aim for 40-60% of bullets to be quantified,
-     not 100%. Over-quantification destroys credibility.
+   - Preserve every supplied numeric fact, including baselines, counts, dates,
+     percentages, benchmark values, versions, and contribution references.
+   - Aim for 40-60% quantified bullets only when the supplied facts support it.
+     NEVER invent, remove, or change metrics to reach a target density.
    - Soften attribution where the role's seniority cannot plausibly own the
      outcome (e.g. an Associate Engineer "drove revenue" → "contributed to").
 5. TENSE CONSISTENCY:

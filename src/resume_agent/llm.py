@@ -30,18 +30,24 @@ def describe_llm_error(exc: Exception) -> str:
     # Out of credits — OpenAI reports this as 429 "insufficient_quota", OpenRouter as 402.
     if has("insufficient", "402", "payment required", "not enough credit", "requires more credit"):
         return (
-            "Out of LLM credits. Add credit to your OpenRouter account, switch to a "
-            "free model (name ends in ':free'), or use local Ollama — then retry."
+            "Out of LLM credits. Check billing with your selected provider in Settings, "
+            "or switch to another provider — then retry."
         )
     if has("429", "rate limit", "rate-limit", "too many requests"):
         return (
-            "Rate limited by the model provider. Wait a moment and retry, pick a "
-            "':free' model, or add $10 of OpenRouter credit to raise the daily limit."
+            "Rate limited by the model provider. Wait a moment and retry, or check "
+            "the usage limits for your selected provider."
         )
+    if has("upgrade_required"):
+        return "Your Command Code plan does not include API access. Check your plan in Command Code Studio."
+    if has("unsupported_model"):
+        return "The model is not available from this provider. Choose an available model in Settings."
+    if has("timeout", "timed out"):
+        return "The model provider took too long to respond. Please retry."
     if has("401", "403", "authentication", "unauthorized", "invalid api key", "no auth credentials"):
         return (
             'The model provider rejected the API key. Reconnect in Settings '
-            '("Sign in with OpenRouter") or re-enter your key.'
+            '("API key") or re-enter your key.'
         )
     return str(exc)
 
@@ -91,11 +97,27 @@ def get_chat_model(
             api_key=api_key,  # type: ignore[arg-type]
         )
 
+    if provider == "commandcode":
+        from langchain_openai import ChatOpenAI
+
+        api_key = settings.commandcode_api_key or os.environ.get("COMMAND_CODE_API_KEY")
+        return ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            max_tokens=MAX_LLM_OUTPUT_TOKENS,
+            api_key=api_key,
+            base_url="https://api.commandcode.ai/provider/v1",
+            timeout=120,
+            max_retries=2,
+            # Keep third-party model IDs on the documented chat endpoint.
+            use_responses_api=False,
+        )
+
     if provider == "openrouter":
         from langchain_openai import ChatOpenAI
 
         # OpenRouter is OpenAI-compatible — one key routes to hundreds of models.
-        # The key is provisioned via the in-app "Sign in with OpenRouter" OAuth flow.
+        # The key is provisioned via the in-app "API key" OAuth flow.
         api_key = settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY")
         return ChatOpenAI(
             model=model_name,

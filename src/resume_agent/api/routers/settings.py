@@ -16,7 +16,7 @@ from ...ui import setup_wizard
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-_PROVIDER_DISPLAY_NAMES = {"ollama": "Ollama", "openrouter": "OpenRouter", "nvidia": "NVIDIA"}
+_PROVIDER_DISPLAY_NAMES = {"commandcode": "Command Code", "ollama": "Ollama", "openrouter": "OpenRouter", "nvidia": "NVIDIA"}
 
 
 class SettingsUpdate(BaseModel):
@@ -49,7 +49,9 @@ async def get_settings() -> dict[str, Any]:
 @router.put("")
 async def update_settings(request: SettingsUpdate) -> dict[str, Any]:
     settings = _settings_from_request(ResumeAgentSettings.load(), request)
-    _write_secret_if_present(settings.provider, request.api_key)
+    if request.api_key:
+        settings = _settings_with_secret(settings, request.api_key.strip())
+    _write_secret_if_present(settings.provider, request.api_key.strip() if request.api_key else None)
     settings.save()
     return _settings_payload(settings)
 
@@ -168,7 +170,7 @@ async def detect_providers() -> dict[str, Any]:
     detected: list[dict[str, Any]] = []
 
     # 1) Keyed providers whose credential is already available (openrouter first).
-    for provider in ("openrouter", "anthropic", "openai", "gemini", "nvidia"):
+    for provider in ("commandcode", "openrouter", "anthropic", "openai", "gemini", "nvidia"):
         env_name = setup_wizard._KEY_ENV.get(provider, "")
         has_key = bool(getattr(settings, f"{provider}_api_key", None) or os.environ.get(env_name))
         if has_key:
@@ -231,6 +233,8 @@ def _settings_payload(settings: ResumeAgentSettings) -> dict[str, Any]:
 def _settings_from_request(settings: ResumeAgentSettings, request: SettingsUpdate) -> ResumeAgentSettings:
     provider = _backend_provider_id(request.provider) if request.provider else settings.provider
     vision = request.vision_model if request.vision_model is not None else settings.model.vision
+    if request.provider and provider == "commandcode" and request.vision_model is None:
+        vision = ""
     if request.vision_enabled is False:
         vision = ""
     model = settings.model.model_copy(
@@ -277,6 +281,7 @@ def _settings_with_secret(settings: ResumeAgentSettings, api_key: str) -> Resume
         "openai": "openai_api_key",
         "ollama": "ollama_api_key",
         "openrouter": "openrouter_api_key",
+        "commandcode": "commandcode_api_key",
     }.get(settings.provider)
     return settings.model_copy(update={field: api_key}) if field else settings
 

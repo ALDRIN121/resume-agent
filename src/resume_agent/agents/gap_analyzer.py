@@ -14,7 +14,7 @@ import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from ..config import MAX_RESUME_JSON_CHARS, ResumeAgentSettings
+from ..config import ResumeAgentSettings
 from ..llm import get_chat_model
 from ..schemas import GapAnalysis
 from ..state import ResumeGenState
@@ -96,7 +96,7 @@ def gap_analyzer_node(
     }
 
     human_content = _HUMAN_TEMPLATE.format(
-        resume_json=json.dumps(resume_summary, indent=2)[:MAX_RESUME_JSON_CHARS],
+        resume_json=json.dumps(resume_summary, indent=2),
         company=jd.company,
         role_title=jd.role_title,
         seniority=jd.seniority or "Not specified",

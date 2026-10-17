@@ -151,7 +151,7 @@ const computeEventsFromApi = (events) => {
 };
 
 // -------------- HITL: ask_missing form --------------
-const AskMissingForm = ({ questions = SAMPLE_HITL_QUESTIONS, onSubmit, onSkip }) => {
+const AskMissingForm = ({ questions = SAMPLE_HITL_QUESTIONS, onSubmit, onSkip, stats }) => {
   const [answers, setAnswers] = React.useState(questions.map(q => ""));
   const hasAny = answers.some(a => a.trim().length > 0);
   const submitAnswers = () => {
@@ -187,11 +187,11 @@ const AskMissingForm = ({ questions = SAMPLE_HITL_QUESTIONS, onSubmit, onSkip })
       }}>
         <span className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: 0.6, flexShrink: 0 }}>gap analysis</span>
         {[
-          { l: "matched",     v: GAP_ANALYSIS_STATS.matched,     c: "var(--success)" },
-          { l: "missing",     v: GAP_ANALYSIS_STATS.missing,     c: "var(--warning)" },
-          { l: "questions",   v: GAP_ANALYSIS_STATS.questions,   c: "var(--text)" },
-          { l: "suggestions", v: GAP_ANALYSIS_STATS.suggestions, c: "var(--text)" },
-        ].map(s => (
+          { l: "matched",     v: stats?.matched,     c: "var(--success)" },
+          { l: "missing",     v: stats?.missing,     c: "var(--warning)" },
+          { l: "questions",   v: questions.length,   c: "var(--text)" },
+          { l: "suggestions", v: stats?.suggestions || null, c: "var(--text)" },
+        ].filter(s => s.v != null).map(s => (
           <span key={s.l} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, flexShrink: 0 }}>
             <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: s.c, fontVariantNumeric: "tabular-nums" }}>{s.v}</span>
             <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{s.l}</span>
@@ -384,7 +384,7 @@ const LogTail = ({ visibleLines, density }) => (
 );
 
 // -------------- LiveRunView (the orchestrator) --------------
-const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, settings }) => {
+const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, settings, summary }) => {
   // Local state for advancing through nodes (simulation)
   const [manualIdx, setManualIdx] = React.useState(null); // when set, overrides tweakRunState
   const [autoplay, setAutoplay] = React.useState(false);
@@ -445,8 +445,8 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
     : (tweakRunState === "complete" ? "0:47.00" : fmtElapsed(sim.elapsedMs));
 
   const runStatusForPill = sim.failed ? "failed" : sim.completed ? "complete" : sim.isPaused ? "awaiting-input" : "running";
-  const company = runDetail?.company || "Unknown";
-  const role = runDetail?.role || "Unknown";
+  const company = summary?.company || runDetail?.company || "Unknown";
+  const role = summary?.role || runDetail?.role || "Unknown";
   const logLines = apiEvents.filter(e => e.type === "log_line").map(e => e.line);
   // For real runs (threadId set) never fall back to sample data — show what the
   // run actually produced (possibly empty). Samples are only for the demo view.
@@ -705,7 +705,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
     }
 
     if (sim.hitlState === "ask_missing") {
-      return <AskMissingForm questions={sim.hitlPayload?.questions || SAMPLE_HITL_QUESTIONS} onSubmit={submitMissing} onSkip={() => submitMissing({})} />;
+      return <AskMissingForm stats={isDemo ? GAP_ANALYSIS_STATS : gapStats} questions={sim.hitlPayload?.questions || SAMPLE_HITL_QUESTIONS} onSubmit={submitMissing} onSkip={() => submitMissing({})} />;
     }
     if (sim.hitlState === "present_suggestions") {
       return <SuggestionList suggestions={sim.hitlPayload?.suggestions || SAMPLE_SUGGESTIONS} onContinue={submitSuggestions} />;

@@ -1131,17 +1131,22 @@ export const App = () => {
     else setRoute("run");
   };
 
+  const handleSettingsSaved = (settings) => {
+    setAppSettings(settings);
+    runDoctor().then(setDoctor).catch(() => setDoctor(null));
+  };
+
   const renderRoute = () => {
     switch (route) {
       case "library":   return <LibraryView goto={goto} openRun={openRun} locked={isLocked} initialFilter={libraryFilter}/>;
       case "companies": return <CompaniesView goto={goto} openRun={openRun}/>;
       case "dashboard": return <Dashboard goto={goto} openRun={openRun} locked={isLocked} doctor={doctor}/>;
-      case "new":       return <NewRun goto={goto} openRun={openRun} locked={isLocked} onRunStarted={(id) => openRun(id, "running")}/>;
+      case "new":       return <NewRun goto={goto} openRun={openRun} settings={appSettings} locked={isLocked} onRunStarted={(id) => openRun(id, "running")}/>;
       case "resume":    return <ResumeEditor onReplace={() => setReplaceOpen(true)} parsing={parsing}/>;
       case "history":   return <HistoryView goto={goto} openRun={openRun}/>;
-      case "settings":  return <SettingsView tweaks={tweaks} setTweak={setTweak}/>;
-      case "setup":     return <SetupWizard goto={goto} startParse={startParse} parsing={parsing}/>;
-      case "run":       return <LiveRunView key={selectedRunId} threadId={selectedRunId} density={tweaks.density} runState={tweaks.runState} setRunState={(v) => setTweak("runState", v)} settings={appSettings}/>;
+      case "settings":  return <SettingsView tweaks={tweaks} setTweak={setTweak} onSettingsSaved={handleSettingsSaved}/>;
+      case "setup":     return <SetupWizard goto={goto} startParse={startParse} parsing={parsing} onSettingsSaved={handleSettingsSaved}/>;
+      case "run":       return <LiveRunView key={selectedRunId} threadId={selectedRunId} summary={runs.find(run => run.thread_id === selectedRunId)} density={tweaks.density} runState={tweaks.runState} setRunState={(v) => setTweak("runState", v)} settings={appSettings}/>;
       default:          return <LibraryView goto={goto} openRun={openRun} locked={isLocked}/>;
     }
   };

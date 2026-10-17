@@ -416,6 +416,13 @@ class TestHRReviewNode:
 
 class TestPDFValidatorNode:
 
+    @pytest.fixture(autouse=True)
+    def enabled_vision(self, monkeypatch):
+        from resume_agent.config import ResumeAgentSettings
+
+        settings = ResumeAgentSettings(_env_file=None, model={"vision": "test-vision"})
+        monkeypatch.setattr(ResumeAgentSettings, "load", classmethod(lambda cls: settings))
+
     def _make_mock_llm(self, response_text: str):
         """Return a mock LLM whose .invoke() yields canned content."""
         llm = MagicMock()

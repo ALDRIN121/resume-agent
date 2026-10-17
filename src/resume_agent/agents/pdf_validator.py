@@ -127,13 +127,17 @@ def pdf_validator_node(
     Check each PDF page image for layout problems using a vision LLM.
     Sets validation_passed=True or provides validation_feedback for retry.
     """
+    settings = settings or ResumeAgentSettings.load()
+    if not settings.model.vision:
+        print_info("Vision validation disabled; skipping model inspection.")
+        return {"validation_passed": True, "validation_feedback": None}
+
     page_images: list[str] = state.get("page_images", [])
 
     if not page_images:
         feedback = "No rendered page images available — layout unverified."
         return {"validation_passed": False, "validation_feedback": feedback}
 
-    settings = settings or ResumeAgentSettings.load()
     llm = get_chat_model(settings, task="vision", temperature=0.0)
 
     print_info(f"Validating layout of {len(page_images)} page(s) with vision model…")

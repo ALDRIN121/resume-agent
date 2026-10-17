@@ -8,6 +8,7 @@ On retry:     sends previous LaTeX + error context to LLM for self-correction.
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -91,10 +92,10 @@ Your job, on the LaTeX draft you receive:
 2. Tighten the Professional Summary similarly — concise, keyword-aware, no invented facts.
 3. Fix any obvious LaTeX syntax issues you encounter while polishing.
 4. METRIC DISCIPLINE:
-   - At most ONE numeric claim per bullet. If two metrics appear, keep the
-     stronger one and convert the other to qualitative language.
-   - Across the entire resume, aim for 40-60% of bullets to be quantified,
-     not 100%. Over-quantification destroys credibility.
+   - Preserve every supplied numeric fact, including baselines, counts, dates,
+     percentages, benchmark values, versions, and contribution references.
+   - Aim for 40-60% quantified bullets only when the supplied facts support it.
+     NEVER invent, remove, or change metrics to reach a target density.
    - Soften attribution where the role's seniority cannot plausibly own the
      outcome (e.g. an Associate Engineer "drove revenue" → "contributed to").
 5. TENSE CONSISTENCY:
@@ -141,6 +142,12 @@ Fix ONLY the listed errors. Preserve everything else byte-for-byte where possibl
 """
 
 _FIX_SYSTEM_TAIL = """
+
+FACTUAL ACCURACY OVERRIDES REVIEW FEEDBACK:
+- Never add, remove, or change supplied numeric facts or invent accomplishments.
+- If feedback asks for more metrics, use ONLY metrics already in the source.
+- Improve wording and layout without inventing performance figures, user counts,
+  release cadences, accuracy scores, or other unsupported outcomes.
 
 Common pitfalls to avoid while fixing:
 - Do NOT "simplify" by deleting \\resumeItemListStart / \\resumeItemListEnd
@@ -278,6 +285,19 @@ def _render_template(resume) -> str:
             if key not in ordered:
                 ordered[key] = val
         data["skills"] = ordered
+
+    # Parsers sometimes synthesize a short description from an existing bullet.
+    # Avoid printing that summary twice, while keeping distinct descriptions.
+    def normalize(text: str) -> str:
+        return " ".join(re.findall(r"\w+", text.casefold()))
+
+    for project in data.get("projects", []):
+        description = normalize(project.get("description") or "")
+        bullets = " ".join(normalize(b) for b in project.get("bullets", []))
+        generic = normalize(f"Open-source contributions to {project['name']}")
+        generic_singular = normalize(f"Open-source contribution to {project['name']}")
+        if bullets and (description in bullets or description in {generic, generic_singular}):
+            project["description"] = ""
 
     return template.render(**data)
 
@@ -423,7 +443,26 @@ def _guard_structure(candidate: str, *, fallback: str) -> str:
         )
         return fallback
 
+    original_numbers = _numeric_facts(fallback)
+    candidate_numbers = _numeric_facts(candidate)
+    if candidate_numbers != original_numbers:
+        print_warning("LLM changed numeric facts — keeping the source-backed LaTeX.")
+        return fallback
+
     return candidate
+
+
+def _numeric_facts(source: str) -> Counter[str]:
+    """Compare factual numbers in the document body, excluding layout lengths."""
+    body = source.partition(r"\begin{document}")[2]
+    body = re.sub(r"\\(?:vspace|hspace)\*?\{[^}]*\}", "", body)
+    body = re.sub(r"(?<!\\)%[^\n]*", "", body).replace(r"\%", "%")
+    return Counter(re.findall(
+        r"\d+(?:[.,]\d+)*(?:%|x|\+)?|"
+        r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"eleven|twelve|hundred|thousand|million|billion)\b",
+        body.casefold(),
+    ))
 
 
 def _brace_balance_errors(source: str) -> list[str]:

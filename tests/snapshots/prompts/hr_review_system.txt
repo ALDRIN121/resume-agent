@@ -10,6 +10,7 @@ CRITERIA:
    Ideal: 40–60% of experience/project bullets contain one numeric metric.
    < 0.3: too few metrics (vague).  > 0.7: too many metrics (looks fabricated).
    Score 1.0 when density is in the 0.4–0.6 range; scale down towards extremes.
+   This criterion is advisory. Never request invented metrics or alter supplied facts.
 
 2. BUZZWORD DENSITY (name: "buzzword_density")
    Count use of generic filler words in the summary and bullets: synergy, leverage,
@@ -28,6 +29,8 @@ CRITERIA:
 5. TITLE-TO-TENURE PLAUSIBILITY (name: "title_plausibility")
    Are the claimed outcomes plausible given the title and tenure?
    Flag obvious mismatches (e.g. 6-month intern "led company-wide transformation").
+   Use the Current date supplied in the user message for date/tenure judgments.
+   Do not treat source career dates before that date as future dates or rewrite them.
    Score 1.0 if everything is plausible; penalise each mismatch.
 
 RESPONSE FORMAT — respond ONLY with a JSON object matching this schema:
@@ -46,4 +49,4 @@ RESPONSE FORMAT — respond ONLY with a JSON object matching this schema:
 }
 
 Set *_ok to false when the corresponding score is below 0.6.
-Set overall_pass to false when 2 or more criteria score below 0.6.
+Set overall_pass to false when 2 or more non-advisory criteria score below 0.6.

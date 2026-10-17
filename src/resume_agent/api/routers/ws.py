@@ -20,5 +20,8 @@ async def run_events(websocket: WebSocket, thread_id: str) -> None:
     try:
         async for event in run_manager.subscribe(thread_id):
             await websocket.send_json(dump_event(event))
-    except (KeyError, WebSocketDisconnect):
-        await websocket.close()
+    except WebSocketDisconnect:
+        # Starlette already marks the socket closed when a send fails.
+        return
+    except KeyError:
+        await websocket.close(code=1008)

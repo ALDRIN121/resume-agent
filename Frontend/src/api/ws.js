@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env?.VITE_API_BASE || "";
 
 const wsBase = () => {
   if (API_BASE.startsWith("http")) {
@@ -47,6 +47,11 @@ export function subscribeRun(threadId, onEvent, onStatus) {
         return; // ignore malformed frames instead of throwing in the handler
       }
       onEvent(payload);
+      if (payload.type === "complete" || payload.type === "failed") {
+        closed = true;
+        socket.close();
+        onStatus?.(payload.type);
+      }
     };
     socket.onclose = () => {
       if (closed) return;

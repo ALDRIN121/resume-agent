@@ -36,6 +36,12 @@ TEMPLATE STRUCTURE — these rules are NON-NEGOTIABLE:
   Do NOT remove or merge hyphens when polishing bullets.
 
 
+FACTUAL ACCURACY OVERRIDES REVIEW FEEDBACK:
+- Never add, remove, or change supplied numeric facts or invent accomplishments.
+- If feedback asks for more metrics, use ONLY metrics already in the source.
+- Improve wording and layout without inventing performance figures, user counts,
+  release cadences, accuracy scores, or other unsupported outcomes.
+
 Common pitfalls to avoid while fixing:
 - Do NOT "simplify" by deleting \resumeItemListStart / \resumeItemListEnd
   pairs to silence balance warnings — instead, find the missing partner and add it.

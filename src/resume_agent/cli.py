@@ -737,6 +737,9 @@ def doctor() -> None:
             or os.environ.get("GEMINI_API_KEY")
         )
         checks.append(("GOOGLE_API_KEY", key_ok, "Run: resume-generator setup  or  export GOOGLE_API_KEY=..."))
+    elif provider == "commandcode":
+        key_ok = bool(settings.commandcode_api_key or os.environ.get("COMMAND_CODE_API_KEY"))
+        checks.append(("COMMAND_CODE_API_KEY", key_ok, "Set your Command Code API key in Settings."))
     elif provider == "nvidia":
         key_ok = bool(settings.nvidia_api_key or os.environ.get("NVIDIA_API_KEY"))
         checks.append(("NVIDIA_API_KEY", key_ok, "Set in .env or export NVIDIA_API_KEY=nvapi-..."))

@@ -297,6 +297,13 @@ class TestCLIImport:
 
 
 class TestPDFValidatorNode:
+
+    @pytest.fixture(autouse=True)
+    def enabled_vision(self, monkeypatch):
+        from resume_agent.config import ResumeAgentSettings
+
+        settings = ResumeAgentSettings(_env_file=None, model={"vision": "test-vision"})
+        monkeypatch.setattr(ResumeAgentSettings, "load", classmethod(lambda cls: settings))
     """Vision validator must distinguish PASS from API-error (not silently PASS)."""
 
     def test_fails_when_no_rendered_images(self):

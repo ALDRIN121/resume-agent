@@ -133,6 +133,7 @@ The tool needs to call an AI model. Pick one:
 | **Google Gemini** | Free tier available | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | **NVIDIA NIM** | Free tier available | [build.nvidia.com](https://build.nvidia.com) |
 | **Anthropic Claude** | Paid | [console.anthropic.com](https://console.anthropic.com) |
+| **Command Code** | API access | [commandcode.ai/studio/api-keys](https://commandcode.ai/studio/api-keys) |
 | **OpenAI GPT** | Paid | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | **Ollama** | Free, runs locally | [ollama.com](https://ollama.com) — no key needed for local |
 
@@ -234,6 +235,7 @@ retries:
 ```
 
 API keys go in environment variables or `~/.resume_generator/.env`:
+- `COMMAND_CODE_API_KEY` (provider: `commandcode`, model: `deepseek/deepseek-v4.1-flash`)
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - `GOOGLE_API_KEY`

@@ -467,7 +467,7 @@ const ProviderLogo = ({ p, size = 28 }) => (
   }}>{p.logo}</span>
 );
 
-const SetupWizard = ({ goto, startParse, parsing }) => {
+const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
   const TOTAL = 5;
   const { providers, models, visionModels } = useProviders();
   const [step, setStep] = React.useState(1);
@@ -492,7 +492,12 @@ const SetupWizard = ({ goto, startParse, parsing }) => {
   }, []);
 
   const useDetected = async (d) => {
-    await updateSettings({ provider: d.providerId, default_model: d.defaultModel }).catch(() => {});
+    const updated = await updateSettings({
+      provider: d.providerId, default_model: d.defaultModel,
+      vision_model: (visionModels[d.providerId] || [""])[0] || "",
+      vision_enabled: !!visionModels[d.providerId]?.length,
+    });
+    onSettingsSaved?.(updated);
     goto("dashboard");
   };
 
@@ -511,8 +516,10 @@ const SetupWizard = ({ goto, startParse, parsing }) => {
     setProviderId(pid);
     setDefaultModel((models[pid] || [""])[0] || "");
     setVisionModel((visionModels[pid] || [""])[0] || "");
+    setVisionEnabled(!!visionModels[pid]?.length);
     if (pid === "ollama_local") { setApiKey(""); setBaseUrl("http://localhost:11434"); }
     else if (pid === "ollama_remote") setBaseUrl("https://ollama.example.com");
+    setApiKey("");
     setKeyTested(null);
   };
 
@@ -558,7 +565,7 @@ const SetupWizard = ({ goto, startParse, parsing }) => {
     vision_enabled: visionEnabled,
     base_url: baseUrl || undefined,
     api_key: apiKey || undefined,
-  }).catch(() => {});
+  }).then(updated => { onSettingsSaved?.(updated); return updated; });
 
   return (
     <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 40, overflow: "auto" }}>
@@ -1324,7 +1331,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
 };
 
 // ============== NEW RUN ==============
-const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
+const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) => {
   const [tab, setTab] = React.useState("text");
   const [text, setText] = React.useState("");
   const [url, setUrl] = React.useState("");
@@ -1416,13 +1423,13 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
       </div>
     </div>
   );
-  const optRow = (title, sub, last) => (
+  const optRow = (title, sub, last, enabled = true) => (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: last ? "none" : "1px dashed var(--border)" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600 }}>{title}</div>
         <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{sub}</div>
       </div>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, color: "var(--success)", background: "var(--success-soft)", borderRadius: 99, padding: "3px 9px", flexShrink: 0 }}><Icon name="check" size={11} stroke={3}/>On</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, color: enabled ? "var(--success)" : "var(--text-muted)", background: enabled ? "var(--success-soft)" : "var(--surface-2)", borderRadius: 99, padding: "3px 9px", flexShrink: 0 }}>{enabled && <Icon name="check" size={11} stroke={3}/>} {enabled ? "On" : "Off"}</span>
     </div>
   );
 
@@ -1511,7 +1518,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted }) => {
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Run options</div>
             {optRow("Ask me about gaps", "Pause to add missing experience")}
             {optRow("Review rewrites", "Approve each bullet before compiling")}
-            {optRow("Vision layout check", "opus reviews the final PDF", true)}
+            {optRow("Vision layout check", settings.visionEnabled ? `${settings.visionModel} reviews the final PDF` : "Disabled for this run", true, settings.visionEnabled)}
           </Card>
           <Card padding={24}>
             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Base resume</div>
@@ -1613,7 +1620,7 @@ const HistoryView = ({ goto, openRun }) => {
 };
 
 // ============== SETTINGS ==============
-const SettingsView = ({ tweaks, setTweak }) => {
+const SettingsView = ({ tweaks, setTweak, onSettingsSaved }) => {
   const { providers, models, visionModels } = useProviders();
   const [showKey, setShowKey] = React.useState(false);
   const [apiKey, setApiKey] = React.useState("");
@@ -1663,6 +1670,7 @@ const SettingsView = ({ tweaks, setTweak }) => {
     setProviderId(pid);
     setDefaultModel((models[pid] || [""])[0] || "");
     setVisionModel((visionModels[pid] || [""])[0] || "");
+    setVisionEnabled(!!visionModels[pid]?.length);
     setApiKey("");
     mark();
   };
@@ -1684,6 +1692,7 @@ const SettingsView = ({ tweaks, setTweak }) => {
         enable_hr_review: hrReview,
       });
       applySettings(updated);
+      onSettingsSaved?.(updated);
       setApiKey("");
       setDirty(false);
       setSaveState("saved");
