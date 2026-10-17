@@ -22,10 +22,11 @@ Rules:
 - Split responsibilities into individual bullet items
 - If a field is not mentioned, omit it or use an empty list
 - Separate "must have" from "nice to have" / "preferred" skills based on the language used
+- Capture the job location and remote_policy explicitly, including country restrictions, hybrid attendance, or time-zone requirements. Remote does not imply worldwide eligibility.
 
 You MUST respond with a single valid JSON object and nothing else — no markdown, no prose, no code fences.
 Required fields: "company" (string), "role_title" (string).
-Optional fields: "seniority", "location", "remote_policy", "must_have_skills" (list), \
+Optional fields: "seniority", "location", "work_mode" (Remote, Hybrid, or On-site), "remote_policy" (full stated location/time-zone/attendance restrictions), "must_have_skills" (list), \
 "nice_to_have_skills" (list), "responsibilities" (list), "keywords" (list).
 """
 
@@ -74,7 +75,7 @@ def jd_extractor_node(
 
         try:
             jd: JobDescription = structured_llm.invoke(messages)
-            jd = jd.model_copy(update={"raw_text": text[:MAX_JD_STORAGE_CHARS]})
+            jd = _with_job_context(jd, state, text)
             print_info(f"Extracted JD: {jd.company} — {jd.role_title}")
             return {"jd": jd}
         except Exception as exc:  # noqa: BLE001
@@ -88,7 +89,7 @@ def jd_extractor_node(
                 raw_text = content if isinstance(content, str) else str(content)
                 data = parse_json_markdown(raw_text)
                 jd = JobDescription.model_validate(data)
-                jd = jd.model_copy(update={"raw_text": text[:MAX_JD_STORAGE_CHARS]})
+                jd = _with_job_context(jd, state, text)
                 print_info(f"Extracted JD (fallback): {jd.company} — {jd.role_title}")
                 return {"jd": jd}
             except Exception:  # noqa: BLE001
@@ -100,3 +101,12 @@ def jd_extractor_node(
         "Tip: Try switching to a stronger model (e.g. anthropic or openai) with:\n"
         "  resume-generator config set provider anthropic"
     ) from last_exc
+
+
+def _with_job_context(jd: JobDescription, state: ResumeGenState, text: str) -> JobDescription:
+    updates = {"raw_text": text[:MAX_JD_STORAGE_CHARS]}
+    if location := (state.get("job_location") or "").strip():
+        updates["location"] = location
+    if work_mode := state.get("work_mode"):
+        updates["work_mode"] = work_mode
+    return jd.model_copy(update=updates)

@@ -30,6 +30,7 @@ Rules:
 - If the user said "no" or left an answer blank, do NOT add that item
 - Weave new details into the appropriate experience bullets or summary
 - Return the complete updated resume JSON
+- Treat answers about job location or work mode as application context, not work experience. Do not invent remote work, relocation, or work authorization claims.
 """
 
 _HUMAN_TEMPLATE = """\
@@ -95,6 +96,11 @@ def hitl_node(
     ]
 
     enriched: UserResume = structured_llm.invoke(messages)
+    # Tailoring a document must not silently change saved availability or home location.
+    enriched = enriched.model_copy(update={
+        "personal": enriched.personal.model_copy(update={"location": base_resume.personal.location}),
+        "work_preferences": base_resume.work_preferences.model_copy(deep=True),
+    })
     return {"hitl_answers": hitl_answers, "tailored_resume": enriched}
 
 

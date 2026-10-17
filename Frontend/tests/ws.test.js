@@ -43,3 +43,15 @@ test('an unexpected disconnect still reconnects an unfinished run', () => {
   assert.equal(retries.length, 1);
   dispose();
 });
+
+test('disposing a resume parse subscription does not report a broken connection', async () => {
+  const { subscribeResumeParse } = await import('../src/api/ws.js');
+  globalThis.window = { location: { protocol: 'http:', host: '127.0.0.1:8000' } };
+  globalThis.WebSocket = class {
+    close() { this.onclose?.(); }
+  };
+  let closed = 0;
+  const dispose = subscribeResumeParse('parse-job', () => {}, () => closed++);
+  dispose();
+  assert.equal(closed, 0);
+});

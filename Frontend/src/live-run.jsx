@@ -2,7 +2,8 @@ import React from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, StatusPill, Badge, Textarea, MonoTicker } from "./components.jsx";
 import { PipelineTimeline } from "./timeline.jsx";
-import { resumeRun, getRun, cancelRun, pdfUrl } from "./api/client.js";
+import { WorkContextSummary } from "./work-context.jsx";
+import { resumeRun, getRun, cancelRun, pdfUrl, downloadPdf } from "./api/client.js";
 import { subscribeRun } from "./api/ws.js";
 import { ACTIVE_LLM, FAILED_DEBUG_PATH, GAP_ANALYSIS_STATS, LINT_WARNINGS, PIPELINE_NODES, RETRY_ATTEMPTS, SAMPLE_HITL_QUESTIONS, SAMPLE_LOG_LINES, SAMPLE_SUGGESTIONS, VISION_ISSUES } from "./data.jsx";
 
@@ -72,13 +73,13 @@ const fmtElapsed = (ms) => {
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
   const ss = String(s % 60).padStart(2, "0");
-  const cs = String(Math.floor((ms % 1000) / 10)).padStart(2, "0");
-  return `${m}:${ss}.${cs}`;
+  return `${m}:${ss}`;
 };
 
 const computeEventsFromApi = (events) => {
   const timeline = PIPELINE_NODES.map(() => ({ status: "pending", durationMs: null }));
   let currentNodeIdx = 0;
+  let lastStartedIdx = -1;
   let hitlState = null;
   let hitlPayload = null;
   let completed = false;
@@ -92,11 +93,12 @@ const computeEventsFromApi = (events) => {
       if (idx >= 0) {
         timeline[idx] = { ...timeline[idx], status: "running" };
         currentNodeIdx = idx;
+        lastStartedIdx = idx;
         hitlState = null;
         hitlPayload = null;
       }
     }
-    if (event.type === "hitl_resolved") {
+    if (event.type === "hitl_resolved" && event.kind === hitlState && (!event.pendingTs || event.pendingTs === hitlPayload?.ts)) {
       hitlState = null;
       hitlPayload = null;
     }
@@ -104,7 +106,7 @@ const computeEventsFromApi = (events) => {
       const idx = PIPELINE_NODES.findIndex(n => n.id === event.node_id);
       if (idx >= 0) {
         timeline[idx] = { status: "done", durationMs: event.duration_ms };
-        elapsedMs += event.duration_ms || PIPELINE_NODES[idx].avgMs || 0;
+        elapsedMs += event.duration_ms || 0;
         currentNodeIdx = Math.min(idx + 1, PIPELINE_NODES.length - 1);
       }
     }
@@ -125,15 +127,18 @@ const computeEventsFromApi = (events) => {
       completed = true;
       hitlState = null;
       for (let i = 0; i < timeline.length; i++) {
-        if (timeline[i].status === "pending" || timeline[i].status === "running") {
-          timeline[i] = { status: "done", durationMs: timeline[i].durationMs || PIPELINE_NODES[i].avgMs || 0 };
-        }
+        if (timeline[i].status === "pending") timeline[i] = { status: "unrecorded", durationMs: null };
+        else if (timeline[i].status === "running") timeline[i] = { status: "done", durationMs: null };
       }
       currentNodeIdx = PIPELINE_NODES.length;
     }
     if (event.type === "failed") {
       failed = true;
       hitlState = null;
+      if (lastStartedIdx >= 0) {
+        currentNodeIdx = lastStartedIdx;
+        timeline[lastStartedIdx] = { ...timeline[lastStartedIdx], status: "failed" };
+      }
     }
   }
 
@@ -163,7 +168,7 @@ const AskMissingForm = ({ questions = SAMPLE_HITL_QUESTIONS, onSubmit, onSkip, s
   };
 
   return (
-    <div className="fade-in" style={{ padding: 24 }}>
+    <div className="fade-in run-activity" style={{ padding: 24 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
         <span style={{
           width: 26, height: 26, borderRadius: 99, background: "var(--warning-soft)",
@@ -250,7 +255,7 @@ const SuggestionDiff = ({ before, after }) => {
   const setA = new Set(wA.map(w => w.toLowerCase()));
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+    <div className="suggestion-diff" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
       <div style={{
         padding: 12, background: "var(--danger-soft)",
         border: "1px solid color-mix(in oklab, var(--danger) 20%, transparent)",
@@ -291,7 +296,7 @@ const SuggestionList = ({ suggestions = SAMPLE_SUGGESTIONS, onContinue }) => {
   const setAll = (v) => setItems(items.map(it => ({ ...it, approved: v })));
 
   return (
-    <div className="fade-in" style={{ padding: 24 }}>
+    <div className="fade-in run-activity" style={{ padding: 24 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{
@@ -328,7 +333,7 @@ const SuggestionList = ({ suggestions = SAMPLE_SUGGESTIONS, onContinue }) => {
                   {it.approved ? "Approved" : "Approve"}
                 </span>
                 <button
-                  role="switch" aria-checked={it.approved} onClick={() => toggle(it.id)}
+                  role="switch" aria-label={`Approve ${it.title}`} aria-checked={it.approved} onClick={() => toggle(it.id)}
                   style={{
                     width: 32, height: 18, position: "relative",
                     border: "1px solid " + (it.approved ? "var(--success)" : "var(--border-strong)"),
@@ -370,7 +375,7 @@ const LogTail = ({ visibleLines, density }) => (
         <Icon name="dot" size={10} stroke={2} style={{ color: "var(--success)" }}/>
         <span className="mono" style={{ letterSpacing: 0.3 }}>log tail · last {visibleLines.length}</span>
       </div>
-      <span style={{ fontSize: 11, color: "var(--text-faint)" }}>hover to pause</span>
+      <span style={{ fontSize: 11, color: "var(--text-faint)" }}>Latest activity</span>
     </div>
     <div className="mono" style={{
       fontSize: 11, color: "var(--text-muted)", lineHeight: 1.55,
@@ -384,7 +389,7 @@ const LogTail = ({ visibleLines, density }) => (
 );
 
 // -------------- LiveRunView (the orchestrator) --------------
-const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, settings, summary }) => {
+const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, settings, summary, goto }) => {
   // Local state for advancing through nodes (simulation)
   const [manualIdx, setManualIdx] = React.useState(null); // when set, overrides tweakRunState
   const [autoplay, setAutoplay] = React.useState(false);
@@ -394,6 +399,9 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   const [runDetail, setRunDetail] = React.useState(null);
   const [wsStatus, setWsStatus] = React.useState("offline");
   const [cancelling, setCancelling] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [actionError, setActionError] = React.useState(null);
+  const [activePane, setActivePane] = React.useState("activity");
   // Real gap-analysis signal for this run — set from the user's own actions,
   // never fabricated (the backend doesn't emit a matched/missing skill tally).
   const [gapAnswered, setGapAnswered] = React.useState(false);
@@ -413,7 +421,12 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
       .catch(() => {});
     return subscribeRun(
       threadId,
-      (event) => setApiEvents(items => [...items, event]),
+      (event) => setApiEvents(items => {
+        // The server replays history on reconnect. Keep the mounted form and
+        // its draft, while ignoring events already received in this session.
+        const replayed = event.ts && items.some(item => item.ts === event.ts && item.type === event.type && item.node_id === event.node_id && item.kind === event.kind);
+        return replayed ? items : [...items, event];
+      }),
       setWsStatus,
     );
   }, [threadId]);
@@ -430,23 +443,25 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
     return () => clearInterval(interval);
   }, [autoplay]);
 
-  // Live ticker for running state
-  React.useEffect(() => {
-    if (tweakRunState !== "running" || manualIdx != null) return;
-    const start = Date.now();
-    const id = setInterval(() => setTickMs(Date.now() - start), 47);
-    return () => clearInterval(id);
-  }, [tweakRunState, manualIdx]);
-
-  const apiSim = threadId ? computeEventsFromApi(apiEvents) : null;
+  const apiSim = React.useMemo(() => threadId ? computeEventsFromApi(apiEvents) : null, [threadId, apiEvents]);
   const sim = apiSim || computeEventsForState(tweakRunState, manualIdx);
-  const elapsedDisplay = (tweakRunState === "running" && manualIdx == null)
-    ? fmtElapsed(sim.elapsedMs + tickMs)
-    : (tweakRunState === "complete" ? "0:47.00" : fmtElapsed(sim.elapsedMs));
+  // Update once per second and stop when the run finishes.
+  React.useEffect(() => {
+    if (sim.completed || sim.failed) return;
+    const start = Date.now();
+    const id = setInterval(() => setTickMs(Date.now() - start), 1000);
+    return () => clearInterval(id);
+  }, [sim.completed, sim.failed]);
+  const terminalEvent = apiEvents.find(e => e.type === "complete" || e.type === "failed");
+  const elapsedMs = threadId && runDetail?.created_at
+    ? terminalEvent?.duration_s != null ? terminalEvent.duration_s * 1000
+      : Math.max(0, (terminalEvent?.ts ? Date.parse(terminalEvent.ts) : Date.now()) - runDetail.created_at * 1000)
+    : sim.elapsedMs + (sim.completed || sim.failed ? 0 : tickMs);
+  const elapsedDisplay = fmtElapsed(elapsedMs);
 
   const runStatusForPill = sim.failed ? "failed" : sim.completed ? "complete" : sim.isPaused ? "awaiting-input" : "running";
-  const company = summary?.company || runDetail?.company || "Unknown";
-  const role = summary?.role || runDetail?.role || "Unknown";
+  const company = (summary?.company !== "Unknown" && summary?.company) || runDetail?.company || "Unknown";
+  const role = (summary?.role !== "Unknown" && summary?.role) || runDetail?.role || "Unknown";
   const logLines = apiEvents.filter(e => e.type === "log_line").map(e => e.line);
   // For real runs (threadId set) never fall back to sample data — show what the
   // run actually produced (possibly empty). Samples are only for the demo view.
@@ -484,35 +499,40 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   const cancel = async () => {
     if (!threadId) return;
     setCancelling(true);
-    try { await cancelRun(threadId); } catch { /* failure surfaces via the WS failed event */ }
-    setCancelling(false);
+    setActionError(null);
+    try { await cancelRun(threadId); }
+    catch (error) { setActionError(error.message || "Could not cancel the run. Try again."); }
+    finally { setCancelling(false); }
   };
 
-  const submitMissing = async (answers) => {
-    setGapAnswered(true);
-    if (!threadId) {
-      setManualIdx(6);
-      return;
+  const submitInput = async (kind, payload, onSuccess) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await resumeRun(threadId, kind, payload);
+      setApiEvents(items => [...items, { type: "hitl_resolved", kind, pendingTs: sim.hitlPayload?.ts }]);
+      onSuccess();
+    } catch (error) {
+      setActionError(error.message || "Could not send your review. Try again.");
+    } finally {
+      setSubmitting(false);
     }
-    setApiEvents(items => [...items, { type: "hitl_resolved" }]);
-    await resumeRun(threadId, "ask_missing", { answers });
   };
-
-  const submitSuggestions = async (approvedIds) => {
-    setApprovedCount(approvedIds.length);
-    if (!threadId) {
-      setManualIdx(7);
-      return;
-    }
-    setApiEvents(items => [...items, { type: "hitl_resolved" }]);
-    await resumeRun(threadId, "present_suggestions", { approved_ids: approvedIds });
+  const submitMissing = (answers) => {
+    if (!threadId) { setGapAnswered(true); setManualIdx(6); return; }
+    return submitInput("ask_missing", { answers }, () => setGapAnswered(true));
+  };
+  const submitSuggestions = (approvedIds) => {
+    if (!threadId) { setApprovedCount(approvedIds.length); setManualIdx(7); return; }
+    return submitInput("present_suggestions", { approved_ids: approvedIds }, () => setApprovedCount(approvedIds.length));
   };
 
   // Activity panel content
   const renderActivity = () => {
     if (sim.failed) {
       return (
-        <div className="fade-in" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="fade-in run-activity" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{
             border: "1px solid color-mix(in oklab, var(--danger) 30%, transparent)",
             background: "var(--danger-soft)",
@@ -524,13 +544,13 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
               </span>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600 }}>Generation failed</div>
-                <div className="mono" style={{ fontSize: 11.5, color: "var(--danger)" }}>{failedEvent?.reason || `retry budget exhausted · ${effectiveRetries[0].stage} ↻ ${effectiveRetries[effectiveRetries.length - 1].stage}`}</div>
+                <div className="mono" style={{ fontSize: 11.5, color: "var(--danger)" }}>{failedEvent?.reason || "Generation failed. Check the logs and try a new run."}</div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <Button variant="primary" icon="refresh">Try again</Button>
-              <Button variant="secondary" icon="edit">Edit base resume</Button>
-              <Button variant="ghost" icon="folder">Open debug artifacts</Button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+              <Button variant="primary" icon="refresh" onClick={() => goto?.("new")}>Try again</Button>
+              <Button variant="secondary" icon="edit" onClick={() => goto?.("resume")}>Edit base resume</Button>
+              {debugPath && <Button variant="ghost" icon="copy" onClick={() => navigator.clipboard?.writeText(debugPath)}>Copy debug path</Button>}
             </div>
           </div>
 
@@ -616,7 +636,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
 
     if (sim.completed) {
       return (
-        <div className="fade-in" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="fade-in run-activity" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 14,
             padding: 18,
@@ -649,12 +669,12 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
               </svg>
             </div>
             <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2 }}>Done in {completeEvent?.duration_s ? `${Math.round(completeEvent.duration_s)}s` : "47s"}</div>
+            <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2 }}>Done in {completeEvent?.duration_s != null ? `${Math.round(completeEvent.duration_s)}s` : elapsedDisplay}</div>
             <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 3 }}>
                 Tailored to {company} · PDF ready
               </div>
             </div>
-            <Button variant="primary" icon="download" onClick={() => downloadUrl && window.open(downloadUrl, "_blank")}>Download PDF</Button>
+            <Button variant="primary" compact shortLabel="Download" icon="download" disabled={!downloadUrl} onClick={() => threadId && downloadPdf(threadId)}>Download PDF</Button>
           </div>
 
           {/* Lint warnings — non-blocking but useful */}
@@ -696,8 +716,8 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
               <span style={{ fontSize: 12.5, color: "var(--text)" }}>Generate another resume?</span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <Button size="sm" variant="secondary" icon="folder">Open folder</Button>
-              <Button size="sm" variant="primary" icon="plus">New run</Button>
+              <Button size="sm" variant="secondary" compact icon="folder" onClick={() => goto?.("library")}>View library</Button>
+              <Button size="sm" variant="primary" icon="plus" onClick={() => goto?.("new")}>New run</Button>
             </div>
           </div>
         </div>
@@ -762,10 +782,10 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   };
 
   // Visible log lines depend on progress
-  const visibleLogs = (logLines.length ? logLines : SAMPLE_LOG_LINES).slice(0, Math.min((logLines.length ? logLines : SAMPLE_LOG_LINES).length, sim.currentNodeIdx + 3));
+  const visibleLogs = (isDemo ? SAMPLE_LOG_LINES : logLines).slice(-20);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+    <div className="live-run" style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
 
       {/* Top bar of run page */}
       <div style={{
@@ -809,13 +829,20 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
             </div>
           )}
           {threadId && !sim.completed && !sim.failed && (
-            <Button size="sm" variant="secondary" icon="x" onClick={cancel} disabled={cancelling}>{cancelling ? "Cancelling…" : "Cancel run"}</Button>
+            <Button size="sm" variant="secondary" compact icon="x" onClick={cancel} disabled={cancelling}>{cancelling ? "Cancelling…" : "Cancel run"}</Button>
           )}
         </div>
       </div>
 
+      <div className="run-view-tabs" role="tablist" aria-label="Run views">
+        {[["activity", "Activity", "file-text"], ["progress", "Progress", "list"], ["details", "Details", "info"]].map(([id, label, icon]) =>
+          <button key={id} id={`run-tab-${id}`} role="tab" aria-selected={activePane === id} aria-controls={`run-pane-${id}`} onClick={() => setActivePane(id)}>
+            <Icon name={icon} size={16}/>{label}{id === "activity" && sim.isPaused && <span className="attention-dot"/>}
+          </button>
+        )}
+      </div>
       {/* Three columns */}
-      <div className="live-run-cols" style={{
+      <div className="live-run-cols" data-active-pane={activePane} style={{
         display: "grid",
         gridTemplateColumns: "minmax(240px, 320px) minmax(0, 1fr) minmax(280px, 360px)",
         gap: 1,
@@ -823,11 +850,11 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
         background: "var(--border)",
       }}>
         {/* LEFT — pipeline */}
-        <div style={{ background: "var(--bg)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div className="run-pane run-pane-progress" id="run-pane-progress" role="tabpanel" aria-labelledby="run-tab-progress" style={{ background: "var(--bg)", display: "flex", flexDirection: "column", minHeight: 0 }}>
           <div style={{ padding: density === "compact" ? "10px 14px" : "14px 16px 8px", flexShrink: 0 }}>
-            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>Pipeline</div>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>Generation progress</div>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ fontSize: 13.5, color: "var(--text)" }}>{PIPELINE_NODES.length} nodes</span>
+              <span style={{ fontSize: 13.5, color: "var(--text)" }}>5 phases</span>
               <MonoTicker style={{ color: "var(--text-muted)" }}>{elapsedDisplay}</MonoTicker>
             </div>
           </div>
@@ -835,31 +862,38 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
             <PipelineTimeline
               events={sim.events} currentNodeIdx={sim.currentNodeIdx}
               density={density}
-              isPaused={sim.isPaused}
+              isPaused={sim.isPaused} completed={sim.completed} failed={sim.failed}
               selectedIdx={selectedIdx}
               retryFor={sim.retryFor}
-              retryCount={sim.failed ? 5 : 2}
+              retryCount={effectiveRetries.length}
               onNodeClick={(i) => setSelectedIdx(i === selectedIdx ? null : i)}
             />
           </div>
         </div>
 
         {/* MIDDLE — activity / HITL */}
-        <div style={{
+        <div className="run-pane run-pane-activity" id="run-pane-activity" role="tabpanel" aria-labelledby="run-tab-activity" style={{
           background: "var(--bg)", overflow: "auto", minHeight: 0,
         }}>
-          {renderActivity()}
+          {actionError && <div role="alert" style={{ margin: 16, padding: 12, color: "var(--danger)", background: "var(--danger-soft)", borderRadius: "var(--radius-md)" }}>{actionError}</div>}
+          <fieldset disabled={submitting} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }} aria-busy={submitting}>
+            {renderActivity()}
+          </fieldset>
         </div>
 
         {/* RIGHT — run details / gap analysis / live log */}
-        <div style={{ background: "var(--bg)", display: "flex", flexDirection: "column", minHeight: 0, overflow: "auto" }}>
+        <div className="run-pane run-pane-details" id="run-pane-details" role="tabpanel" aria-labelledby="run-tab-details" style={{ background: "var(--bg)", display: "flex", flexDirection: "column", minHeight: 0, overflow: "auto" }}>
+          <WorkContextSummary location={summary?.location || runDetail?.location}
+            mode={summary?.work_mode || runDetail?.work_mode}
+            policy={summary?.remote_policy || runDetail?.remote_policy}
+            preferences={summary?.work_preferences || runDetail?.work_preferences}/>
           <div style={{ padding: 16, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
             <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>Run details</div>
             {[
               ["Thread", threadId || "—"],
               ["Model", viaModel],
               ["Started", startedLabel || "—"],
-              ["Retries", `${effectiveRetries.length} / 3`],
+              ["Retries", `${effectiveRetries.length} / ${settings?.generatorMax || 5}`],
               ["Output", `${outputSlug}/`],
             ].map(([k, v], i) => (
               <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderTop: i ? "1px dashed var(--border)" : "none", fontSize: 13 }}>

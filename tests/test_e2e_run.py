@@ -177,3 +177,26 @@ def test_run_manager_drives_a_run_to_completion(tmp_path, monkeypatch, fake_pipe
     filed = library_at.list_resumes()
     assert session.thread_id in {r["thread_id"] for r in filed}
     assert next(r for r in filed if r["thread_id"] == session.thread_id)["pdf_url"] == f"/api/runs/{session.thread_id}/pdf"
+
+
+async def test_real_graph_stream_emits_one_lifecycle_per_node(fake_pipeline):
+    """Model/parser child traces must not inflate displayed time or progress."""
+    from collections import Counter
+
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from resume_agent.api.streaming import StreamTranslator
+    from resume_agent.graph import build_graph
+
+    settings = ResumeAgentSettings(output=OutputConfig(base_dir=str(fake_pipeline)))
+    graph = build_graph(checkpointer=InMemorySaver(), settings=settings)
+    translator = StreamTranslator()
+    events = []
+    async for raw in graph.astream_events(_initial_state(), {"configurable": {"thread_id": "stream-e2e"}}, version="v2"):
+        events.extend(translator.translate(raw))
+    starts = Counter(event.node_id for event in events if event.type == "node_start")
+    ends = Counter(event.node_id for event in events if event.type == "node_end")
+    assert starts == ends
+    assert starts['extract_jd'] == 1
+    assert starts['compile_pdf'] == 1
+    assert all(count == 1 for count in starts.values())

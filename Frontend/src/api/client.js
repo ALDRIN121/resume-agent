@@ -19,9 +19,9 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export const createRun = ({ jdText, jdUrl, jdFileId } = {}) => request("/api/runs", {
+export const createRun = ({ jdText, jdUrl, jdFileId, jobLocation, workMode } = {}) => request("/api/runs", {
   method: "POST",
-  body: JSON.stringify({ jd_text: jdText, jd_url: jdUrl, jd_file_id: jdFileId }),
+  body: JSON.stringify({ jd_text: jdText, jd_url: jdUrl, jd_file_id: jdFileId, job_location: jobLocation, work_mode: workMode }),
 });
 
 export const uploadJdFile = (file) => {
@@ -69,6 +69,15 @@ export const exchangeOpenRouter = ({ code, codeVerifier }) => request("/api/auth
 });
 
 export const pdfUrl = (threadId) => `${API_BASE}/api/runs/${threadId}/pdf`;
+
+export const downloadPdf = (threadId) => {
+  const link = document.createElement("a");
+  link.href = pdfUrl(threadId);
+  link.download = "";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
 
 // ── Résumé library (companies + filed resumes, persisted in library.sqlite) ──
 export const listCompanies = () => request("/api/library/companies");

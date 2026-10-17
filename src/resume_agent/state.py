@@ -20,6 +20,8 @@ class ResumeGenState(TypedDict, total=False):
     # ── Input ──────────────────────────────────────────────────────────────────
     input_type: Literal["text", "url"]
     raw_input: str
+    job_location: str | None
+    work_mode: str | None
 
     # ── Scraping ───────────────────────────────────────────────────────────────
     scraped_text: str | None

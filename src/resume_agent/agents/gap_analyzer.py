@@ -46,6 +46,13 @@ STRICT RULES:
      "drove $5M in revenue" → "contributed to $5M in revenue growth"
    Mark such suggestions with section="experience" and include "soften attribution"
    in the rationale. This preserves honesty without deleting accomplishments.
+6. LOCATION AND WORK MODE:
+   Compare the job's location, work mode, and stated geographic restrictions with
+   the candidate's explicit work_preferences. Raise an open question for a stated
+   conflict or an important unclear restriction; do not count this as a missing skill.
+   Empty preferences mean unspecified, not willingness to work anywhere.
+   Never infer relocation, commuting ability, work authorization, or worldwide remote
+   eligibility. Never suggest changing the candidate's current location to the job's.
 """
 
 _HUMAN_TEMPLATE = """\
@@ -55,6 +62,9 @@ USER RESUME:
 JOB DESCRIPTION:
 Company: {company}
 Role: {role_title} ({seniority})
+Job location: {location}
+Work mode: {work_mode}
+Posting's full work policy: {remote_policy}
 Must-have skills: {must_have}
 Nice-to-have skills: {nice_to_have}
 Responsibilities:
@@ -78,6 +88,8 @@ def gap_analyzer_node(
 
     # Build a concise JSON representation of the resume for the prompt
     resume_summary = {
+        "current_location": resume.personal.location,
+        "work_preferences": resume.work_preferences.model_dump(),
         "summary": resume.summary,
         "skills": resume.skills,
         "experience": [
@@ -100,6 +112,9 @@ def gap_analyzer_node(
         company=jd.company,
         role_title=jd.role_title,
         seniority=jd.seniority or "Not specified",
+        location=jd.location or "Not specified",
+        work_mode=jd.work_mode or jd.remote_policy or "Not specified",
+        remote_policy=jd.remote_policy or "Not specified",
         must_have=", ".join(jd.must_have_skills) or "Not specified",
         nice_to_have=", ".join(jd.nice_to_have_skills) or "None",
         responsibilities="\n".join(f"- {r}" for r in jd.responsibilities[:15]),

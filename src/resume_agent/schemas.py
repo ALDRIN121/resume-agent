@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -120,6 +121,14 @@ class Certification(BaseModel):
     url: str | None = None
 
 
+WorkMode = Literal["Remote", "Hybrid", "On-site"]
+
+
+class WorkPreferences(BaseModel):
+    preferred_locations: list[str] = Field(default_factory=list)
+    work_modes: list[WorkMode] = Field(default_factory=list)
+
+
 class UserResume(BaseModel):
     personal: PersonalInfo
     summary: str | None = None
@@ -130,6 +139,7 @@ class UserResume(BaseModel):
     skills: dict[str, list[str]] = Field(default_factory=dict)
     publications: list[str] = Field(default_factory=list)
     certifications: list[Certification] = Field(default_factory=list)
+    work_preferences: WorkPreferences = Field(default_factory=WorkPreferences)
 
     @model_validator(mode="before")
     @classmethod
@@ -226,6 +236,7 @@ class JobDescription(BaseModel):
     role_title: str
     seniority: str | None = None       # e.g. "Senior", "Staff", "Lead"
     location: str | None = None
+    work_mode: WorkMode | None = None
     remote_policy: str | None = None   # "Remote", "Hybrid", "On-site"
     must_have_skills: list[str] = Field(default_factory=list)
     nice_to_have_skills: list[str] = Field(default_factory=list)

@@ -17,7 +17,7 @@ _CHECKPOINT_TYPES = tuple(
     ("resume_agent.schemas", name)
     for name in (
         "PersonalInfo", "Role", "Project", "Education", "Certification",
-        "UserResume", "JobDescription", "Question", "Suggestion", "GapAnalysis",
+        "UserResume", "WorkPreferences", "JobDescription", "Question", "Suggestion", "GapAnalysis",
     )
 )
 

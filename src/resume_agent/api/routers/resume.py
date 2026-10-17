@@ -14,6 +14,7 @@ from fastapi.responses import PlainTextResponse
 
 from ...agents.base_resume_loader import parse_and_save_resume
 from ...config import BASE_RESUME_FILE, SOURCE_DIR
+from ...llm import describe_llm_error
 from ...schemas import UserResume
 from ..events import ResumeParseEvent, dump_event
 from ..security import request_is_loopback
@@ -99,15 +100,24 @@ async def _parse_resume_job(
     source: Path,
     queue: asyncio.Queue[ResumeParseEvent | None],
 ) -> None:
+    loop = asyncio.get_running_loop()
+    active_stage = "upload"
+    labels = {"upload": "Upload file", "extract": "Read document",
+              "parse": "Understand resume", "write_yaml": "Save base resume"}
+
+    def report(stage: str, status: str) -> None:
+        nonlocal active_stage
+        active_stage = stage
+        event = ResumeParseEvent(stage_id=stage, label=labels[stage], status=status)
+        loop.call_soon_threadsafe(queue.put_nowait, event)
+
     try:
-        await queue.put(ResumeParseEvent(stage_id="upload", label="Uploading file", status="done"))
-        await queue.put(ResumeParseEvent(stage_id="extract", label="Extracting resume text"))
-        resume = await asyncio.to_thread(parse_and_save_resume, source)
-        await queue.put(ResumeParseEvent(stage_id="extract", label="Extracting resume text", status="done"))
+        await queue.put(ResumeParseEvent(stage_id="upload", label=labels["upload"], status="done"))
+        resume = await asyncio.to_thread(parse_and_save_resume, source, on_progress=report)
         await queue.put(
             ResumeParseEvent(
                 stage_id="write_yaml",
-                label="Writing base_resume.yaml",
+                label=labels["write_yaml"],
                 status="done",
                 detail=resume.personal.full_name,
             )
@@ -115,10 +125,10 @@ async def _parse_resume_job(
     except Exception as exc:
         await queue.put(
             ResumeParseEvent(
-                stage_id="failed",
-                label="Resume parsing failed",
+                stage_id=active_stage,
+                label=labels[active_stage],
                 status="failed",
-                detail=str(exc),
+                detail=describe_llm_error(exc),
             )
         )
     finally:

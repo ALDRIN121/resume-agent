@@ -60,12 +60,12 @@ class StreamTranslator:
             if hitl:
                 events.append(hitl)
 
-        if node and event_name.endswith("_start"):
+        if node and event_name == "on_chain_start":
             self._starts[node] = perf_counter()
             events.append(NodeStartEvent(node_id=node))
             events.append(LogLineEvent(line=_log_line(node, "started")))
 
-        if node and event_name.endswith("_end"):
+        if node and event_name == "on_chain_end":
             started = self._starts.pop(node, None)
             duration = int((perf_counter() - started) * 1000) if started else None
             events.append(NodeEndEvent(node_id=node, duration_ms=duration))
@@ -132,19 +132,10 @@ class StreamTranslator:
 
 
 def _node_from_raw(raw: dict[str, Any]) -> str | None:
-    metadata = raw.get("metadata") or {}
-    candidates = [
-        raw.get("name"),
-        metadata.get("langgraph_node"),
-        metadata.get("checkpoint_ns"),
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        value = str(candidate).split(":")[0]
-        if value in _PIPELINE_NODE_SET:
-            return value
-    return None
+    # Nested model, parser, and routing traces inherit langgraph_node metadata.
+    # Only the graph node's own named chain marks its lifecycle.
+    name = str(raw.get("name") or "")
+    return name if name in _PIPELINE_NODE_SET else None
 
 
 def _event_output(raw: dict[str, Any]) -> Any:

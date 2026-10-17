@@ -1,9 +1,11 @@
 import React from "react";
 import { Icon } from "./icons.jsx";
+import { ResumeImportProgress } from "./resume-upload.jsx";
+import { JobContextFields, JobContextLine, WorkPreferencesFields } from "./work-context.jsx";
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
-import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, pdfUrl, uploadJdFile, detectProviders } from "./api/client.js";
+import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders } from "./api/client.js";
 import { startOpenRouterSignIn } from "./api/openrouter-oauth.js";
-import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS, PARSE_STAGES } from "./data.jsx";
+import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS } from "./data.jsx";
 
 // Fetch the live provider catalogue (A4); fall back to the static data.jsx
 // catalogue until the request resolves.
@@ -26,6 +28,8 @@ const normalizeRun = (run) => ({
   id: run.id || run.thread_id,
   company: run.company || "Unknown",
   role: run.role || "Unknown",
+  location: run.location || null,
+  work_mode: run.work_mode || null,
   date: run.date || (run.created_at ? new Date(run.created_at * 1000).toLocaleString() : "Just now"),
   ts: run.created_at || null,
   status: run.status || "queued",
@@ -76,6 +80,7 @@ const resumeForUi = (resume) => {
     })),
     projects: (resume.projects || []).map((project, i) => ({
       id: `p${i + 1}`,
+      ...project,
       name: project.name,
       url: project.url,
       tech: (project.tech || []).join(", "),
@@ -83,6 +88,7 @@ const resumeForUi = (resume) => {
     })),
     education: resume.education || [],
     skills: resume.skills || {},
+    workPreferences: resume.work_preferences || { preferred_locations: [], work_modes: [] },
   };
 };
 
@@ -197,7 +203,7 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
           ? <Button size="sm" variant="primary" iconRight="arrow-right">Answer</Button>
           : bad ? <Button size="sm" variant="secondary" icon="refresh">Retry</Button>
           : done ? <div style={{ display: "flex", gap: 6 }}>
-              {r.pdf_url && <button aria-label="Download" title="Download" onClick={(e) => { e.stopPropagation(); window.open(pdfUrl(r.id), "_blank"); }} style={{ width: 34, height: 34, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--text)", border: "1px solid var(--text)", color: "var(--bg)", cursor: "pointer" }}><Icon name="download" size={15}/></button>}
+              {r.pdf_url && <button aria-label="Download" title="Download" onClick={(e) => { e.stopPropagation(); downloadPdf(r.id); }} style={{ width: 34, height: 34, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--text)", border: "1px solid var(--text)", color: "var(--bg)", cursor: "pointer" }}><Icon name="download" size={15}/></button>}
               <button aria-label="Open" title="Open" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }} style={{ width: 34, height: 34, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", border: "1px solid var(--border-strong)", color: "var(--text)", cursor: "pointer" }}><Icon name="arrow-right" size={15}/></button>
             </div>
           : <button aria-label="Open" title="Open" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }} style={{ width: 34, height: 34, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid transparent", color: "var(--text-muted)", cursor: "pointer" }}><Icon name="arrow-right" size={15}/></button>}
@@ -213,12 +219,12 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
 
   // ── Tab definitions ──
   const TABS = [
-    { id: "overview", label: "Overview", count: null },
-    { id: "active", label: "Active runs", count: activeRuns.length },
-    { id: "final", label: "Resumes", count: completedRuns.length },
-    { id: "companies", label: "Companies", count: companies.length },
-    { id: "needs", label: "Questions asked", count: needsRuns.length },
-    { id: "failed", label: "Failures", count: failedRuns.length },
+    { id: "overview", icon: "home", label: "Overview", count: null },
+    { id: "active", icon: "zap", label: "Active runs", count: activeRuns.length },
+    { id: "final", icon: "file-text", label: "Resumes", count: completedRuns.length },
+    { id: "companies", icon: "building", label: "Companies", count: companies.length },
+    { id: "needs", icon: "alert", label: "Questions asked", count: needsRuns.length },
+    { id: "failed", icon: "x-circle", label: "Failures", count: failedRuns.length },
   ];
 
   // ── Run-list view (used by active / final / needs / failed tabs) ──
@@ -406,16 +412,16 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
             </span>
           </div>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Button size="xl" variant="secondary" icon="upload" onClick={() => goto("resume")}>Replace base resume</Button>
-          <Button size="xl" variant="primary" icon="plus" disabled={locked} onClick={() => !locked && goto("new")}>New tailored resume</Button>
+        <div className="page-actions" style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Button size="xl" variant="secondary" compact icon="upload" onClick={() => goto("resume")}>Replace base resume</Button>
+          <Button size="xl" variant="primary" compact shortLabel="New resume" icon="plus" disabled={locked} onClick={() => !locked && goto("new")}>New tailored resume</Button>
         </div>
       </div>
 
       {/* In-page tabs — switch content within the Dashboard, no navigation away. */}
-      <div style={{ display: "flex", gap: 22, borderBottom: "1px solid var(--border)", marginTop: 22, overflowX: "auto" }}>
+      <div className="dashboard-tabs" role="tablist" aria-label="Overview sections" style={{ display: "flex", gap: 22, borderBottom: "1px solid var(--border)", marginTop: 22, overflowX: "auto" }}>
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
+          <button role="tab" aria-label={t.label} aria-selected={tab === t.id} title={t.label} key={t.id} onClick={() => setTab(t.id)} style={{
             display: "inline-flex", alignItems: "center", gap: 8,
             padding: "12px 2px", background: "transparent", border: "none",
             cursor: "pointer", fontSize: 13.5, fontWeight: tab === t.id ? 600 : 500, whiteSpace: "nowrap",
@@ -423,9 +429,10 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
             borderBottom: "2px solid " + (tab === t.id ? "var(--text)" : "transparent"), marginBottom: -1,
             transition: `color var(--t-fast), border-color var(--t-fast)`,
           }}>
-            {t.label}
+            <Icon name={t.icon} size={16}/>
+            <span className="tab-label">{t.id === "needs" ? "Questions" : t.label}</span>
             {t.count != null && (
-              <span style={{
+              <span className="tab-count" style={{
                 fontSize: 12, padding: "6px 10px", borderRadius: 999, height: 20,
                 display: "inline-flex", alignItems: "center",
                 background: tab === t.id ? "var(--text)" : t.id === "active" ? "var(--warning-chip)" : "var(--surface-2)",
@@ -484,6 +491,7 @@ const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
   const [testResult, setTestResult] = React.useState(null);
   const [doctor, setDoctor] = React.useState(null);
   const [detected, setDetected] = React.useState([]);
+  const [configuredProvider, setConfiguredProvider] = React.useState(null);
 
   // Detect LLMs already usable on this machine (env keys, local Ollama) so we can
   // offer one-click "use this" cards instead of manual setup.
@@ -505,6 +513,7 @@ const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
   React.useEffect(() => {
     getSettings().then(s => {
       if (s.providerId || s.provider) setProviderId(s.providerId || s.provider);
+      if (s.status === "connected") setConfiguredProvider(s.providerId || s.provider);
       if (s.defaultModel) setDefaultModel(s.defaultModel);
       if (s.visionModel) setVisionModel(s.visionModel);
       setVisionEnabled(!!s.visionEnabled);
@@ -527,7 +536,8 @@ const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
   const isOllama = providerId === "ollama_local" || providerId === "ollama_remote";
   const isOllamaLocal = providerId === "ollama_local";
   const needsKeyNow = !!provider.needsKey && !isOllama;
-  const credsValid = needsKeyNow ? apiKey.length > 8 : true;
+  const hasStoredKey = configuredProvider === providerId;
+  const credsValid = needsKeyNow ? !!apiKey.trim() || hasStoredKey : true;
 
   // Real key check — round-trips to the provider instead of measuring key length (C6).
   const testKey = async () => {
@@ -568,7 +578,7 @@ const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
   }).then(updated => { onSettingsSaved?.(updated); return updated; });
 
   return (
-    <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 40, overflow: "auto" }}>
+    <div className="setup-layout" style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
       <div style={{ width: "100%", maxWidth: 660 }}>
 
         {/* Stepper */}
@@ -701,11 +711,11 @@ const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
                   <div style={{ display: "flex", gap: 8 }}>
                     <Input type={showKey ? "text" : "password"} value={apiKey}
                       onChange={(e) => { setApiKey(e.target.value); setKeyTested(null); }}
-                      placeholder={providerId === "anthropic" ? "sk-ant-api03-…" : providerId === "openai" ? "sk-proj-…" : "your key"}
+                      placeholder={hasStoredKey ? "Leave blank to use your saved key" : "Enter your API key"}
                       style={{ flex: 1 }}
                       suffix={<IconButton name={showKey ? "eye-off" : "eye"} label="Toggle visibility" onClick={() => setShowKey(s => !s)}/>}
                     />
-                    <Button variant="secondary" disabled={!apiKey || keyTested === "running"} onClick={testKey}>{keyTested === "running" ? "Testing…" : "Test key"}</Button>
+                    <Button variant="secondary" disabled={(!apiKey && !hasStoredKey) || keyTested === "running"} onClick={testKey}>{keyTested === "running" ? "Testing…" : "Test key"}</Button>
                   </div>
                   {keyTested === "ok"   && <div className="mono" style={{ fontSize: 11.5, color: "var(--success)", marginTop: 6 }}>✓ verified · model responded</div>}
                   {keyTested === "fail" && <div className="mono" style={{ fontSize: 11.5, color: "var(--danger)",  marginTop: 6 }}>✗ rejected — check the key and try again</div>}
@@ -845,14 +855,14 @@ const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
           {/* STEP 5 — UPLOAD */}
           {step === 5 && (
             <div>
-              <SectionHeader eyebrow={`Step 5 of ${TOTAL} · Base resume`} title="Upload your resume" sub="We only need this once. We'll parse it into a YAML you can edit anytime."/>
+              <SectionHeader eyebrow={`Step 5 of ${TOTAL} · Base resume`} title="Upload your resume" sub="We’ll organize your experience and skills into a base resume you can edit anytime."/>
 
               {!parsing && (
-                <UploadDropzone onUpload={startParse} padding="40px 20px" hint="parsed into ~/.resume_generator/base_resume.yaml"/>
+                <UploadDropzone onUpload={startParse} padding="40px 20px" label="Choose a resume file" hint="Drop a PDF or LaTeX file here, or click to browse."/>
               )}
 
               {parsing && (
-                <InlineParseProgress parsing={parsing}/>
+                <ResumeImportProgress parsing={parsing}/>
               )}
 
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
@@ -872,90 +882,9 @@ const SetupWizard = ({ goto, startParse, parsing, onSettingsSaved }) => {
   );
 };
 
-// Inline parse-progress view (Setup wizard step 5) — driven by real WS statuses.
-const InlineParseProgress = ({ parsing }) => {
-  const stages = PARSE_STAGES;
-  const completed = parsing.completed;
-  const failed = parsing.failed;
-  const [elapsed, setElapsed] = React.useState(0);
-
-  React.useEffect(() => {
-    if (completed || failed) return;
-    const id = setInterval(() => setElapsed(Date.now() - parsing.startedAt), 200);
-    return () => clearInterval(id);
-  }, [completed, failed, parsing.startedAt]);
-
-  const doneCount = stages.filter(s => parsing.statuses?.[s.id] === "done").length;
-  const pct = Math.min(100, completed ? 100 : (doneCount / stages.length) * 100);
-  const accent = failed ? "var(--danger)" : completed ? "var(--success)" : "var(--accent)";
-
-  return (
-    <div style={{
-      border: "1px solid " + (failed ? "color-mix(in oklab, var(--danger) 30%, transparent)" : completed ? "color-mix(in oklab, var(--success) 30%, transparent)" : "var(--accent)"),
-      background: failed ? "var(--danger-soft)" : completed ? "var(--success-soft)" : "var(--accent-soft)",
-      borderRadius: "var(--radius-lg)", padding: "18px 18px 8px",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{
-            width: 28, height: 28, borderRadius: 99,
-            background: accent,
-            color: "white",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            {failed ? <Icon name="x" size={14} stroke={2.8}/>
-                    : completed ? <Icon name="check" size={14} stroke={2.8}/>
-                    : <Icon name="loader" size={13} style={{ animation: "spin 1.2s linear infinite" }}/>}
-          </span>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{failed ? "Parsing failed" : completed ? "Parsed" : "Parsing…"}</div>
-            <div className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{parsing.file}</div>
-          </div>
-        </div>
-        <span className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-          {(elapsed / 1000).toFixed(1)}s
-        </span>
-      </div>
-      <div style={{ height: 4, background: "var(--surface)", borderRadius: 99, overflow: "hidden", marginBottom: 14 }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: accent, borderRadius: 99, transition: "width 300ms" }}/>
-      </div>
-      {failed && parsing.error && (
-        <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{parsing.error}</div>
-      )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        {stages.map((s) => {
-          const status = completed ? "done" : (parsing.statuses?.[s.id] || "pending");
-          return (
-            <div key={s.id} style={{
-              display: "flex", alignItems: "center", gap: 10, padding: "5px 0",
-              fontSize: 12.5,
-              color: status === "pending" ? "var(--text-faint)" : "var(--text)",
-            }}>
-              <span style={{
-                width: 14, height: 14, borderRadius: 99,
-                background: status === "done" ? "var(--success)" : status === "failed" ? "var(--danger)" : status === "running" ? "var(--accent)" : "var(--surface-2)",
-                border: "1px solid " + (status === "done" ? "var(--success)" : status === "failed" ? "var(--danger)" : status === "running" ? "var(--accent)" : "var(--border-strong)"),
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0,
-              }}>
-                {status === "done" && <Icon name="check" size={8} stroke={3.4} style={{ color: "white" }}/>}
-                {status === "failed" && <Icon name="x" size={8} stroke={3.4} style={{ color: "white" }}/>}
-              </span>
-              <span style={{ fontWeight: status === "running" ? 600 : 400 }}>{s.label}</span>
-              {s.sub && status !== "pending" && (
-                <span className="mono truncate" style={{ fontSize: 11, color: "var(--text-faint)" }}>· {s.sub}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 // Compact model-picker grid used in the wizard + settings
 const ModelGrid = ({ value, onChange, options, recommended }) => (
-  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+  <div className="form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
     {options.map(m => (
       <button key={m} onClick={() => onChange(m)}
         style={{
@@ -990,6 +919,10 @@ const uiToResume = (ui, base = {}) => ({
     portfolio: ui.profile.portfolio || null,
   },
   summary: ui.profile.summary || null,
+  work_preferences: {
+    preferred_locations: [...new Set((ui.workPreferences?.preferred_locations || []).map(location => location.trim()).filter(Boolean))],
+    work_modes: ui.workPreferences?.work_modes || [],
+  },
   experience: (ui.experience || []).map((e, i) => ({
     ...((base.experience || [])[i] || {}),
     title: e.role || "",
@@ -999,6 +932,13 @@ const uiToResume = (ui, base = {}) => ({
     end: e.end && e.end !== "Present" ? e.end : null,
     bullets: (e.bullets || []).filter(b => b.trim()),
     tech: (e.tech || "").split(",").map(s => s.trim()).filter(Boolean),
+  })),
+  skills: ui.skills || {},
+  projects: (ui.projects || []).map(({ id, tech, ...project }) => ({
+    ...project,
+    description: project.description || "",
+    bullets: (project.bullets || []).filter(b => b.trim()),
+    tech: (tech || "").split(",").map(s => s.trim()).filter(Boolean),
   })),
   education: (ui.education || []).map((ed, i) => ({
     ...((base.education || [])[i] || {}),
@@ -1018,6 +958,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   const [dirty, setDirty] = React.useState(false);
   const [saveState, setSaveState] = React.useState("idle"); // idle | saving | saved | error
   const parsingDone = parsing && parsing.completed;
+  const parsingActive = !!parsing && !parsing.completed && !parsing.failed;
 
   const load = React.useCallback(() => {
     getResume()
@@ -1049,7 +990,21 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   const updExp = (i, field, val) => edit(r => ({ ...r, experience: r.experience.map((e, idx) => idx === i ? { ...e, [field]: val } : e) }));
   const updBullet = (i, j, val) => edit(r => ({ ...r, experience: r.experience.map((e, idx) => idx === i ? { ...e, bullets: e.bullets.map((b, bj) => bj === j ? val : b) } : e) }));
   const addBullet = (i) => edit(r => ({ ...r, experience: r.experience.map((e, idx) => idx === i ? { ...e, bullets: [...e.bullets, ""] } : e) }));
-  const addRole = () => edit(r => ({ ...r, experience: [...r.experience, { id: `e${Date.now()}`, role: "", company: "", location: "", start: "", end: "Present", bullets: [""], tech: "" }] }));
+  const addRole = () => {
+    const id = `e${Date.now()}`;
+    edit(r => ({ ...r, experience: [...r.experience, { id, role: "", company: "", location: "", start: "", end: "Present", bullets: [""], tech: "" }] }));
+    setExpanded(x => ({ ...x, [id]: true }));
+  };
+  const updProject = (i, field, value) => edit(r => ({ ...r, projects: r.projects.map((p, index) => index === i ? { ...p, [field]: value } : p) }));
+  const removeSkill = (group, skill) => edit(r => ({ ...r, skills: { ...r.skills, [group]: r.skills[group].filter(s => s !== skill) } }));
+  const addSkill = (event, group) => {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    const skill = event.currentTarget.value.trim();
+    if (!skill) return;
+    edit(r => ({ ...r, skills: { ...r.skills, [group]: [...new Set([...r.skills[group], skill])] } }));
+    event.currentTarget.value = "";
+  };
   const updEdu = (i, field, val) => edit(r => ({ ...r, education: (r.education || []).map((ed, idx) => idx === i ? { ...ed, [field]: val } : ed) }));
 
   const save = async () => {
@@ -1071,6 +1026,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   const r = resume || {};
   const sections = [
     { id: "profile",    label: "Profile",    count: null },
+    { id: "preferences", label: "Work preferences", count: null },
     { id: "experience", label: "Experience", count: r.experience?.length ?? null },
     { id: "projects",   label: "Projects",   count: r.projects?.length ?? null },
     { id: "education",  label: "Education",  count: r.education?.length ?? null },
@@ -1106,7 +1062,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
 
       {/* Editor */}
       <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
-        <div style={{
+        <div className="editor-toolbar wrap-row" style={{
           padding: "20px 32px",
           borderBottom: "1px solid var(--border)",
           background: "var(--surface)",
@@ -1115,7 +1071,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
           <div>
             <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: -0.3 }}>Base resume</div>
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-              {parsing && !parsing.completed
+              {parsingActive
                 ? <span style={{ color: "var(--accent)" }}>Re-parsing from <span className="mono">{parsing.file}</span>…</span>
                 : saveState === "saving" ? "Saving changes…"
                 : saveState === "error" ? <span style={{ color: "var(--danger)" }}>Save failed — try again</span>
@@ -1123,8 +1079,8 @@ const ResumeEditor = ({ onReplace, parsing }) => {
                 : "All changes saved"}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {parsing && !parsing.completed ? (
+          <div className="wrap-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {parsingActive ? (
               <Badge tone="info" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                 <Icon name="loader" size={10} stroke={2.6} style={{ animation: "spin 1s linear infinite" }}/> Parsing
               </Badge>
@@ -1137,12 +1093,12 @@ const ResumeEditor = ({ onReplace, parsing }) => {
               </Badge>
             )}
             <Tabs value={tab} onChange={setTab} options={[{value:"form",label:"Form"},{value:"yaml",label:"YAML"}]}/>
-            <Button size="sm" variant="primary" icon="check" onClick={save} disabled={!dirty || saveState === "saving" || !resume}>Save</Button>
-            <Button size="sm" variant="secondary" icon="upload" onClick={onReplace}>Replace</Button>
+            <Button size="sm" variant="primary" compact icon="check" onClick={save} disabled={parsingActive || !dirty || saveState === "saving" || !resume}>Save</Button>
+            <Button size="sm" variant="secondary" compact icon="upload" onClick={onReplace} disabled={parsingActive}>Replace</Button>
           </div>
         </div>
 
-        <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 32px 80px" }}>
+        <div className="editor-content" style={{ maxWidth: 820, margin: "0 auto", padding: "28px 32px 80px" }}>
           <div key={tab + String(!!resume)} className="route-in">
           {resume === null ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 80, gap: 10, color: "var(--text-muted)" }}>
@@ -1161,16 +1117,16 @@ const ResumeEditor = ({ onReplace, parsing }) => {
               <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: -0.2, marginBottom: 8 }}>No base resume yet</div>
               <div style={{ fontSize: 13.5, color: "var(--text-muted)", maxWidth: 400, lineHeight: 1.65, marginBottom: 24 }}>
                 Upload a <span className="mono">.pdf</span> or <span className="mono">.tex</span> file to get started.
-                Resume Generator will parse it into a structured YAML that every run uses as its source of truth.
+                We’ll organize your document into an editable base resume for future applications.
               </div>
-              <Button variant="primary" icon="upload" onClick={onReplace}>Upload base resume</Button>
+              <Button variant="primary" icon="upload" onClick={onReplace} disabled={parsingActive}>Upload base resume</Button>
             </div>
           ) : tab === "form" ? (
             <>
               {/* Profile card */}
               <Card id="sec-profile" style={{ marginBottom: 16 }} padding={20}>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Profile</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div className="form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                   <div><div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Name</div><Input value={r.profile.name || ""} onChange={(e) => updProfile("name", e.target.value)}/></div>
                   <div><div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Location</div><Input value={r.profile.location || ""} onChange={(e) => updProfile("location", e.target.value)}/></div>
                   <div><div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Email</div><Input value={r.profile.email || ""} onChange={(e) => updProfile("email", e.target.value)}/></div>
@@ -1180,6 +1136,13 @@ const ResumeEditor = ({ onReplace, parsing }) => {
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Summary</div>
                 <Textarea value={r.profile.summary || ""} onChange={(e) => updProfile("summary", e.target.value)} style={{ minHeight: 70 }}/>
+              </Card>
+
+              <Card id="sec-preferences" style={{ marginBottom: 16 }} padding={20}>
+                <h3 className="work-section-title">Work preferences</h3>
+                <p className="work-section-help">Used to compare job requirements with what works for you. These preferences don’t change your current location.</p>
+                <WorkPreferencesFields value={r.workPreferences}
+                  onChange={workPreferences => edit(resume => ({ ...resume, workPreferences }))}/>
               </Card>
 
               {/* Experience */}
@@ -1212,7 +1175,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
                       </button>
                       {expanded[e.id] && (
                         <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div className="form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                             <div><div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 4 }}>Role</div><Input value={e.role || ""} onChange={(ev) => updExp(ei, "role", ev.target.value)}/></div>
                             <div><div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 4 }}>Company</div><Input value={e.company || ""} onChange={(ev) => updExp(ei, "company", ev.target.value)}/></div>
                             <div><div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 4 }}>Start</div><Input value={e.start || ""} onChange={(ev) => updExp(ei, "start", ev.target.value)}/></div>
@@ -1242,21 +1205,26 @@ const ResumeEditor = ({ onReplace, parsing }) => {
 
               {/* Projects */}
               <Card id="sec-projects" style={{ marginBottom: 16 }} padding={20}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div className="wrap-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>Projects</div>
+                  <Button size="sm" variant="ghost" icon="plus" onClick={() => edit(r => ({ ...r, projects: [...r.projects, { id: `p${Date.now()}`, name: "", description: "", url: "", tech: "", bullets: [] }] }))}>Add project</Button>
                 </div>
-                {r.projects.map(p => (
-                  <div key={p.id} style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "10px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)",
-                  }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Icon name="grip" size={14} style={{ color: "var(--text-faint)" }}/>
-                      <Icon name="chevron-right" size={14} style={{ color: "var(--text-muted)" }}/>
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>{p.name}</span>
-                      <span style={{ fontSize: 12, color: "var(--text-muted)" }} className="mono">· {p.url}</span>
-                    </span>
-                    <Icon name="trash" size={13} style={{ color: "var(--text-faint)" }}/>
+                {r.projects.map((p, i) => (
+                  <div key={p.id} style={{ padding: 12, border: "1px solid var(--border)", borderRadius: "var(--radius-md)", marginBottom: 12 }}>
+                    <div className="form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <label>Project name<Input aria-label="Project name" value={p.name} onChange={e => updProject(i, "name", e.target.value)}/></label>
+                      <label>Project URL<Input aria-label="Project URL" value={p.url || ""} onChange={e => updProject(i, "url", e.target.value)}/></label>
+                      <label style={{ gridColumn: "1 / -1" }}>Description<Textarea aria-label="Project description" value={p.description || ""} onChange={e => updProject(i, "description", e.target.value)}/></label>
+                      <label style={{ gridColumn: "1 / -1" }}>Technologies<Input aria-label="Project technologies" value={p.tech} onChange={e => updProject(i, "tech", e.target.value)} placeholder="Python, FastAPI"/></label>
+                    </div>
+                    {(p.bullets || []).map((bullet, j) => <div key={j} style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <Textarea aria-label={`Project ${i + 1} bullet ${j + 1}`} value={bullet} onChange={e => updProject(i, "bullets", p.bullets.map((b, index) => index === j ? e.target.value : b))} style={{ minHeight: 56 }}/>
+                      <IconButton name="x" label="Remove project bullet" onClick={() => updProject(i, "bullets", p.bullets.filter((_, index) => index !== j))}/>
+                    </div>)}
+                    <div className="wrap-row" style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
+                      <Button size="sm" variant="ghost" icon="plus" onClick={() => updProject(i, "bullets", [...(p.bullets || []), ""])}>Add bullet</Button>
+                      <Button size="sm" variant="ghost" icon="trash" onClick={() => edit(r => ({ ...r, projects: r.projects.filter((_, index) => index !== i) }))}>Remove project</Button>
+                    </div>
                   </div>
                 ))}
               </Card>
@@ -1273,9 +1241,9 @@ const ResumeEditor = ({ onReplace, parsing }) => {
                           display: "inline-flex", alignItems: "center", gap: 5,
                           padding: "3px 8px", background: "var(--surface-2)", border: "1px solid var(--border)",
                           borderRadius: 99, fontSize: 12,
-                        }}>{s} <Icon name="x" size={10} style={{ color: "var(--text-faint)" }}/></span>
+                        }}>{s} <button aria-label={`Remove ${s}`} onClick={() => removeSkill(group, s)} className="skill-remove"><Icon name="x" size={12}/></button></span>
                       ))}
-                      <input placeholder="Type to add…" style={{ background: "transparent", border: "none", outline: "none", fontSize: 12.5, padding: "3px 8px", flex: 1, minWidth: 100 }}/>
+                      <input aria-label={`Add skill to ${group}`} onKeyDown={e => addSkill(e, group)} placeholder="Type to add…" style={{ background: "transparent", border: "none", outline: "none", fontSize: 12.5, padding: "3px 8px", flex: 1, minWidth: 100 }}/>
                     </div>
                   </div>
                 ))}
@@ -1291,7 +1259,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
                   <EmptyState icon="file-text" title="No education entries" sub="Add a degree or certification."/>
                 )}
                 {(r.education || []).map((ed, i) => (
-                  <div key={ed.id || i} style={{
+                  <div key={ed.id || i} className="form-grid" style={{
                     display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
                     padding: "12px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)",
                     marginBottom: 8, background: "var(--surface)",
@@ -1335,6 +1303,8 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
   const [tab, setTab] = React.useState("text");
   const [text, setText] = React.useState("");
   const [url, setUrl] = React.useState("");
+  const [jobLocation, setJobLocation] = React.useState("");
+  const [workMode, setWorkMode] = React.useState("");
   const [jdFileId, setJdFileId] = React.useState(null);
   const [jdFileName, setJdFileName] = React.useState(null);
   const [uploadingFile, setUploadingFile] = React.useState(false);
@@ -1376,6 +1346,8 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
         jdText: tab === "text" ? text : undefined,
         jdUrl: tab === "url" ? url : undefined,
         jdFileId: tab === "file" ? jdFileId : undefined,
+        jobLocation: jobLocation.trim() || undefined,
+        workMode: workMode || undefined,
       });
       onRunStarted?.(result.thread_id);
     } catch (err) {
@@ -1403,7 +1375,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
             <div>
               <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2 }}>Your base resume is being re-parsed</div>
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6, maxWidth: 440 }}>
-                New runs are paused while parsing finishes, so the LangGraph pipeline doesn't mid-flight against a stale resume. This usually takes 10–12s.
+                New runs will be available when your base resume is ready. Parsing can take a minute or two.
               </div>
             </div>
             <Button variant="secondary" icon="file-text" onClick={() => goto("resume")}>View parsing progress</Button>
@@ -1442,7 +1414,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
       <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)", gap: 32, alignItems: "start", marginTop: 24 }}>
         {/* input card */}
         <Card padding={22}>
-          <div style={{ display: "inline-flex", background: "var(--surface-2)", borderRadius: "var(--radius-md)", padding: 3, gap: 2 }}>
+          <div className="input-tabs" style={{ display: "inline-flex", background: "var(--surface-2)", borderRadius: "var(--radius-md)", padding: 3, gap: 2 }}>
             {[["text", "Paste text", "file-text"], ["url", "From URL", "link"], ["file", "Upload file", "upload"]].map(([id, label, ic]) => (
               <button key={id} onClick={() => switchTab(id)} style={{
                 display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px",
@@ -1462,7 +1434,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
                   style={{ minHeight: 300, fontFamily: "var(--font-mono)", fontSize: 12.5, lineHeight: 1.7 }}/>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: detected ? "var(--success)" : "var(--text-faint)" }}>
-                    <Icon name={detected ? "check-circle" : "info"} size={14}/>{detected ? "Looks like a full posting — company & role detected" : "Paste the full job description above"}
+                    <Icon name={detected ? "check-circle" : "info"} size={14}/>{detected ? "Ready to analyze the company and role" : "Paste the full job description above"}
                   </span>
                   <span className="mono" style={{ fontSize: 11.5, color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-faint)" }}>{charCount.toLocaleString()} / 8,000</span>
                 </div>
@@ -1494,11 +1466,13 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
             )}
           </div>
 
+          <JobContextFields location={jobLocation} mode={workMode} onLocationChange={setJobLocation} onModeChange={setWorkMode}/>
+
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
             <span style={{ flex: 1, minWidth: 180, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-faint)" }}>
-              {error ? <span style={{ color: "var(--danger)" }}>{error}</span> : <><Icon name="loader" size={13} style={{ animation: "none" }}/>Runs take ~45s — you can leave and come back</>}
+              {error ? <span style={{ color: "var(--danger)" }}>{error}</span> : <><Icon name="loader" size={13} style={{ animation: "none" }}/>Generation can take a few minutes. You can leave and come back.</>}
             </span>
-            <Button variant="primary" iconRight="zap" onClick={startRun} disabled={tone === "danger" || submitting || (tab === "text" ? !text.trim() : tab === "url" ? !url.trim() : !jdFileId)} style={{ height: 44 }}>
+            <Button variant="primary" compact shortLabel="Generate" iconRight="zap" onClick={startRun} disabled={(tab === "text" && tone === "danger") || submitting || uploadingFile || (tab === "text" ? !text.trim() : tab === "url" ? !url.trim() : !jdFileId)} style={{ height: 44 }}>
               {submitting ? "Starting…" : "Generate tailored resume"}
             </Button>
           </div>
@@ -1548,7 +1522,7 @@ const HistoryView = ({ goto, openRun }) => {
   const q = query.trim().toLowerCase();
   const filtered = runs.filter(r => {
     if (rangeMs && r.ts && (now - r.ts * 1000) > rangeMs) return false;
-    if (q && !`${r.company} ${r.role}`.toLowerCase().includes(q)) return false;
+    if (q && !`${r.company} ${r.role} ${r.location || ""} ${r.work_mode || ""}`.toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -1597,6 +1571,7 @@ const HistoryView = ({ goto, openRun }) => {
                   >
                     <td style={{ padding: "10px 18px", width: "30%" }}>
                       <div style={{ fontSize: 12.5 }}>{r.role}</div>
+                      <JobContextLine location={r.location} mode={r.work_mode}/>
                     </td>
                     <td style={{ padding: "10px 14px" }}><StatusPill status={r.status} size="sm"/></td>
                     <td style={{ padding: "10px 14px" }} className="mono"><span style={{ color: "var(--text-muted)", fontSize: 11.5 }}>{r.duration}</span></td>
@@ -1604,7 +1579,7 @@ const HistoryView = ({ goto, openRun }) => {
                     <td style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 11.5 }}>{r.date}</td>
                     <td style={{ padding: "10px 18px", textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 2 }} onClick={(e) => e.stopPropagation()}>
-                        {r.pdf_url && <IconButton name="download" label="Download PDF" onClick={() => window.open(r.pdf_url, "_blank")} />}
+                        {r.pdf_url && <IconButton name="download" label="Download PDF" onClick={() => downloadPdf(r.id)} />}
                       </div>
                     </td>
                   </tr>
@@ -1707,7 +1682,7 @@ const SettingsView = ({ tweaks, setTweak, onSettingsSaved }) => {
 
   return (
     <div className="page-pad" style={{ padding: "32px 40px", maxWidth: 820, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 22 }}>
+      <div className="wrap-row" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 22 }}>
         <div>
           <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Settings</div>
           <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: -0.4, marginTop: 4 }}>Configuration</div>
@@ -1716,7 +1691,7 @@ const SettingsView = ({ tweaks, setTweak, onSettingsSaved }) => {
           <span style={{ fontSize: 12, color: saveState === "error" ? "var(--danger)" : "var(--text-muted)" }}>
             {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : dirty ? "Unsaved changes" : ""}
           </span>
-          <Button variant="primary" icon="check" onClick={save} disabled={!dirty || saveState === "saving"}>Save changes</Button>
+          <Button variant="primary" compact shortLabel="Save" icon="check" onClick={save} disabled={!dirty || saveState === "saving"}>Save changes</Button>
         </div>
       </div>
 
@@ -1734,7 +1709,7 @@ const SettingsView = ({ tweaks, setTweak, onSettingsSaved }) => {
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>{provider.name}</span>
-                <span style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>· {provider.sub}</span>
+                <span style={{ fontSize: 11, color: "var(--text-muted)", overflowWrap: "anywhere" }}>· {provider.sub}</span>
                 <StatusPill status={connection.status === "error" ? "failed" : "complete"} size="sm" label={connection.status === "error" ? "Error" : "Connected"}/>
               </div>
               <div className="mono" style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`default: ${defaultModel}${visionEnabled ? ` · vision: ${visionModel}` : ""}`}>
@@ -2014,7 +1989,7 @@ const fmtFiled = (ts) => {
 
 const RowActions = ({ r, openRun }) => {
   const m = libMeta(r.status);
-  const download = (e) => { e.stopPropagation(); if (r.pdf_url) window.open(pdfUrl(r.id), "_blank"); };
+  const download = (e) => { e.stopPropagation(); if (r.pdf_url) downloadPdf(r.id); };
   if (m.key === "needs") {
     return <IconButton name="arrow-right" label="Answer & continue" onClick={(e) => { e.stopPropagation(); openRun(r.id, "awaiting-input", r); }} />;
   }
@@ -2024,7 +1999,7 @@ const RowActions = ({ r, openRun }) => {
   if (m.key === "final" && r.pdf_url) {
     return (
       <div style={{ display: "inline-flex", gap: 2 }}>
-        <IconButton name="eye" label="Preview" onClick={download} />
+        <IconButton name="eye" label="Preview" onClick={(e) => { e.stopPropagation(); openRun(r.id, r.status, r); }} />
         <IconButton name="download" label="Download PDF" onClick={download} />
       </div>
     );
@@ -2035,7 +2010,7 @@ const RowActions = ({ r, openRun }) => {
 const LedgerTable = ({ groups, openRun }) => (
   <Card padding={0} style={{ overflow: "hidden" }}>
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 660 }}>
+      <table className="ledger-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 660 }}>
         <thead>
           <tr>
             {["Document", "Status", "Filed", ""].map((h, i) => (
@@ -2060,7 +2035,7 @@ const LedgerTable = ({ groups, openRun }) => (
                 </td>
               </tr>
               {rows.map(r => (
-                <tr key={r.id} style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
+                <tr className="ledger-entry" key={r.id} style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
                   onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                   onClick={() => openRun(r.id, r.status, r)}
@@ -2070,6 +2045,7 @@ const LedgerTable = ({ groups, openRun }) => (
                       <Stamp status={r.status}/>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: -0.1 }} className="truncate">{r.role}</div>
+                        <JobContextLine location={r.location} mode={r.work_mode}/>
                         <div className="mono truncate" style={{ fontSize: 11, color: "var(--text-faint)" }}>
                           {r.pdf || (r.status === "awaiting-input" ? (r.hitlDetail || "waiting on your answers") : r.status === "failed" ? "generation failed" : "in progress")} · #{String(r.id).slice(0, 8)}
                         </div>
@@ -2109,6 +2085,7 @@ const ShelvesBoard = ({ groups, openRun }) => (
             <Stamp status={r.status} size={28}/>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600 }} className="truncate">{r.role}</div>
+              <JobContextLine location={r.location} mode={r.work_mode}/>
               <div className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)" }}>{libMeta(r.status).label} · {fmtFiled(r.ts)}</div>
             </div>
           </button>
@@ -2140,6 +2117,7 @@ const GridCard = ({ r, openRun }) => {
       <div style={{ padding: "12px 14px" }}>
         <div className="mono truncate" style={{ fontSize: 12.5, fontWeight: 600 }}>{r.pdf || `${r.company} — ${r.role}`}</div>
         <div className="truncate" style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 3 }}>{r.company} · {r.role}</div>
+        <JobContextLine location={r.location} mode={r.work_mode}/>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
           <LibPill status={r.status}/>
           {r.retries > 0 && <Badge>{r.retries} retr{r.retries === 1 ? "y" : "ies"}</Badge>}
@@ -2190,7 +2168,7 @@ const LibraryView = ({ goto, openRun, locked, initialFilter }) => {
     <div className="page-pad" style={{ padding: "40px 40px 64px", maxWidth: 1240, margin: "0 auto" }}>
       <Masthead crumb="Workspace / Library" title="Résumé library"
         sub={`${counts.all} résumé${counts.all === 1 ? "" : "s"} across ${companyList.length} compan${companyList.length === 1 ? "y" : "ies"}`}
-        action={<Button variant="primary" iconRight="arrow-right" disabled={locked} onClick={() => goto("new")}>New résumé</Button>}
+        action={<Button variant="primary" compact shortLabel="New resume" iconRight="arrow-right" disabled={locked} onClick={() => goto("new")}>New résumé</Button>}
       />
 
       {/* Summary strip */}
@@ -2211,23 +2189,29 @@ const LibraryView = ({ goto, openRun, locked, initialFilter }) => {
 
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ display: "inline-flex", gap: 2 }}>
+        <div className="library-filters" style={{ display: "inline-flex", gap: 2 }}>
           {chip("all", "All")}{chip("final", "Final")}{chip("needs", "Needs you")}{chip("active", "Active")}{chip("failed", "Failed")}
         </div>
-        <div style={{ marginLeft: "auto", display: "inline-flex", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+        <div className="library-view-switch" style={{ marginLeft: "auto", display: "inline-flex", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
           {[["grid", "grid", "Grid"], ["table", "list", "Ledger"], ["board", "columns", "Shelves"]].map(([id, icon, label], i) => (
-            <button key={id} onClick={() => setLayout(id)} style={{
+            <button aria-label={label} title={label} aria-pressed={layout === id} key={id} onClick={() => setLayout(id)} style={{
               border: "none", borderLeft: i ? "1px solid var(--border)" : "none",
               background: layout === id ? "var(--accent)" : "var(--surface)", color: layout === id ? "var(--accent-contrast)" : "var(--text-muted)",
               padding: "7px 12px", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: layout === id ? 600 : 400, cursor: "pointer",
-            }}><Icon name={icon} size={14}/> {label}</button>
+            }}><Icon name={icon} size={16}/><span className="view-label">{label}</span></button>
           ))}
         </div>
       </div>
 
       <div className="org-grid" style={{ display: "grid", gridTemplateColumns: "212px 1fr", gap: 20, alignItems: "start" }}>
+        <label className="mobile-company-filter">Company
+          <select aria-label="Filter by company" value={company || ""} onChange={e => setCompany(e.target.value || null)}>
+            <option value="">All companies ({all.length})</option>
+            {companyList.map(c => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
+          </select>
+        </label>
         {/* company tree */}
-        <Card padding={8} style={{ position: "sticky", top: 12 }}>
+        <Card className="desktop-company-tree" padding={8} style={{ position: "sticky", top: 12 }}>
           <div className="mono" style={{ fontSize: 9.5, textTransform: "uppercase", letterSpacing: 1.2, color: "var(--text-faint)", padding: "8px 9px 6px" }}>Companies</div>
           <TreeItem label="All companies" icon="folder" count={all.length} active={!company} onClick={() => setCompany(null)}/>
           <div style={{ height: 1, background: "var(--border)", margin: "6px 4px" }}/>

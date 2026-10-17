@@ -53,9 +53,10 @@ export const FAILED_DEBUG_PATH = "/output/_failed/20260517_142903";
 // Expected backend parse stages (mirrors api/routers/resume.py::_parse_resume_job).
 // Statuses are overlaid from the real /ws/resume-parse WebSocket events.
 export const PARSE_STAGES = [
-  { id: "upload",     label: "Uploading file",            sub: "transferring to ~/.resume_generator/source/" },
-  { id: "extract",    label: "Extracting resume text",     sub: "Poppler / LaTeX source" },
-  { id: "write_yaml", label: "Writing base_resume.yaml",   sub: "~/.resume_generator/base_resume.yaml" },
+  { id: "upload", label: "Upload file", sub: "Transfer your document to the app." },
+  { id: "extract", label: "Read document", sub: "Extract the text from your PDF or LaTeX file." },
+  { id: "parse", label: "Understand resume", sub: "Organize your experience, education, and skills. This can take a minute or two." },
+  { id: "write_yaml", label: "Save base resume", sub: "Make your new resume available to review and use." },
 ];
 
 export const SAMPLE_SUGGESTIONS = [
@@ -240,4 +241,3 @@ export const ACTIVE_LLM = {
   lastTested: "3 min ago",
   testReply: "OK",
 };
-

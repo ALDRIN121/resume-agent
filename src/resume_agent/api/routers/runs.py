@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, model_validator
 
 from ...agents.base_resume_loader import _extract_pdf_text
+from ...schemas import WorkMode
 from ..run_manager import run_detail, run_manager, run_summary
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -20,6 +21,8 @@ class CreateRunRequest(BaseModel):
     jd_text: str | None = None
     jd_url: str | None = None
     jd_file_id: str | None = None
+    job_location: str | None = None
+    work_mode: WorkMode | None = None
 
     @model_validator(mode="after")
     def _must_have_input(self) -> CreateRunRequest:

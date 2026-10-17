@@ -45,6 +45,10 @@ class RunSession:
     started_wall_ts: float = field(default_factory=lambda: __import__("time").time())
     company: str = "Unknown"
     role: str = "Unknown"
+    location: str | None = None
+    work_mode: str | None = None
+    remote_policy: str | None = None
+    work_preferences: dict[str, Any] | None = None
     pdf_path: str | None = None
     error: str | None = None
     events: list[Event] = field(default_factory=list)
@@ -95,6 +99,8 @@ class RunManager:
             "schema_version": STATE_SCHEMA_VERSION,
             "input_type": "url" if is_url else "text",
             "raw_input": raw_input,
+            "job_location": (jd_input.get("job_location") or "").strip() or None,
+            "work_mode": jd_input.get("work_mode"),
             "latex_errors": [],
             "pdf_errors": [],
             "page_images": [],
@@ -104,7 +110,8 @@ class RunManager:
             "messages": [],
         }
 
-        session = RunSession(thread_id=thread_id, status="running")
+        session = RunSession(thread_id=thread_id, status="running",
+                             location=initial_state["job_location"], work_mode=initial_state["work_mode"])
         async with self._lock:
             self._sessions[thread_id] = session
         session.task = asyncio.create_task(self._drive(session, initial_state))
@@ -192,6 +199,10 @@ class RunManager:
                 await self._publish(session, NodeStartEvent(node_id="route_input"))
                 await self._publish(session, NodeEndEvent(node_id="route_input", duration_ms=0))
                 async for raw in graph.astream_events(graph_input, config=config, version="v2"):
+                    if raw.get("event") == "on_chain_end" and raw.get("name") in {"extract_jd", "load_base_resume"}:
+                        output = (raw.get("data") or {}).get("output")
+                        if isinstance(output, dict):
+                            self._refresh_meta(session, output)
                     for event in translator.translate(raw):
                         if event.type == "hitl_pending":
                             session.status = "awaiting-input"
@@ -249,6 +260,10 @@ class RunManager:
                 "thread_id": session.thread_id,
                 "company": session.company,
                 "role": session.role,
+                "location": session.location,
+                "work_mode": session.work_mode,
+                "remote_policy": session.remote_policy,
+                "work_preferences": session.work_preferences,
                 "started_wall_ts": session.started_wall_ts,
                 "status": session.status,
                 "pdf_path": session.pdf_path,
@@ -267,6 +282,9 @@ class RunManager:
                 thread_id=session.thread_id,
                 company=session.company,
                 role=session.role,
+                location=session.location,
+                work_mode=session.work_mode,
+                remote_policy=session.remote_policy,
                 status=session.status,
                 pdf_path=session.pdf_path,
                 error=session.error,
@@ -309,6 +327,10 @@ class RunManager:
                     started_wall_ts=rec.get("started_wall_ts", 0.0),
                     company=rec.get("company", "Unknown"),
                     role=rec.get("role", "Unknown"),
+                    location=rec.get("location"),
+                    work_mode=rec.get("work_mode"),
+                    remote_policy=rec.get("remote_policy"),
+                    work_preferences=rec.get("work_preferences"),
                     pdf_path=rec.get("pdf_path"),
                     error=rec.get("error"),
                     stored_duration_s=rec.get("duration_s"),
@@ -338,6 +360,10 @@ class RunManager:
             await subscriber.put(None)
 
     def _refresh_meta(self, session: RunSession, values: dict[str, Any]) -> None:
+        resume = values.get("base_resume")
+        if resume is not None:
+            preferences = resume.get("work_preferences", {}) if isinstance(resume, dict) else resume.work_preferences
+            session.work_preferences = preferences.model_dump() if hasattr(preferences, "model_dump") else preferences
         jd = values.get("jd")
         if jd is not None:
             session.company = getattr(jd, "company", None) or (
@@ -346,6 +372,9 @@ class RunManager:
             session.role = getattr(jd, "role_title", None) or (
                 jd.get("role_title") if isinstance(jd, dict) else session.role
             )
+            session.location = jd.get("location") if isinstance(jd, dict) else jd.location
+            session.remote_policy = jd.get("remote_policy") if isinstance(jd, dict) else jd.remote_policy
+            session.work_mode = (jd.get("work_mode") if isinstance(jd, dict) else jd.work_mode) or session.remote_policy
         final_pdf = values.get("final_pdf_path")
         if final_pdf:
             session.pdf_path = str(final_pdf)
@@ -365,6 +394,10 @@ def run_summary(session: RunSession) -> dict[str, Any]:
         "thread_id": session.thread_id,
         "company": session.company,
         "role": session.role,
+        "location": session.location,
+        "work_mode": session.work_mode,
+        "remote_policy": session.remote_policy,
+        "work_preferences": session.work_preferences,
         "created_at": session.started_wall_ts,
         "status": session.status,
         "duration": _format_duration(session.get_duration_s()) if session.status != "awaiting-input" else "-",

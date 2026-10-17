@@ -7,6 +7,7 @@ On subsequent `generate` runs, loads the YAML directly (no LLM cost).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -25,10 +26,11 @@ Rules:
 - Extract ALL information present — do not discard anything
 - Preserve exact wording of bullet points and skills
 - If a section is absent, use an empty list
+- Extract work_preferences only when explicitly stated: preferred_locations (list of locations) and work_modes (list containing Remote, Hybrid, or On-site). Keep current personal.location separate; never infer preferences or relocation willingness from it.
 - For skills, group them into logical categories (e.g., Languages, Frameworks, Tools, Cloud)
 
 Required output field names (use these exactly):
-- Top level: personal, summary, experience, projects, education, skills, certifications, publications
+- Top level: personal, summary, experience, projects, education, skills, certifications, publications, work_preferences
 - personal fields: full_name, email, phone, location, linkedin (handle only), github (handle only), website
 - experience items: company, title, start (e.g. "Jan 2022"), end (e.g. "Dec 2023"; omit or null if current), location, bullets (list of strings), tech (list of strings)
 - projects items: name, description, tech (list), bullets (list), url
@@ -63,7 +65,11 @@ def load_base_resume_node(_state: ResumeGenState) -> dict:
     return {"base_resume": resume}
 
 
-def parse_and_save_resume(source_path: Path) -> UserResume:
+def parse_and_save_resume(
+    source_path: Path,
+    *,
+    on_progress: Callable[[str, str], None] | None = None,
+) -> UserResume:
     """
     One-time parsing: read .tex or .pdf → LLM → UserResume → save YAML.
     Called by `resume-generator init`, not from the graph.
@@ -73,10 +79,14 @@ def parse_and_save_resume(source_path: Path) -> UserResume:
     """
     from ..ui.progress import phase_spinner
 
-    settings = ResumeAgentSettings.load()
     suffix = source_path.suffix.lower()
 
+    def report(stage: str, status: str) -> None:
+        if on_progress is not None:
+            on_progress(stage, status)
+
     # ── Step 1: Extract text ───────────────────────────────────────────────────
+    report("extract", "running")
     with phase_spinner(f"Extracting text from {source_path.name}"):
         if suffix == ".tex":
             text = source_path.read_text(encoding="utf-8")
@@ -89,8 +99,11 @@ def parse_and_save_resume(source_path: Path) -> UserResume:
             raise ValueError("Could not extract any text from the provided file.")
 
     print_info(f"Extracted {len(text):,} characters from resume.")
+    report("extract", "done")
 
     # ── Step 2: LLM parsing (slow — can take 1–2 min) ─────────────────────────
+    report("parse", "running")
+    settings = ResumeAgentSettings.load()
     llm = get_chat_model(settings, task="structured")
     structured_llm = llm.with_structured_output(UserResume)
 
@@ -101,8 +114,10 @@ def parse_and_save_resume(source_path: Path) -> UserResume:
 
     with phase_spinner("Parsing with AI  (may take 1–2 min)"):
         resume: UserResume = structured_llm.invoke(messages)
+    report("parse", "done")
 
     # ── Step 3: Save YAML ─────────────────────────────────────────────────────
+    report("write_yaml", "running")
     with phase_spinner("Saving parsed resume"):
         BASE_RESUME_FILE.parent.mkdir(parents=True, exist_ok=True)
         BASE_RESUME_FILE.write_text(

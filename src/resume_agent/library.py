@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS resumes (
     thread_id  TEXT PRIMARY KEY,
     company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     role       TEXT,
+    location   TEXT,
+    work_mode  TEXT,
+    remote_policy TEXT,
     status     TEXT,
     pdf_path   TEXT,
     error      TEXT,
@@ -53,6 +56,10 @@ def init_db() -> None:
     """Create tables if they don't exist. Safe to call repeatedly."""
     with _connect() as conn:
         conn.executescript(_SCHEMA)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(resumes)")}
+        for column in ("location", "work_mode", "remote_policy"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE resumes ADD COLUMN {column} TEXT")
 
 
 def _company_id(conn: sqlite3.Connection, name: str) -> int:
@@ -71,6 +78,9 @@ def upsert_resume(
     thread_id: str,
     company: str,
     role: str | None = None,
+    location: str | None = None,
+    work_mode: str | None = None,
+    remote_policy: str | None = None,
     status: str | None = None,
     pdf_path: str | None = None,
     error: str | None = None,
@@ -86,11 +96,14 @@ def upsert_resume(
         conn.execute(
             """
             INSERT INTO resumes
-                (thread_id, company_id, role, status, pdf_path, error, duration_s, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (thread_id, company_id, role, status, pdf_path, error, duration_s, created_at, updated_at, location, work_mode, remote_policy)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(thread_id) DO UPDATE SET
                 company_id = excluded.company_id,
                 role       = excluded.role,
+                location   = excluded.location,
+                work_mode  = excluded.work_mode,
+                remote_policy = excluded.remote_policy,
                 status     = excluded.status,
                 pdf_path   = excluded.pdf_path,
                 error      = excluded.error,
@@ -107,6 +120,9 @@ def upsert_resume(
                 duration_s,
                 created_at if created_at is not None else now,
                 now,
+                location,
+                work_mode,
+                remote_policy,
             ),
         )
 
@@ -145,7 +161,7 @@ def list_resumes(company: str | None = None) -> list[dict[str, Any]]:
     """Résumé records, optionally filtered to one company, newest first."""
     query = (
         "SELECT r.thread_id, c.name AS company, r.role, r.status, r.pdf_path, "
-        "r.error, r.duration_s, r.created_at, r.updated_at "
+        "r.error, r.duration_s, r.created_at, r.updated_at, r.location, r.work_mode, r.remote_policy "
         "FROM resumes r JOIN companies c ON c.id = r.company_id"
     )
     params: tuple[Any, ...] = ()
@@ -162,7 +178,7 @@ def get_resume(thread_id: str) -> dict[str, Any] | None:
     with _connect() as conn:
         row = conn.execute(
             "SELECT r.thread_id, c.name AS company, r.role, r.status, r.pdf_path, "
-            "r.error, r.duration_s, r.created_at, r.updated_at "
+            "r.error, r.duration_s, r.created_at, r.updated_at, r.location, r.work_mode, r.remote_policy "
             "FROM resumes r JOIN companies c ON c.id = r.company_id "
             "WHERE r.thread_id = ?",
             (thread_id,),
@@ -202,6 +218,9 @@ def migrate_from_jsonl(path: Path | None = None) -> int:
                 thread_id=tid,
                 company=rec.get("company", "Unknown"),
                 role=rec.get("role"),
+                location=rec.get("location"),
+                work_mode=rec.get("work_mode"),
+                remote_policy=rec.get("remote_policy"),
                 status=rec.get("status"),
                 pdf_path=rec.get("pdf_path"),
                 error=rec.get("error"),
@@ -222,6 +241,9 @@ def _resume_dict(row: sqlite3.Row) -> dict[str, Any]:
         "id": row["thread_id"],
         "company": row["company"],
         "role": row["role"] or "Unknown",
+        "location": row["location"],
+        "work_mode": row["work_mode"],
+        "remote_policy": row["remote_policy"],
         "status": row["status"] or "queued",
         "pdf": Path(pdf_path).name if pdf_path else None,
         "pdf_url": f"/api/runs/{row['thread_id']}/pdf" if has_pdf else None,

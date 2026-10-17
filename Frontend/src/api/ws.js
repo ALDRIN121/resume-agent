@@ -14,6 +14,7 @@ const wsBase = () => {
 // sequence of ResumeParseEvent frames and then closes the socket, so we don't
 // reconnect here (unlike subscribeRun).
 export function subscribeResumeParse(jobId, onEvent, onClose) {
+  let disposed = false;
   const socket = new WebSocket(`${wsBase()}/ws/resume-parse/${jobId}`);
   socket.onmessage = (message) => {
     try {
@@ -22,8 +23,8 @@ export function subscribeResumeParse(jobId, onEvent, onClose) {
       // ignore malformed frames
     }
   };
-  socket.onclose = () => onClose?.();
-  return () => socket.close();
+  socket.onclose = () => { if (!disposed) onClose?.(); };
+  return () => { disposed = true; socket.close(); };
 }
 
 export function subscribeRun(threadId, onEvent, onStatus) {

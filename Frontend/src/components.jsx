@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon } from "./icons.jsx";
 
-const Button = ({ children, variant = "primary", size = "md", icon, iconRight, className = "", ...rest }) => {
+const Button = ({ children, variant = "primary", size = "md", icon, iconRight, compact = false, shortLabel, className = "", ...rest }) => {
   const sizeStyles = {
     sm: { height: 34, padding: "0 12px", fontSize: 13, gap: 6 },
     md: { height: 40, padding: "0 16px", fontSize: 13.5, gap: 8, fontWeight: 600 },
@@ -19,6 +19,9 @@ const Button = ({ children, variant = "primary", size = "md", icon, iconRight, c
     <button
       {...rest}
       className={`btn ${className}`}
+      data-compact={compact && (icon || iconRight) ? (shortLabel ? "short" : "icon") : undefined}
+      aria-label={rest["aria-label"] || (compact && typeof children === "string" ? children : undefined)}
+      title={rest.title || (compact && typeof children === "string" ? children : undefined)}
       style={{
         ...sizeStyles, ...variantStyles,
         display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -31,7 +34,8 @@ const Button = ({ children, variant = "primary", size = "md", icon, iconRight, c
       onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; rest.onMouseLeave?.(e); }}
     >
       {icon && <Icon name={icon} size={size === "sm" ? 13 : 15} />}
-      {children}
+      <span className="button-label">{children}</span>
+      {shortLabel && <span className="button-short" aria-hidden="true">{shortLabel}</span>}
       {iconRight && <Icon name={iconRight} size={size === "sm" ? 13 : 15} />}
     </button>
   );
@@ -39,7 +43,7 @@ const Button = ({ children, variant = "primary", size = "md", icon, iconRight, c
 
 const IconButton = ({ name, label, size = 14, padding = 6, onClick, active = false, style = {} }) => (
   <button
-    aria-label={label} title={label} onClick={onClick}
+    className="icon-btn" aria-label={label} title={label} onClick={onClick}
     style={{
       width: size + padding * 2, height: size + padding * 2,
       display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -290,7 +294,14 @@ const UploadDropzone = ({ onUpload, accept = ".pdf,.tex", padding = "32px 20px",
   const pick = (file) => { if (file) onUpload(file); };
   return (
     <div
+      role="button" tabIndex={0} aria-label={label}
       onClick={() => inputRef.current?.click()}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files?.[0]); }}
@@ -304,7 +315,7 @@ const UploadDropzone = ({ onUpload, accept = ".pdf,.tex", padding = "32px 20px",
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "var(--accent-soft)"; }}
       onMouseLeave={(e) => { if (!over) { e.currentTarget.style.borderColor = "var(--border-strong)"; e.currentTarget.style.background = "var(--surface-2)"; } }}
     >
-      <input ref={inputRef} type="file" accept={accept} style={{ display: "none" }}
+      <input ref={inputRef} type="file" accept={accept} style={{ display: "none" }} onClick={(event) => event.stopPropagation()}
         onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }}/>
       <Icon name="upload" size={22} stroke={1.6}/>
       <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginTop: 8 }}>{label}</div>

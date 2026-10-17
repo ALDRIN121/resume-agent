@@ -3,8 +3,9 @@ import { Icon } from "./icons.jsx";
 import { Button, IconButton, StatusPill, Badge, EmptyState, Kbd, Logo, MonoTicker, UploadDropzone } from "./components.jsx";
 import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView, LibraryView, CompaniesView } from "./screens.jsx";
 import { LiveRunView } from "./live-run.jsx";
+import { BaseResumeParseModal, ParsingBanner, ReplaceBaseResumeModal } from "./resume-upload.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
-import { ACTIVE_LLM, PARSE_STAGES, PROVIDERS } from "./data.jsx";
+import { ACTIVE_LLM, PROVIDERS } from "./data.jsx";
 import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume, exchangeOpenRouter } from "./api/client.js";
 import { consumeOpenRouterCallback } from "./api/openrouter-oauth.js";
 import { subscribeResumeParse } from "./api/ws.js";
@@ -17,6 +18,7 @@ const useIsMobile = (breakpoint = 860) => {
   );
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [breakpoint]);
@@ -230,256 +232,8 @@ const OpenRouterSignInBanner = ({ status, onClose }) => {
   );
 };
 
-// ===== Base resume parsing — modal, banner, and global lock =====
-// `parsing.statuses` is a { [stageId]: "running"|"done"|"failed" } map fed by the
-// real /ws/resume-parse WebSocket. Progress is done-count / known-stage-count.
-const parseDoneCount = (parsing) => PARSE_STAGES.filter(s => parsing.statuses?.[s.id] === "done").length;
-
-const BaseResumeParseModal = ({ parsing, onClose, onMinimize, onCancel }) => {
-  if (!parsing) return null;
-  const stages = PARSE_STAGES;
-  const completed = parsing.completed;
-  const failed = parsing.failed;
-  const [elapsed, setElapsed] = React.useState(0);
-
-  React.useEffect(() => {
-    if (completed || failed) return;
-    const id = setInterval(() => setElapsed(Date.now() - parsing.startedAt), 100);
-    return () => clearInterval(id);
-  }, [completed, failed, parsing.startedAt]);
-
-  const doneCount = parseDoneCount(parsing);
-  const pct = completed ? 100 : Math.min(100, (doneCount / stages.length) * 100);
-
-  const fmt = (ms) => {
-    const s = ms / 1000;
-    return s < 10 ? s.toFixed(1) + "s" : Math.round(s) + "s";
-  };
-
-  return (
-    <div style={{
-      position: "fixed", inset: 0, background: "rgba(15, 12, 8, 0.45)",
-      zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 20, animation: "fade-in 200ms",
-    }}>
-      <div role="dialog" aria-modal="true" style={{
-        width: "100%", maxWidth: 540,
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        boxShadow: "var(--shadow-lg)",
-        overflow: "hidden",
-        animation: "panel-slide 240ms",
-      }}>
-        {/* Header */}
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            <span style={{
-              width: 28, height: 28, borderRadius: 6,
-              background: failed ? "var(--danger-soft)" : completed ? "var(--success-soft)" : "var(--accent-soft)",
-              color: failed ? "var(--danger)" : completed ? "var(--success)" : "var(--accent)",
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}
-              className={completed ? "pop-in" : ""}
-            >
-              <Icon name={failed ? "x" : completed ? "check" : "file-text"} size={14} stroke={2.4}/>
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
-                {failed ? "Resume parsing failed" : completed ? "Base resume parsed" : "Parsing your base resume"}
-              </div>
-              <div className="mono truncate" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{parsing.file}</div>
-            </div>
-          </div>
-          {!completed && !failed && <IconButton name="x" label="Minimize" onClick={onMinimize}/>}
-          {(completed || failed) && <IconButton name="x" label="Close" onClick={onClose}/>}
-        </div>
-
-        {/* Progress bar */}
-        <div style={{ padding: "14px 20px 0" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {failed ? "failed" : completed ? "complete" : `${doneCount} of ${stages.length} done`}
-            </span>
-            <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {fmt(elapsed)} elapsed
-            </span>
-          </div>
-          <div style={{
-            height: 4, background: "var(--surface-2)", borderRadius: 99,
-            overflow: "hidden", position: "relative",
-          }}>
-            <div style={{
-              height: "100%",
-              width: `${pct}%`,
-              background: failed ? "var(--danger)" : completed ? "var(--success)" : "var(--accent)",
-              borderRadius: 99,
-              transition: "width 300ms cubic-bezier(.4,0,.2,1), background 200ms",
-            }}/>
-          </div>
-        </div>
-
-        {/* Stage list */}
-        <div style={{ padding: "16px 20px 4px", display: "flex", flexDirection: "column", gap: 4 }}>
-          {stages.map((s) => {
-            const status = completed ? "done" : (parsing.statuses?.[s.id] || "pending");
-            return (
-              <div key={s.id} style={{
-                display: "grid", gridTemplateColumns: "22px 1fr auto", gap: 10,
-                alignItems: "flex-start", padding: "8px 0",
-              }}>
-                <span style={{
-                  width: 18, height: 18, borderRadius: 99, marginTop: 1,
-                  background: status === "done" ? "var(--success)" : status === "failed" ? "var(--danger)" : status === "running" ? "var(--accent-soft)" : "var(--surface-2)",
-                  border: "1px solid " + (status === "done" ? "var(--success)" : status === "failed" ? "var(--danger)" : status === "running" ? "var(--accent)" : "var(--border-strong)"),
-                  color: "white",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  position: "relative", flexShrink: 0,
-                }}>
-                  {status === "done" && <Icon name="check" size={10} stroke={3}/>}
-                  {status === "failed" && <Icon name="x" size={10} stroke={3}/>}
-                  {status === "running" && <Icon name="loader" size={10} style={{ color: "var(--accent)", animation: "spin 1s linear infinite" }}/>}
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: status === "running" ? 600 : 500, color: status === "pending" ? "var(--text-muted)" : "var(--text)" }}>
-                    {s.label}
-                  </div>
-                  {s.sub && <div className="mono" style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2 }}>{s.sub}</div>}
-                </div>
-                <span className="mono" style={{ fontSize: 10.5, color: "var(--text-faint)", paddingTop: 3 }}>
-                  {status === "done" ? "✓" : status === "running" ? "…" : ""}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "var(--surface-2)" }}>
-          {failed ? (
-            <>
-              <div style={{ fontSize: 12, color: "var(--danger)", minWidth: 0 }} className="truncate">
-                {parsing.error || "Parsing failed. Check the file and try again."}
-              </div>
-              <Button size="sm" variant="secondary" onClick={onClose}>Close</Button>
-            </>
-          ) : !completed ? (
-            <>
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
-                <Icon name="alert" size={11} style={{ color: "var(--warning)" }}/>
-                <span>New runs are paused while parsing</span>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
-                <Button size="sm" variant="secondary" iconRight="chevron-down" onClick={onMinimize}>Minimize</Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                Resume parsed and saved to <span className="mono" style={{ color: "var(--text)" }}>base_resume.yaml</span>
-              </div>
-              <Button size="sm" variant="primary" onClick={onClose}>Done</Button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Thin banner at top of every screen while parsing is in-flight (modal minimized)
-const ParsingBanner = ({ parsing, onOpen }) => {
-  if (!parsing || parsing.completed || parsing.failed || parsing.modalOpen) return null;
-  const [elapsed, setElapsed] = React.useState(0);
-  React.useEffect(() => {
-    const id = setInterval(() => setElapsed(Date.now() - parsing.startedAt), 200);
-    return () => clearInterval(id);
-  }, [parsing.startedAt]);
-  const doneCount = parseDoneCount(parsing);
-  const stage = PARSE_STAGES.find(s => parsing.statuses?.[s.id] === "running")
-             || PARSE_STAGES[Math.min(doneCount, PARSE_STAGES.length - 1)];
-  const pct = Math.min(100, (doneCount / PARSE_STAGES.length) * 100);
-
-  return (
-    <button onClick={onOpen} style={{
-      width: "100%", padding: "8px 24px",
-      background: "var(--accent-soft)",
-      border: "none",
-      borderBottom: "1px solid color-mix(in oklab, var(--accent) 30%, transparent)",
-      display: "flex", alignItems: "center", gap: 12,
-      cursor: "pointer", textAlign: "left",
-      position: "relative", overflow: "hidden",
-    }}>
-      <span style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${pct}%`, background: "color-mix(in oklab, var(--accent) 14%, transparent)", transition: "width 300ms" }}/>
-      <Icon name="loader" size={14} style={{ animation: "spin 1.2s linear infinite", color: "var(--accent)", position: "relative" }}/>
-      <span style={{ fontSize: 12.5, fontWeight: 500, position: "relative" }}>
-        Parsing your base resume — <span style={{ color: "var(--accent)" }}>{stage.label}</span>
-      </span>
-      <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto", position: "relative" }}>
-        {doneCount}/{PARSE_STAGES.length} · {(elapsed / 1000).toFixed(1)}s
-      </span>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--accent)", fontWeight: 500, position: "relative" }}>
-        View details <Icon name="arrow-right" size={11}/>
-      </span>
-    </button>
-  );
-};
-
-// Replace base resume modal (initial drop zone before parsing kicks off)
-const ReplaceBaseResumeModal = ({ open, onClose, onUpload }) => {
-  if (!open) return null;
-  return (
-    <div onClick={onClose} style={{
-      position: "fixed", inset: 0, background: "rgba(15, 12, 8, 0.45)",
-      zIndex: 105, display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 20, animation: "fade-in 200ms",
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        width: "100%", maxWidth: 540,
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        boxShadow: "var(--shadow-lg)",
-        overflow: "hidden",
-        animation: "panel-slide 240ms",
-      }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ width: 26, height: 26, borderRadius: 6, background: "var(--surface-2)", color: "var(--text)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--border)" }}>
-              <Icon name="upload" size={13}/>
-            </span>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Replace base resume</div>
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 1 }}>This overwrites your current <span className="mono">base_resume.yaml</span>.</div>
-            </div>
-          </div>
-          <IconButton name="x" label="Close" onClick={onClose}/>
-        </div>
-
-        <div style={{ padding: 20 }}>
-          <div style={{
-            padding: "14px 14px",
-            background: "var(--warning-soft)",
-            border: "1px solid color-mix(in oklab, var(--warning) 25%, transparent)",
-            borderRadius: "var(--radius-md)",
-            display: "flex", gap: 10, marginBottom: 16,
-          }}>
-            <Icon name="alert" size={14} style={{ color: "var(--warning)", flexShrink: 0, marginTop: 2 }}/>
-            <div style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.55 }}>
-              Parsing will use the LLM and takes <span className="mono">~10–12s</span>. <b>New runs are paused</b> during parsing to avoid mid-flight schema mismatches. Existing runs continue.
-            </div>
-          </div>
-
-          <UploadDropzone onUpload={onUpload}/>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // Sidebar
-const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = false, settings = ACTIVE_LLM, activeRunCount = 0 }) => {
+const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = false, mobile = false, autoCollapsed = false, settings = ACTIVE_LLM, activeRunCount = 0 }) => {
   const items = [
     { id: "dashboard", icon: "home", label: "Overview" },
     { id: "new", icon: "play", label: "Create resume" },
@@ -497,7 +251,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
   const w = collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w)";
 
   return (
-    <div className={"app-sidebar" + (mobileOpen ? " open" : "")} style={{
+    <div className={"app-sidebar" + (mobileOpen ? " open" : "")} inert={mobile && !mobileOpen ? "" : undefined} aria-hidden={mobile && !mobileOpen ? true : undefined} style={{
       width: w, transition: `width var(--t-mid)`,
       borderRight: "1px solid var(--border)",
       background: "var(--sidebar-bg)",
@@ -564,7 +318,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
                 border: "2px solid var(--surface)",
               }}/>
             </button>
-            <IconButton name="sidebar" label="Expand sidebar" onClick={() => setCollapsed(false)} />
+            {!autoCollapsed && <IconButton name="sidebar" label="Expand sidebar" onClick={() => setCollapsed(false)} />}
           </div>
         ) : (
           <div role="button" tabIndex={0} onClick={() => goto("settings")}
@@ -626,7 +380,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
 };
 
 const NavItem = ({ icon, label, active, collapsed, onClick, locked, badge }) => (
-  <button onClick={onClick} title={collapsed ? (locked ? `${label} — paused while parsing` : label) : (locked ? "Paused while base resume is parsing" : null)}
+  <button aria-label={label} onClick={onClick} title={collapsed ? (locked ? `${label} — paused while parsing` : label) : (locked ? "Paused while base resume is parsing" : null)}
     disabled={locked}
     style={{
       display: "flex", alignItems: "center", gap: 12,
@@ -679,7 +433,7 @@ const TopBar = ({ goto, openCmdK, openNotifs, unreadCount, bellRef, settings, on
       </button>
 
       {/* Search / command bar */}
-      <button onClick={openCmdK} style={{
+      <button className="search-trigger" aria-label="Search commands" onClick={openCmdK} style={{
         flex: "0 1 420px", minWidth: 0, display: "flex", alignItems: "center", gap: 10,
         height: 40, padding: "0 13px",
         background: "var(--surface-2)",
@@ -688,7 +442,8 @@ const TopBar = ({ goto, openCmdK, openNotifs, unreadCount, bellRef, settings, on
         color: "var(--text-faint)", fontSize: 13.5, cursor: "text", textAlign: "left",
       }}>
         <Icon name="search" size={16}/>
-        <span className="hide-mobile truncate" style={{ flex: 1 }}>Search companies, runs, or type a command</span>
+        <span className="search-label truncate" style={{ flex: 1 }}>Search companies, runs, or type a command</span>
+        <span className="search-short">Search</span>
         <span className="hide-mobile" style={{ display: "inline-flex", gap: 3, flexShrink: 0 }}><Kbd>⌘</Kbd><Kbd>K</Kbd></span>
       </button>
 
@@ -926,6 +681,7 @@ export const App = () => {
   const [route, setRoute] = useState("dashboard"); // dashboard | library | new | companies | resume | history | settings | setup | run
   const [libraryFilter, setLibraryFilter] = useState(null); // status filter to seed LibraryView with (set via goto(id, {libraryFilter}))
   const isMobile = useIsMobile();
+  const isNarrowDesktop = useIsMobile(1180);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [cmdK, setCmdK] = useState(false);
   const [notifsOpen, setNotifsOpen] = useState(false);
@@ -943,6 +699,8 @@ export const App = () => {
   const [doctor, setDoctor] = useState(null);
   const [doctorDismissed, setDoctorDismissed] = useState(() => localStorage.getItem("rg.doctorDismissed") === "1");
   const bellRef = useRef(null);
+  const contentRef = useRef(null);
+  useEffect(() => { contentRef.current?.scrollTo({ top: 0, left: 0 }); }, [route, selectedRunId]);
   const parseUnsubRef = useRef(null);
   const toastedRef = useRef(new Set());
   const uiSyncReady = useRef(false);
@@ -1021,9 +779,10 @@ export const App = () => {
     try {
       job = await uploadResume(file);
     } catch (err) {
-      setParsing(p => p ? { ...p, failed: true, error: err.message || "Upload failed." } : null);
+      setParsing(p => p ? { ...p, failed: true, modalOpen: true, error: err.message || "Upload failed." } : null);
       return;
     }
+    parseUnsubRef.current?.();
     parseUnsubRef.current = subscribeResumeParse(job.job_id, (ev) => {
       setParsing(p => {
         if (!p) return null;
@@ -1036,8 +795,13 @@ export const App = () => {
           failed: failed || p.failed,
           error: failed ? (ev.detail || "Parsing failed.") : p.error,
           completed: completed || p.completed,
+          modalOpen: completed || failed || p.modalOpen,
         };
       });
+    }, () => {
+      setParsing(p => p && !p.completed && !p.failed
+        ? { ...p, failed: true, modalOpen: true, error: "The upload connection closed before parsing finished. Upload the file again to retry." }
+        : p);
     });
   };
 
@@ -1085,7 +849,7 @@ export const App = () => {
   useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setCmdK(true); }
-      if (e.key === "Escape") setCmdK(false);
+      if (e.key === "Escape") { setCmdK(false); setMobileNavOpen(false); setNotifsOpen(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1146,14 +910,14 @@ export const App = () => {
       case "history":   return <HistoryView goto={goto} openRun={openRun}/>;
       case "settings":  return <SettingsView tweaks={tweaks} setTweak={setTweak} onSettingsSaved={handleSettingsSaved}/>;
       case "setup":     return <SetupWizard goto={goto} startParse={startParse} parsing={parsing} onSettingsSaved={handleSettingsSaved}/>;
-      case "run":       return <LiveRunView key={selectedRunId} threadId={selectedRunId} summary={runs.find(run => run.thread_id === selectedRunId)} density={tweaks.density} runState={tweaks.runState} setRunState={(v) => setTweak("runState", v)} settings={appSettings}/>;
+      case "run":       return <LiveRunView goto={goto} key={selectedRunId} threadId={selectedRunId} summary={runs.find(run => run.thread_id === selectedRunId)} density={tweaks.density} runState={tweaks.runState} setRunState={(v) => setTweak("runState", v)} settings={appSettings}/>;
       default:          return <LibraryView goto={goto} openRun={openRun} locked={isLocked}/>;
     }
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar route={route} goto={goto} collapsed={isMobile ? false : sidebarCollapsed} setCollapsed={setSidebarCollapsed} locked={isLocked} mobileOpen={mobileNavOpen} settings={appSettings} activeRunCount={activeRunCount}/>
+    <div className="app-shell" style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
+      <Sidebar mobile={isMobile} route={route} goto={goto} autoCollapsed={!isMobile && isNarrowDesktop} collapsed={isMobile ? false : isNarrowDesktop || sidebarCollapsed} setCollapsed={setSidebarCollapsed} locked={isLocked} mobileOpen={mobileNavOpen} settings={appSettings} activeRunCount={activeRunCount}/>
       {isMobile && mobileNavOpen && <div className="sidebar-backdrop" onClick={() => setMobileNavOpen(false)}/>}
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg)" }}>
@@ -1167,8 +931,8 @@ export const App = () => {
           initials={ownerInitials}/>
         <ParsingBanner parsing={parsing} onOpen={() => setParsing(p => p ? { ...p, modalOpen: true } : null)}/>
         {(doctorHasIssue || tweaks.doctorBanner) && !doctorDismissed && <DoctorBanner doctor={doctor} goto={goto} onDismiss={() => setDoctorDismissed(true)}/>}
-        <div style={{ flex: 1, overflow: "auto", minHeight: 0, position: "relative" }}>
-          <div key={route} className="route-in" style={{ minHeight: "100%" }}>
+        <div className="app-content" ref={contentRef} style={{ flex: 1, overflow: "auto", minHeight: 0, position: "relative" }}>
+          <div key={route} className="route-in workspace-view" style={{ minHeight: "100%" }}>
             {renderRoute()}
           </div>
           <NotificationCenter
@@ -1189,7 +953,7 @@ export const App = () => {
         parsing={parsing && parsing.modalOpen ? parsing : null}
         onClose={endParse}
         onMinimize={() => setParsing(p => p ? { ...p, modalOpen: false } : null)}
-        onCancel={endParse}
+        onRetry={() => { endParse(); setReplaceOpen(true); }}
       />
 
       <TweaksPanel title="Tweaks">

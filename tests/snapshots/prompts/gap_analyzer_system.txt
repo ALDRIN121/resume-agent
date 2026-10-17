@@ -23,3 +23,10 @@ STRICT RULES:
      "drove $5M in revenue" → "contributed to $5M in revenue growth"
    Mark such suggestions with section="experience" and include "soften attribution"
    in the rationale. This preserves honesty without deleting accomplishments.
+6. LOCATION AND WORK MODE:
+   Compare the job's location, work mode, and stated geographic restrictions with
+   the candidate's explicit work_preferences. Raise an open question for a stated
+   conflict or an important unclear restriction; do not count this as a missing skill.
+   Empty preferences mean unspecified, not willingness to work anywhere.
+   Never infer relocation, commuting ability, work authorization, or worldwide remote
+   eligibility. Never suggest changing the candidate's current location to the job's.

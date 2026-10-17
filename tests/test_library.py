@@ -37,6 +37,28 @@ def test_upsert_creates_company_and_resume(lib):
     assert resumes[0]["pdf_url"] == "/api/runs/t1/pdf"  # complete + pdf → downloadable
 
 
+def test_job_location_and_work_mode_survive_library_updates(lib):
+    lib.upsert_resume(thread_id="context", company="Example", location="Pune, India", work_mode="Hybrid")
+    lib.upsert_resume(thread_id="context", company="Example", status="complete", location="Pune, India", work_mode="Remote", remote_policy="Remote within India")
+    assert lib.get_resume("context")["location"] == "Pune, India"
+    assert lib.list_resumes()[0]["work_mode"] == "Remote"
+    assert lib.list_resumes()[0]["remote_policy"] == "Remote within India"
+
+
+def test_existing_library_is_migrated_without_losing_rows(lib):
+    with lib._connect() as conn:
+        conn.execute("DROP TABLE resumes")
+        conn.execute("CREATE TABLE resumes (thread_id TEXT PRIMARY KEY, company_id INTEGER, role TEXT, status TEXT, pdf_path TEXT, error TEXT, duration_s REAL, created_at REAL, updated_at REAL)")
+        conn.execute("INSERT INTO companies (id, name, created_at) VALUES (10, 'Legacy', 1)")
+        conn.execute("INSERT INTO resumes VALUES ('old', 10, 'Engineer', 'complete', NULL, NULL, 1, 1, 1)")
+    lib.init_db()
+    lib.init_db()
+    assert lib.get_resume("old")["company"] == "Legacy"
+    assert lib.get_resume("old")["location"] is None
+    lib.upsert_resume(thread_id="new", company="Example", location="Berlin, Germany", work_mode="On-site")
+    assert lib.get_resume("new")["work_mode"] == "On-site"
+
+
 def test_upsert_is_idempotent_and_updates_status(lib):
     lib.upsert_resume(thread_id="t1", company="TechCorp", role="SWE", status="running")
     lib.upsert_resume(thread_id="t1", company="TechCorp", role="SWE", status="complete", pdf_path="/out/a.pdf")
