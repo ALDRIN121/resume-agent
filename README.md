@@ -489,8 +489,8 @@ After installation, `resume-generator` should be available in your terminal. If 
 | Component | Technology |
 |-----------|-----------|
 | Agent graph | [LangGraph](https://github.com/langchain-ai/langgraph) StateGraph |
-| LLM providers | Anthropic Claude · OpenAI GPT · Google Gemini · NVIDIA NIM · Ollama |
-| Structured output | Pydantic v2 + `llm.with_structured_output()` |
+| LLM providers | LiteLLM SDK via `langchain-litellm`: Anthropic · OpenAI · Gemini · NVIDIA NIM · Ollama · OpenRouter · Command Code |
+| Structured output | Capability-aware function calling or schema-guided JSON, validated with Pydantic v2 |
 | Scraping | httpx + readability-lxml → Playwright fallback |
 | LaTeX → PDF | [Tectonic](https://tectonic-typesetting.github.io/) |
 | PDF → images | pdf2image + Poppler |
@@ -521,6 +521,14 @@ uv sync                 # installs the dev dependency group by default
 uv run pytest -q
 uv run ruff check src/
 ```
+
+All model calls use the shared LiteLLM adapter in `src/resume_agent/llm.py`; no
+proxy server is required. Existing provider IDs, model names, API keys, and endpoint
+settings continue to work. Models with tool support use non-strict function calling
+so skill categories can keep arbitrary names. Other models receive the output schema
+in the prompt, use JSON mode when supported, and are validated locally with Pydantic.
+Unknown models use the same JSON prompt fallback. Capability checks use LiteLLM's
+bundled catalogue so local Ollama use does not require downloading model metadata.
 
 ### Working on the web UI
 

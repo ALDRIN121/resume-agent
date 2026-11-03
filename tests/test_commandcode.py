@@ -18,6 +18,10 @@ ENDPOINT = "https://api.commandcode.ai/provider/v1/chat/completions"
 
 @pytest.fixture
 def isolated(tmp_path, monkeypatch):
+    import litellm
+
+    # respx intercepts httpx transports; LiteLLM otherwise defaults to aiohttp.
+    monkeypatch.setattr(litellm, "disable_aiohttp_transport", True)
     for mod in (config, setup_wizard):
         monkeypatch.setattr(mod, "CONFIG_DIR", tmp_path)
         monkeypatch.setattr(mod, "CONFIG_FILE", tmp_path / "config.yaml")

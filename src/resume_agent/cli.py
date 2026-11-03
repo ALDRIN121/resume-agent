@@ -451,10 +451,7 @@ def init(
 
     print_info(f"Source: {source}")
 
-    # ── Remove stale base resume so a fresh parse always wins ─────────────────
-    if BASE_RESUME_FILE.exists():
-        BASE_RESUME_FILE.unlink()
-        print_info("Removed previous base resume — re-parsing from source…")
+    # Keep the cached resume until parse_and_save_resume successfully replaces it.
 
     # ── Parse ──────────────────────────────────────────────────────────────────
     try:

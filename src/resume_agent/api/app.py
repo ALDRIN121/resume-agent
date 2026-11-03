@@ -87,4 +87,8 @@ def create_app() -> FastAPI:
 
 
 def _frontend_dist() -> Path:
+    packaged = Path(__file__).resolve().parents[1] / "_frontend"
+    if (packaged / "index.html").is_file():
+        return packaged
+    # Editable installs use the frontend bundle in the source checkout.
     return Path(__file__).resolve().parents[3] / "Frontend" / "dist"

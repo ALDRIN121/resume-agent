@@ -3,6 +3,8 @@ OpenRouter LLM branch — all offline (respx mocks the OpenRouter endpoint)."""
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -89,15 +91,25 @@ def test_detect_reports_present_env_key(isolated_config, monkeypatch):
     assert entry["defaultModel"]
 
 
-def test_llm_openrouter_uses_openai_compatible_client():
+@respx.mock
+def test_llm_openrouter_routes_the_selected_model_and_key():
     settings = ResumeAgentSettings(
         provider="openrouter",
         openrouter_api_key="sk-or-test",
+        model={"default": "openrouter/auto", "vision": ""},
+    )
+    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={
+            "id": "test", "object": "chat.completion", "created": 1,
+            "model": "openrouter/auto", "choices": [{"index": 0,
+                "message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}],
+        })
     )
     llm = get_chat_model(settings, task="default")
-    assert llm.__class__.__name__ == "ChatOpenAI"
-    # Routed at OpenRouter, not the default OpenAI host.
-    assert "openrouter.ai" in str(llm.openai_api_base)
+    assert llm.invoke("Hello").content == "OK"
+    assert route.calls[0].request.headers["authorization"] == "Bearer sk-or-test"
+    assert route.calls[0].request.headers["x-title"] == "resume-generator"
+    assert json.loads(route.calls[0].request.content)["model"] == "openrouter/auto"
 
 
 @pytest.mark.parametrize(
