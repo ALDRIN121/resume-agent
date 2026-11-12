@@ -262,6 +262,34 @@ def _reservation_matches(plan: ExportPlan) -> bool:
     )
 
 
+def _owned_copy_prefix(plan: ExportPlan, identity) -> bool:
+    """Recognize interrupted streaming only by inode and approved source bytes."""
+    try:
+        if not identity or _identity(plan.temporary_path) != tuple(identity):
+            return False
+        if hash_file(plan.canonical_pdf_path) != plan.expected_hash:
+            return False
+        with (
+            os.fdopen(_open(plan.temporary_path, os.O_RDONLY), "rb") as temporary,
+            os.fdopen(_open(plan.canonical_pdf_path, os.O_RDONLY), "rb") as canonical,
+        ):
+            info = os.fstat(temporary.fileno())
+            if (info.st_dev, info.st_ino) != tuple(identity):
+                return False
+            if info.st_size > os.fstat(canonical.fileno()).st_size:
+                return False
+            while block := temporary.read(1024 * 1024):
+                if block != canonical.read(len(block)):
+                    return False
+            return (
+                _identity(plan.temporary_path) == tuple(identity)
+                and plan.temporary_path.stat().st_size == info.st_size
+                and hash_file(plan.canonical_pdf_path) == plan.expected_hash
+            )
+    except (OSError, ValueError):
+        return False
+
+
 def prepare_export(
     artifact_id: str,
     canonical_pdf_path: str | Path,
@@ -319,11 +347,7 @@ def prepare_copy(plan: ExportPlan, *, recover: bool = False) -> Path:
             and _matches(plan.temporary_path, owner["temporary_identity"], plan.expected_hash)
         ):
             return plan.temporary_path
-        if (
-            recover
-            and owner.get("temporary_identity")
-            and _matches(plan.temporary_path, owner["temporary_identity"], owner["temporary_hash"])
-        ):
+        if recover and _owned_copy_prefix(plan, owner.get("temporary_identity")):
             plan.temporary_path.unlink()  # owned partial copy, explicit continuation
         else:
             raise ValueError("Unexpected or unverified temporary file")
@@ -383,11 +407,19 @@ def cleanup_export(plan: ExportPlan, *, remove_export: bool = False) -> None:
     """
     owner = _owner(plan)
     identity = owner.get("temporary_identity")
-    if identity and _matches(plan.temporary_path, identity, owner["temporary_hash"]):
+    temporary_exists = plan.temporary_path.exists()
+    if temporary_exists:
+        if not _owned_copy_prefix(plan, identity):
+            # Preserve reservation and sidecar too: later recovery needs proof.
+            raise ValueError("Unexpected or unverified temporary file")
+    reservation_matches = _reservation_matches(plan)
+    export_matches = identity and _matches(plan.destination, identity, plan.expected_hash)
+    if plan.destination.exists() and not (reservation_matches or export_matches):
+        raise ValueError("Unexpected destination ownership or hash conflict")
+    # Validate both files before removing either, preserving complete proof on conflict.
+    if temporary_exists:
         plan.temporary_path.unlink()
-    if _reservation_matches(plan) or (
-        remove_export and identity and _matches(plan.destination, identity, plan.expected_hash)
-    ):
+    if reservation_matches or (remove_export and export_matches):
         plan.destination.unlink()
     plan.ownership_path.unlink()
     _sync_directory(plan.destination.parent)

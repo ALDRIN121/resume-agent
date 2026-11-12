@@ -145,7 +145,9 @@ def test_recovery_reuses_owned_valid_temp_and_preserves_unexpected_bytes(tmp_pat
     plan.destination.write_bytes(b"outsider too")
     with pytest.raises(ValueError):
         artifacts.commit_export(plan)
-    artifacts.cleanup_export(plan)
+    with pytest.raises(ValueError, match="temporary"):
+        artifacts.cleanup_export(plan)
+    assert plan.ownership_path.exists()
     assert plan.destination.read_bytes() == b"outsider too"
     assert plan.temporary_path.read_bytes() == b"outsider"
 
@@ -177,7 +179,7 @@ def test_owned_failed_copy_can_be_retried_explicitly(tmp_path, monkeypatch):
     real_copy = artifacts.shutil.copyfileobj
 
     def fail(source, target):
-        target.write(b"partial")
+        target.write(source.read(3))
         raise OSError("disk full")
 
     monkeypatch.setattr(artifacts.shutil, "copyfileobj", fail)
@@ -205,7 +207,10 @@ def test_replaced_temp_hash_blocks_commit_without_exposing_pdf(tmp_path):
     with pytest.raises(ValueError, match="hash"):
         artifacts.commit_export(plan)
     assert plan.destination.read_bytes() != b"%PDF-A"
-    artifacts.cleanup_export(plan)
+    with pytest.raises(ValueError, match="temporary"):
+        artifacts.cleanup_export(plan)
+    assert plan.ownership_path.exists()
+    assert plan.destination.exists()
     assert plan.temporary_path.read_bytes() == b"different"
 
 
@@ -216,3 +221,147 @@ def test_concurrent_reopen_of_same_owned_run(tmp_path):
             pool.map(lambda _: artifacts.RunArtifacts.create(artifact_id, tmp_path), range(30))
         )
     assert len({run.run_dir for run in runs}) == 1
+
+
+def interrupted_copy(plan, *, complete=False):
+    """Die after fsync during real streaming, bypassing exception cleanup."""
+    import json
+    import subprocess
+    import sys
+
+    child = """
+import json
+import os
+import sys
+from resume_agent import artifacts
+plan = artifacts.ExportPlan.from_dict(json.load(sys.stdin))
+def copy_and_exit(source, target):
+    target.write(source.read() if sys.argv[1] == "complete" else source.read(80))
+    target.flush()
+    os.fsync(target.fileno())
+    os._exit(77)
+artifacts.shutil.copyfileobj = copy_and_exit
+artifacts.prepare_copy(plan)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", child, "complete" if complete else "partial"],
+        input=json.dumps(plan.to_dict()),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 77, result.stderr
+    return json.loads(plan.ownership_path.read_text())
+
+
+def test_hard_exit_partial_prefix_recovers_and_exports(tmp_path):
+    content = b"%PDF-" + bytes(range(256)) * 8
+    plan = export_plan(tmp_path, content)
+    owner = interrupted_copy(plan)
+    assert plan.temporary_path.read_bytes() == content[:80]
+    assert owner["temporary_hash"] != artifacts.hash_file(plan.temporary_path)
+    artifacts.prepare_copy(plan, recover=True)
+    artifacts.commit_export(plan)
+    assert plan.destination.read_bytes() == content
+
+
+def test_hard_exit_partial_prefix_cleanup_removes_only_owned_files(tmp_path):
+    content = b"%PDF-" + bytes(range(256)) * 8
+    plan = export_plan(tmp_path, content)
+    interrupted_copy(plan)
+    artifacts.cleanup_export(plan)
+    assert not plan.temporary_path.exists()
+    assert not plan.destination.exists()
+    assert not plan.ownership_path.exists()
+    assert plan.canonical_pdf_path.read_bytes() == content
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [b"corrupt", b"%PDF-" + bytes(range(256)) * 8 + b"extra"],
+    ids=["corrupt", "oversize"],
+)
+def test_hard_exit_modified_prefix_preserves_all_ownership(tmp_path, replacement):
+    plan = export_plan(tmp_path, b"%PDF-" + bytes(range(256)) * 8)
+    owner = interrupted_copy(plan)
+    reservation = plan.destination.read_bytes()
+    plan.temporary_path.write_bytes(replacement)
+    with pytest.raises(ValueError, match="temporary"):
+        artifacts.prepare_copy(plan, recover=True)
+    with pytest.raises(ValueError, match="temporary"):
+        artifacts.cleanup_export(plan)
+    assert plan.temporary_path.read_bytes() == replacement
+    assert plan.destination.read_bytes() == reservation
+    import json
+
+    assert json.loads(plan.ownership_path.read_text()) == owner
+
+
+def test_hard_exit_replacement_inode_preserves_all_ownership(tmp_path):
+    plan = export_plan(tmp_path, b"%PDF-" + bytes(range(256)) * 8)
+    interrupted_copy(plan)
+    reservation = plan.destination.read_bytes()
+    owner = plan.ownership_path.read_bytes()
+    replacement = tmp_path / "replacement"
+    replacement.write_bytes(plan.canonical_pdf_path.read_bytes()[:80])
+    replacement.replace(plan.temporary_path)
+    with pytest.raises(ValueError, match="temporary"):
+        artifacts.prepare_copy(plan, recover=True)
+    with pytest.raises(ValueError, match="temporary"):
+        artifacts.cleanup_export(plan)
+    assert plan.temporary_path.exists()
+    assert plan.destination.read_bytes() == reservation
+    assert plan.ownership_path.read_bytes() == owner
+
+
+def test_hard_exit_complete_copy_before_hash_publication_reuses_inode(tmp_path):
+    content = b"%PDF-" + bytes(range(256)) * 8
+    plan = export_plan(tmp_path, content)
+    owner = interrupted_copy(plan, complete=True)
+    before = plan.temporary_path.stat().st_ino
+    assert owner["temporary_hash"] != plan.expected_hash
+    artifacts.prepare_copy(plan, recover=True)
+    assert plan.temporary_path.stat().st_ino == before
+    artifacts.commit_export(plan)
+    assert plan.destination.read_bytes() == content
+
+
+def test_partial_prefix_requires_approved_full_canonical_hash(tmp_path):
+    content = b"%PDF-" + bytes(range(256)) * 8
+    plan = export_plan(tmp_path, content)
+    interrupted_copy(plan)
+    owner = plan.ownership_path.read_bytes()
+    reservation = plan.destination.read_bytes()
+    plan.canonical_pdf_path.write_bytes(content[:-1] + b"x")
+    with pytest.raises(ValueError, match="hash"):
+        artifacts.prepare_copy(plan, recover=True)
+    with pytest.raises(ValueError):
+        artifacts.cleanup_export(plan)
+    assert plan.temporary_path.read_bytes() == content[:80]
+    assert plan.ownership_path.read_bytes() == owner
+    assert plan.destination.read_bytes() == reservation
+
+
+@pytest.mark.parametrize("renamed", [False, True], ids=["reservation", "export"])
+@pytest.mark.parametrize("conflict", ["bytes", "inode"])
+def test_unexpected_destination_preserves_all_owned_files_and_proof(tmp_path, renamed, conflict):
+    plan = export_plan(tmp_path)
+    artifacts.prepare_copy(plan)
+    if renamed:
+        artifacts.commit_export(plan)
+    owner = plan.ownership_path.read_bytes()
+    if conflict == "bytes":
+        plan.destination.write_bytes(b"unexpected destination")
+    else:
+        replacement = tmp_path / "replacement"
+        replacement.write_bytes(plan.destination.read_bytes())
+        replacement.replace(plan.destination)
+    destination = plan.destination.read_bytes()
+    temporary = plan.temporary_path.read_bytes() if plan.temporary_path.exists() else None
+    with pytest.raises(ValueError, match="destination"):
+        artifacts.cleanup_export(plan, remove_export=True)
+    assert plan.destination.read_bytes() == destination
+    assert plan.ownership_path.read_bytes() == owner
+    if temporary is not None:
+        assert plan.temporary_path.read_bytes() == temporary
+    assert plan.canonical_pdf_path.read_bytes() == b"%PDF-A"
