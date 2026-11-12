@@ -1,10 +1,105 @@
-"""LLM repairs must preserve supplied facts, including numeric claims."""
+"""Approved manifest contains every visible fact without rewriting punctuation."""
 import pytest
 
 from resume_agent.agents.resume_generator import _guard_structure, _render_template
-from resume_agent.schemas import PersonalInfo, Project, Role, UserResume
+from resume_agent.content_review import (
+    build_content_preview,
+    expected_display_text,
+    expected_display_tokens,
+    recompute_manifest,
+    verify_manifest,
+)
+from resume_agent.contracts import content_hash
+from resume_agent.schemas import (
+    ContentSnapshot,
+    EditProposal,
+    PersonalInfo,
+    Project,
+    Role,
+    SourceRef,
+    UserResume,
+)
 
 
+def fixed_profile():
+    profile = UserResume.model_validate({
+        'personal': {'full_name': 'Mira Rao', 'email': 'mira@example.test', 'phone': '+91 123',
+                     'location': 'Delhi', 'headline': 'Engineer', 'linkedin': 'mira-rao',
+                     'github': 'mira', 'website': 'https://example.test', 'portfolio': '/portfolio'},
+        'summary': 'Summary; exact.',
+        'experience': [{'company': 'Alpha', 'title': 'Engineer', 'start': '2022',
+                        'location': 'Pune', 'tech': ['Python'],
+                        'bullets': ['Reduced latency 450ms-to90ms; helper scope.', 'Same.', 'Same.']}],
+        'projects': [{'name': 'Atlas', 'description': 'Same.', 'bullets': ['Same.'],
+                      'tech': ['SQL'], 'url': 'https://atlas.test'}],
+        'education': [{'institution': 'Institute', 'degree': 'BSc', 'field': 'CS',
+                       'graduation': '2020', 'gpa': '9.0', 'notes': ['Honors.']}],
+        'certifications': [{'name': 'Certification', 'issuer': 'Issuer', 'date': '2021', 'url': 'https://cert.test'}],
+        'skills': {'Zulu': ['Z'], 'Tools': ['Git'], 'Languages': ['Python', 'Go'], 'Alpha': ['A']},
+        'publications': ['My paper.'], 'work_preferences': {'preferred_locations': ['Remote']},
+    }).model_dump(mode='json')
+    return ContentSnapshot(profile=profile, source_revision=content_hash(profile))
+
+
+def test_manifest_complete_ordered_and_exact():
+    snapshot = fixed_profile()
+    manifest = build_content_preview(snapshot, []).manifest
+    text = expected_display_text(manifest)
+    assert '450ms-to90ms; helper scope.' in text
+    assert text.count('Same.') == 4
+    assert 'Present' in expected_display_tokens(manifest)
+    assert [f.order for f in manifest.display_fields] == list(range(len(manifest.display_fields)))
+    assert [f.text for f in manifest.display_fields if f.kind == 'heading'] == [
+        'Summary', 'Experience', 'Projects', 'Education', 'Skills', 'Languages', 'Tools',
+        'Alpha', 'Zulu', 'Publications', 'Certifications']
+    # Every populated scalar leaf is either displayed at its stable pointer or explicitly omitted.
+    def leaves(value, path=''):
+        if isinstance(value, dict):
+            for k, v in value.items():
+                yield from leaves(v, path + '/' + k.replace('~', '~0').replace('/', '~1'))
+        elif isinstance(value, list):
+            for i, v in enumerate(value):
+                yield from leaves(v, f'{path}/{i}')
+        elif value is not None:
+            yield path, value
+    visible = {f.source_path: f.text for f in manifest.display_fields if f.source_path is not None}
+    omissions = {o.source_path for o in manifest.omissions}
+    for path, value in leaves(snapshot.profile):
+        assert visible.get(path) == value or any(path == o or path.startswith(o + '/') for o in omissions)
+    assert '/work_preferences' in omissions
+    assert '/provenance' in omissions
+    assert verify_manifest(manifest)
+
+
+def test_omission_only_changes_display_and_keeps_source_indices():
+    snapshot = fixed_profile()
+    path = '/experience/0/bullets/1'
+    p = EditProposal(id='omit', operation='omit_from_display', target_path=path,
+        source_revision=snapshot.source_revision, before_hash=content_hash('Same.'), after=None,
+        source_refs=[SourceRef(kind='profile', input_hash=snapshot.source_revision, target_path=path)], rationale='Omit')
+    snapshot = snapshot.model_copy(update={'proposals': [p]})
+    preview = build_content_preview(snapshot, ['omit'])
+    assert preview.projected_profile == snapshot.profile
+    assert any(o.source_path == path and o.reason == 'approved omit_from_display' for o in preview.manifest.omissions)
+    assert any(f.source_path == '/experience/0/bullets/2' for f in preview.manifest.display_fields)
+    assert expected_display_text(preview.manifest).count('Same.') == 3
+
+
+def test_content_identity_excludes_layout_template_but_detects_display_tampering():
+    snapshot = fixed_profile()
+    standard = build_content_preview(snapshot, []).manifest
+    compact = build_content_preview(snapshot, [], template_version='v9', layout_id='compact').manifest
+    assert standard.content_hash == compact.content_hash
+    assert verify_manifest(compact)
+    changed = standard.model_copy(update={'display_fields': [standard.display_fields[0].model_copy(update={'text': 'Different'})] + standard.display_fields[1:]})
+    assert not verify_manifest(changed)
+    assert recompute_manifest(changed) != standard.content_hash
+    with pytest.raises(ValueError, match='invalid render manifest'):
+        expected_display_text(changed)
+    assert not verify_manifest(standard.model_copy(update={'display_fields': list(reversed(standard.display_fields))}))
+
+
+# Legacy v1 fidelity behavior stays covered until T09 activation.
 @pytest.fixture
 def draft():
     return _render_template(UserResume(

@@ -327,3 +327,113 @@ class GapAnalysis(BaseModel):
     missing_skills: list[str] = Field(default_factory=list)
     open_questions: list[Question] = Field(default_factory=list)
     tailoring_ideas: list[Suggestion] = Field(default_factory=list)
+
+
+# ── V2 explicit content review (legacy models above remain compatible) ─────────
+
+class ReviewContract(BaseModel):
+    """Strict wire types; nested mutable values are revalidated at each boundary."""
+
+    model_config = {'extra': 'forbid', 'strict': True, 'frozen': True}
+
+
+class SourceRef(ReviewContract):
+    kind: Literal['profile', 'answer', 'user_text']
+    input_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+    target_path: str | None = None
+    answer_id: str | None = None
+    start: int | None = Field(default=None, ge=0)
+    end: int | None = Field(default=None, ge=0)
+    quote: str | None = None
+
+    @model_validator(mode='after')
+    def check_reference_fields(self):
+        if self.kind == 'profile':
+            if not self.target_path or self.answer_id is not None:
+                raise ValueError('profile evidence requires only target_path')
+        elif not self.answer_id or self.target_path is not None:
+            raise ValueError('answer/user_text evidence requires only answer_id')
+        if any(v is not None for v in (self.start, self.end, self.quote)):
+            if self.start is None or self.end is None or self.quote is None:
+                raise ValueError('quote requires start and end')
+            if self.end <= self.start:
+                raise ValueError('quote span must be nonempty')
+        return self
+
+
+class EditProposal(ReviewContract):
+    id: str = Field(min_length=1)
+    operation: Literal['replace', 'append', 'omit_from_display']
+    target_path: str
+    source_revision: str = Field(pattern=r'^[a-f0-9]{64}$')
+    before_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+    after: str | None
+    source_refs: list[SourceRef] = Field(min_length=1)
+    rationale: str
+
+    @model_validator(mode='after')
+    def check_after(self):
+        if self.operation == 'omit_from_display':
+            if self.after is not None:
+                raise ValueError('omission after must be null')
+        elif not isinstance(self.after, str) or not self.after.strip():
+            raise ValueError('replace/append after must be nonempty text')
+        return self
+
+
+class ContentSnapshot(ReviewContract):
+    profile: dict
+    source_revision: str = Field(pattern=r'^[a-f0-9]{64}$')
+    answers: dict[str, str] = Field(default_factory=dict)
+    user_text: dict[str, str] = Field(default_factory=dict)
+    proposals: list[EditProposal] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def check_fixed_source(self):
+        from .contracts import content_hash
+
+        normalized = UserResume.model_validate(self.profile).model_dump(mode='json')
+        if normalized != self.profile or content_hash(normalized) != self.source_revision:
+            raise ValueError('profile snapshot/revision mismatch')
+        ids = [p.id for p in self.proposals]
+        if len(ids) != len(set(ids)):
+            raise ValueError('duplicate proposal IDs')
+        return self
+
+
+class PatchResult(ReviewContract):
+    proposal_id: str
+    status: Literal['applied', 'conflict', 'invalid']
+    reason: str | None = None
+
+
+class DisplayField(ReviewContract):
+    order: int = Field(ge=0)
+    source_path: str | None
+    text: str
+    kind: Literal['name', 'heading', 'field', 'bullet']
+    section: str
+    group: str
+    visible_label: str | None = None
+
+
+class DisplayOmission(ReviewContract):
+    source_path: str
+    reason: str
+
+
+class RenderManifest(ReviewContract):
+    schema_version: Literal[2] = 2
+    source_revision: str = Field(pattern=r'^[a-f0-9]{64}$')
+    approved_proposal_ids: list[str]
+    display_fields: list[DisplayField]
+    omissions: list[DisplayOmission]
+    template_version: str
+    layout_id: str
+    content_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
+class ContentPreview(ReviewContract):
+    projected_profile: dict | None
+    results: list[PatchResult]
+    manifest: RenderManifest | None

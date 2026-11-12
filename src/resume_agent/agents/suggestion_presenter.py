@@ -14,7 +14,7 @@ import copy
 
 from langgraph.types import interrupt
 
-from ..schemas import GapAnalysis, Suggestion, UserResume
+from ..schemas import ContentPreview, ContentSnapshot, GapAnalysis, Suggestion, UserResume
 from ..state import ResumeGenState
 from ..ui.panels import print_info
 
@@ -151,3 +151,10 @@ def _apply_suggestions(resume: UserResume, suggestions: list[Suggestion]) -> Use
                 ]
 
     return UserResume.model_validate(data)
+
+
+def preview_suggestions_v2(snapshot: ContentSnapshot, selected_ids: list[str]) -> ContentPreview:
+    """Use the shared pure projection for review; no pending-state mutation."""
+    from ..content_review import build_content_preview
+
+    return build_content_preview(snapshot, selected_ids)
