@@ -1,0 +1,6 @@
+{"thread_id":"legacy-complete","status":"complete","company":"Cedar Example Labs","role":"Backend Engineer","started_wall_ts":1700000000.0,"duration_s":12.0,"pdf_path":"artifacts/legacy-complete.pdf","error":null}
+{"thread_id":"legacy-missing-artifact","status":"complete","company":"Birch Example Systems","role":"Backend Engineer","started_wall_ts":1700000100.0,"duration_s":14.0,"pdf_path":"artifacts/intentionally-absent.pdf","error":null}
+{"thread_id":"legacy-failed","status":"failed","company":"Cedar Example Labs","role":"Backend Engineer","started_wall_ts":1700000200.0,"duration_s":5.0,"pdf_path":null,"error":"Synthetic provider failure"}
+{"thread_id":"legacy-cancelled","status":"cancelled","company":"Birch Example Systems","role":"Backend Engineer","started_wall_ts":1700000300.0,"duration_s":3.0,"pdf_path":null,"error":"Run cancelled by user."}
+{"thread_id":"legacy-paused","status":"awaiting-input","company":"Cedar Example Labs","role":"Backend Engineer","started_wall_ts":1700000400.0,"duration_s":null,"pdf_path":null,"error":null}
+{"thread_id":"legacy-malformed","status":

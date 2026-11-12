@@ -1,0 +1,10 @@
+Cedar Example Labs — Backend Engineer (fictional test posting)
+
+Build reliable API services using Python and PostgreSQL. Contribute to query
+optimization, observability, and queue integration tests. Collaborate with the
+platform lead during incident investigations; ownership of the whole platform
+is not a requirement.
+
+Required: Python AND SQL. Preferred: Redis OR another message queue.
+Work mode: remote within Example Region; no cross-region employment available.
+RELIABILITY_JOB_TAIL_MARKER: regional eligibility must remain visible after import.
