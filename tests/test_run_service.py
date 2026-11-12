@@ -388,3 +388,34 @@ async def test_checkpoint_write_errors_are_visible_and_recoverable(tmp_path, mon
         await svc.drive(run.id)
     monkeypatch.setattr(module, "write_v2_checkpoint", original)
     assert service(tmp_path).get(run.id).status == "interrupted"
+
+
+async def test_recovered_pdf_rejection_cancels_before_driver_and_replays(tmp_path):
+    from resume_agent.checkpoint import read_v2_checkpoint
+
+    hashes = {key: content_hash(key) for key in ("content_hash", "render_hash", "pdf_hash")}
+    review = PdfReview(review_id="review", template_version="1", layout_id="standard", **hashes)
+    calls = []
+    async def driver(context):
+        calls.append(context.action)
+        context.control.checkpoint({"draft_pdf": "retained.pdf", "review": review.model_dump(mode="json")})
+        return DriverResult(status="awaiting-input", pending=PdfReviewRequest(review=review))
+    svc = service(tmp_path, driver)
+    run = create(svc)
+    await svc.drive(run.id)
+    before = read_v2_checkpoint(svc.store.checkpoint_path, "run", run.id)["values"]
+    rejection = ReviewPdf(action_id="reject", review_id=review.review_id, decision="reject", **hashes)
+    # The acceptance committed; the process then died before its first checkpoint/cancel command.
+    with svc.store.connection(immediate=True) as conn:
+        svc.store.accept("run", run.id, rejection.model_dump(mode="json"), content_hash(rejection), conn)
+        svc.store.update("run", run.id, status="running", pending=None, conn=conn)
+    reopened = service(tmp_path, driver)
+    assert reopened.get(run.id).status == "interrupted"
+    continuation = Continue(action_id="recover-rejection")
+    result = await reopened.drive(run.id, continuation)
+    assert result.status == "cancelled"
+    assert result.cancellation_requested
+    assert calls == [None]
+    assert read_v2_checkpoint(svc.store.checkpoint_path, "run", run.id)["values"] == before
+    assert await service(tmp_path).drive(run.id, rejection) == result
+    assert await service(tmp_path).drive(run.id, continuation) == result

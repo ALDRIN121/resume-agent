@@ -318,8 +318,8 @@ class _Lifecycle:
                                     json.loads(canonical_json(envelope["values"])), control, bool(unfinished))
             try:
                 control.check_cancelled()
-                if action and action.kind in {"review_pdf", "reject_import"} and (
-                    action.kind == "reject_import" or action.decision == "reject"
+                if driver_action and driver_action.kind in {"review_pdf", "reject_import"} and (
+                    driver_action.kind == "reject_import" or driver_action.decision == "reject"
                 ):
                     self.store.cancel(self.kind, owner_id)
                     raise _CancelledError()

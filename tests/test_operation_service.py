@@ -41,3 +41,37 @@ async def test_cancellation_committed_before_completion_wins(tmp_path):
         return original(owner_id, index, action_ids)
     svc._lifecycle._commit_index = commit
     assert (await svc.drive(view.id)).status == "cancelled"
+
+
+async def test_recovered_import_rejection_cancels_before_driver_and_replays(tmp_path):
+    from resume_agent.checkpoint import read_v2_checkpoint
+    from resume_agent.contracts import Continue, ImportReviewRequest, RejectImport, content_hash
+
+    calls = []
+    async def driver(context):
+        calls.append(context.action)
+        context.control.checkpoint({"source": "original source", "draft": {"summary": "retained draft"}})
+        if context.action:
+            return DriverResult(status="complete", result={"incorrectly_saved": True})
+        return DriverResult(status="pending_review", pending=ImportReviewRequest(
+            review_id="review", draft_hash=content_hash("draft"), expected_profile_revision=None))
+    store = RunStore(tmp_path / "library.sqlite", tmp_path / "state.sqlite")
+    svc = OperationService(store, driver=driver)
+    operation = svc.create(OperationRequest(kind="profile_import", input={"source": "original source"}))
+    await svc.drive(operation.id)
+    before = read_v2_checkpoint(store.checkpoint_path, "operation", operation.id)["values"]
+    rejection = RejectImport(action_id="reject", review_id="review")
+    # Crash after the durable acceptance but before any new checkpoint/cancellation command.
+    with store.connection(immediate=True) as conn:
+        store.accept("operation", operation.id, rejection.model_dump(mode="json"), content_hash(rejection), conn)
+        store.update("operation", operation.id, status="running", pending=None, conn=conn)
+    reopened = OperationService(store, driver=driver)
+    assert reopened.get(operation.id).status == "interrupted"
+    continuation = Continue(action_id="recover-rejection")
+    result = await reopened.drive(operation.id, continuation)
+    assert result.status == "cancelled"
+    assert result.cancellation_requested
+    assert calls == [None]
+    assert read_v2_checkpoint(store.checkpoint_path, "operation", operation.id)["values"] == before
+    assert await OperationService(store).drive(operation.id, rejection) == result
+    assert await OperationService(store).drive(operation.id, continuation) == result
