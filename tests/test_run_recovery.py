@@ -351,3 +351,101 @@ async def test_reexport_obeys_real_cross_process_run_lock(setup):
         child.join(10)
         assert child.exitcode == 0
     assert reexport(setup)['status'] == 'complete'
+
+
+@pytest.mark.parametrize('older_pending', [False, True])
+def test_boot_uses_frozen_pdf_review_after_pending_index_publication_failed(setup, monkeypatch, older_pending):
+    import sqlite3
+    from dataclasses import replace
+
+    from resume_agent.artifacts import RunArtifacts
+    from tests.test_pdf_content_check import make_manifest, make_pdf
+
+    store, service, run_id, record, _, _ = setup
+    old = read_v2_checkpoint(store.checkpoint_path, 'release', run_id)
+    old_index = {'status': 'awaiting-input', 'pending': PdfReviewRequest(review=PdfReview.model_validate(old['review'])).model_dump(mode='json')}
+    write_v2_checkpoint(store.checkpoint_path, 'run', run_id, {'schema_version': 2,
+        'values': {'stage': 'pdf_check'}, 'index': old_index if older_pending else {'status': 'running'},
+        'inflight_action_ids': [], 'finished_action_ids': []})
+    attempt = RunArtifacts.create(record.artifact_id, Path(record.pdf_path).parents[3]).attempt(2)
+    make_pdf(attempt.pdf_path, 'Cut 450ms to 90ms (+80%-gain).')
+    replacement = replace(record, attempt_number=2, pdf_path=str(attempt.pdf_path))
+    original_update = store.update
+    def fail(*args, **kwargs):
+        raise sqlite3.OperationalError('pending index unavailable')
+    monkeypatch.setattr(store, 'update', fail)
+    with pytest.raises(sqlite3.OperationalError, match='pending index unavailable'):
+        service.create_review(run_id, make_manifest(), replacement)
+    monkeypatch.setattr(store, 'update', original_update)
+    if not older_pending:
+        with store.connection() as conn:
+            store.update('run', run_id, status='running', pending=None, conn=conn)
+    frozen = read_v2_checkpoint(store.checkpoint_path, 'release', run_id)
+    assert frozen['review']['review_id'] != old['review']['review_id']
+    reopened = RunService(RunStore(store.library_path, store.checkpoint_path))
+    restored = reopened.reconcile_startup()[0]
+    assert restored.status == 'awaiting-input'
+    assert restored.pending.review.model_dump(mode='json') == frozen['review']
+    assert reopened.get(run_id).pending == restored.pending
+    assert reopened.reconcile_startup()[0] == restored
+
+
+@pytest.mark.parametrize('stale_finished_pause', [False, True])
+def test_boot_does_not_repeat_accepted_pdf_approval_before_export_plan(setup, stale_finished_pause):
+    store, _, run_id, _, action, output = setup
+    with store.connection(immediate=True) as conn:
+        store.accept('run', run_id, action.model_dump(mode='json'), content_hash(action), conn)
+        store.update('run', run_id, status='running', pending=None, conn=conn)
+    binding = read_v2_checkpoint(store.checkpoint_path, 'release', run_id)
+    pending = PdfReviewRequest(review=PdfReview.model_validate(binding['review'])).model_dump(mode='json')
+    write_v2_checkpoint(store.checkpoint_path, 'run', run_id, {'schema_version': 2,
+        'values': {}, 'index': {'status': 'awaiting-input', 'pending': pending} if stale_finished_pause else {'status': 'running'},
+        'inflight_action_ids': [action.action_id],
+        'finished_action_ids': [action.action_id] if stale_finished_pause else []})
+    reopened = RunService(RunStore(store.library_path, store.checkpoint_path))
+    view = reopened.reconcile_startup()[0]
+    assert view.status == 'interrupted' and view.pending is None
+    assert store.release(run_id) is None and not output.exists()
+    with store.connection() as conn:
+        accepted = store.action('run', run_id, action.action_id, conn)
+        assert accepted['status'] == 'accepted' and accepted['result_json'] is None
+
+
+@pytest.mark.parametrize('status', ['cancelled', 'failed'])
+def test_boot_frozen_pdf_review_never_resurrects_terminal_run(setup, status):
+    store, _, run_id, _, _, _ = setup
+    diagnostic = {'code': 'retained_diagnostic', 'stage': 'render'}
+    with store.connection() as conn:
+        store.update('run', run_id, status=status, pending=None,
+                     result={'diagnostics': [diagnostic]}, code=diagnostic['code'], stage=diagnostic['stage'], conn=conn)
+    view = RunService(RunStore(store.library_path, store.checkpoint_path)).reconcile_startup()[0]
+    assert view.status == status and view.pending is None
+    assert [item.model_dump(mode='json') for item in view.diagnostics] == [diagnostic]
+
+
+@pytest.mark.parametrize('proof', ['complete', 'missing_applied', 'wrong_hash'])
+def test_boot_completes_inflight_content_only_with_applied_id_and_frozen_content_hash(setup, proof):
+    from resume_agent.contracts import PresentSuggestions
+    store, _, run_id, record, _, _ = setup
+    action = PresentSuggestions(action_id='selected-content', review_id='content-review',
+        source_revision=content_hash('original-source'), approved_ids=['one'],
+        content_hash=record.content_hash if proof != 'wrong_hash' else content_hash('other-content'))
+    values = {'applied_action_ids': [action.action_id] if proof != 'missing_applied' else [],
+              'manifest': {'content_hash': record.content_hash}}
+    write_v2_checkpoint(store.checkpoint_path, 'run', run_id, {'schema_version': 2, 'values': values,
+        'index': {'status': 'running'}, 'inflight_action_ids': [action.action_id], 'finished_action_ids': []})
+    with store.connection() as conn:
+        store.accept('run', run_id, action.model_dump(mode='json'), content_hash(action), conn)
+        store.update('run', run_id, status='running', pending=None,
+                     result={'diagnostics': [{'code': 'retained_diagnostic', 'stage': 'render'}]}, conn=conn)
+    reopened = RunService(RunStore(store.library_path, store.checkpoint_path))
+    view = reopened.reconcile_startup()[0]
+    with store.connection() as conn:
+        stored = store.action('run', run_id, action.action_id, conn)
+    if proof == 'complete':
+        assert view.status == 'awaiting-input' and view.pending.kind == 'review_pdf'
+        assert stored['status'] == 'complete' and stored['result_json']
+    else:
+        assert view.status == 'interrupted' and view.pending is None
+        assert stored['status'] == 'accepted' and stored['result_json'] is None
+    assert view.diagnostics[0].code == 'retained_diagnostic'

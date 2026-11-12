@@ -1,14 +1,15 @@
 """Safe legacy recovery and boot reconciliation, with no automatic execution."""
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from pydantic import ValidationError
 
 from . import __version__
 from .checkpoint import inspect_v1_checkpoint, read_v2_checkpoint
-from .contracts import FixedRunInput, RunRequest, content_hash
-from .run_store import Conflict, RunStore
+from .contracts import FixedRunInput, PdfReviewRequest, RunRequest, content_hash
+from .run_store import TERMINAL, Conflict, RunStore
 from .schemas import UserResume
 
 
@@ -52,6 +53,57 @@ def recover_legacy(store: RunStore, run_id: str, *, provider: str | None = None,
     return store.create_legacy_child(run_id, fixed.model_dump(mode='json'), answers)
 
 
+def _reconcile_frozen_review(service, release_service, run_id: str) -> None:
+    """Bridge the frozen-review/index handoff while retaining command authority."""
+    with service.store.ownership('run', run_id):
+        row = service.store.row('run', run_id)
+        if row['status'] in TERMINAL or service.store.cancellation('run', run_id):
+            return
+        # An approved export is already past review and requires its own explicit
+        # continuation. A released record remains the final completion authority.
+        if service.store.release(run_id) is not None:
+            return
+        inspection = release_service.inspect(run_id)
+        binding = read_v2_checkpoint(service.store.checkpoint_path, 'release', run_id)
+        lifecycle = service._lifecycle
+        saved = lifecycle._latest(run_id)
+        with service.store.connection() as conn:
+            unfinished = service.store.unfinished('run', run_id, conn)
+        values = saved['values']
+        frozen_hash = binding['manifest']['content_hash']
+        applied_ids = set(values.get('applied_action_ids', []))
+
+        def applied_content(action: dict) -> bool:
+            request = json.loads(action['request_json'])
+            return (request.get('kind') == 'present_suggestions'
+                    and action['action_id'] in applied_ids
+                    and request.get('content_hash') == frozen_hash == inspection.review.content_hash
+                    and values.get('manifest', {}).get('content_hash') == frozen_hash)
+
+        # A frozen review proves that bytes were checked, never that an accepted
+        # PDF approval/rejection was completed. Unproven content commands also
+        # keep their accepted state and require Continue through the same command.
+        proven = inspection.status == 'review' and all(applied_content(action) for action in unfinished)
+        unfinished_ids = {action['action_id'] for action in unfinished}
+        finished = [item for item in saved.get('finished_action_ids', []) if item not in unfinished_ids]
+        if proven:
+            review = inspection.review.model_dump(mode='json')
+            pending = PdfReviewRequest(review=inspection.review).model_dump(mode='json')
+            for candidate in ((saved.get('index') or {}).get('pending'),
+                              json.loads(row['pending_json']) if row['pending_json'] else None):
+                if candidate and candidate.get('kind') == 'review_pdf' and candidate.get('review') == review:
+                    pending = candidate
+                    break
+            index = {'status': 'awaiting-input', 'pending': pending}
+            completed_ids = [action['action_id'] for action in unfinished]
+            finished.extend(completed_ids)
+        else:
+            index, completed_ids = {'status': 'interrupted'}, []
+        lifecycle._checkpoint(run_id, {**saved, 'index': index, 'finished_action_ids': finished,
+            'inflight_action_ids': [] if proven else [action['action_id'] for action in unfinished]})
+        lifecycle._commit_index(run_id, index, completed_ids)
+
+
 def reconcile_startup(service) -> list:
     """Rebuild durable indexes and finish already-commanded cancellation cleanup."""
     from .release_service import ReleaseService
@@ -63,6 +115,12 @@ def reconcile_startup(service) -> list:
         if binding and service.store.cancellation('run', run_id):
             try:
                 release_service.recover_unfinished(run_id, cancel=True)
+            except Conflict as exc:
+                if str(exc) != 'owner_busy':
+                    raise
+        elif binding:
+            try:
+                _reconcile_frozen_review(service, release_service, run_id)
             except Conflict as exc:
                 if str(exc) != 'owner_busy':
                     raise
