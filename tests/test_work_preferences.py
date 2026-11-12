@@ -58,7 +58,7 @@ def test_job_context_overrides_extraction_without_inventing_missing_values(monke
     llm = MagicMock()
     llm.with_structured_output.return_value.invoke.return_value = parsed
     if retry:
-        llm.with_structured_output.return_value.invoke.side_effect = [ValueError("bad JSON"), parsed]
+        llm.with_structured_output.return_value.invoke.side_effect = [ValidationError.from_exception_data("JobDescription", [{"type": "missing", "loc": ("company",), "input": {}}]), parsed]
     monkeypatch.setattr(jd_extractor, "get_chat_model", lambda *a, **k: llm)
     result = jd_extractor.jd_extractor_node({"raw_input": "Job posting. " * 20, **overrides}, settings=ResumeAgentSettings(_env_file=None))
     assert (result["jd"].location, getattr(result["jd"], "work_mode", None)) == want

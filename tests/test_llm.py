@@ -113,7 +113,7 @@ def test_local_ollama_requires_no_key(sdk, monkeypatch):
 def test_missing_selected_provider_key_fails_without_using_another_key(sdk, monkeypatch):
     monkeypatch.delenv("COMMAND_CODE_API_KEY", raising=False)
     settings = ResumeAgentSettings(_env_file=None, provider="commandcode", OPENAI_API_KEY="unrelated")
-    with pytest.raises(ValueError, match="COMMAND_CODE_API_KEY"):
+    with pytest.raises(ValueError, match="API key"):
         get_chat_model(settings)
     assert sdk[0] == []
 
@@ -171,7 +171,7 @@ def test_malformed_json_fallback_is_rejected(sdk):
     sdk[1]["malformed"] = True
     settings = ResumeAgentSettings(_env_file=None, provider="openai", OPENAI_API_KEY="test-key",
                                    model={"default": "private-custom-model", "vision": ""})
-    with pytest.raises(ValueError, match="Invalid json"):
+    with pytest.raises(ValueError, match="invalid structured output"):
         get_chat_model(settings).with_structured_output(UserResume).invoke("Parse this resume.")
 
 

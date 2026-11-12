@@ -8,16 +8,15 @@ import re
 from operator import itemgetter
 from typing import TYPE_CHECKING, Literal
 
-from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 from langchain_core.runnables import RunnableLambda, RunnableMap, RunnablePassthrough
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
 from .config import MAX_LLM_OUTPUT_TOKENS
+from .provider_errors import StructuredOutputError, safe_error_guidance
 
 if TYPE_CHECKING:
     from .config import ResumeAgentSettings
@@ -42,9 +41,7 @@ class ResumeChatLiteLLM(ChatLiteLLM):
             # Strict schemas cannot represent arbitrary resume skill categories.
             tool = convert_to_openai_tool(schema, strict=False)
             bound = self.bind_tools([tool], tool_choice="required")
-            parser = PydanticToolsParser(tools=[schema], first_tool_only=True)
-            # A model that omits the tool call must fail validation, not return None.
-            parser = parser | RunnableLambda(schema.model_validate)
+            parser = RunnableLambda(lambda message: parse_structured_response(message, schema, require_tool=True))
         else:
             instructions = SystemMessage(content=format_instructions)
 
@@ -55,27 +52,7 @@ class ResumeChatLiteLLM(ChatLiteLLM):
             bound = self
             if litellm.supports_response_schema(self.model, self.custom_llm_provider):
                 bound = self.bind(response_format={"type": "json_object"})
-            def parse_json(message):
-                # Decode complete JSON only. LangChain's JSON parser repairs
-                # truncated replies, which can silently drop resume sections.
-                text = message.content.strip()
-                fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
-                if fenced:
-                    text = fenced.group(1)
-                try:
-                    data = json.loads(text)
-                except json.JSONDecodeError as exc:
-                    raise OutputParserException("Invalid json output from model.", llm_output=text) from exc
-                return schema.model_validate(data)
-
-            parser = RunnableLambda(parse_json)
-
-        def require_complete(message):
-            if message.response_metadata.get("finish_reason") == "length":
-                raise OutputParserException("The model response was truncated; retry with a larger output budget.")
-            return message
-
-        parser = RunnableLambda(require_complete) | parser
+            parser = RunnableLambda(lambda message: parse_structured_response(message, schema))
 
         if include_raw:
             parsed = RunnablePassthrough.assign(
@@ -88,41 +65,64 @@ class ResumeChatLiteLLM(ChatLiteLLM):
         return prompt | bound | parser
 
 
+def _incomplete_json(text: str) -> bool:
+    """Recognize unclosed JSON containers/strings without repairing their contents."""
+    if not text.lstrip().startswith(("{", "[")):
+        return False
+    stack, quoted, escaped = [], False, False
+    for char in text:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+        elif char in "{[":
+            stack.append(char)
+        elif char in "}]":
+            if not stack or stack.pop() != ("{" if char == "}" else "["):
+                return False
+    return quoted or bool(stack)
+
+
+def parse_structured_response(response: object, schema: type[BaseModel], *, require_tool: bool = False):
+    """Validate complete structured/tool JSON; never salvage a partial response."""
+    metadata = getattr(response, "response_metadata", {})
+    reason = metadata.get("finish_reason") or metadata.get("stop_reason")
+    if reason in {"length", "max_tokens", "max_output_tokens", "MAX_TOKENS"}:
+        raise StructuredOutputError("truncated_output")
+    if isinstance(response, schema):
+        return response
+    tool_calls = getattr(response, "tool_calls", [])
+    invalid_calls = getattr(response, "invalid_tool_calls", [])
+    if tool_calls:
+        matching = [call for call in tool_calls if call.get("name") == schema.__name__]
+        return schema.model_validate(matching[0]["args"] if matching else None)
+    if invalid_calls:
+        response = invalid_calls[0].get("args", "")
+    elif require_tool:
+        return schema.model_validate(None)
+    else:
+        response = getattr(response, "content", response)
+    if isinstance(response, str):
+        text = response.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+        if fenced:
+            text = fenced.group(1)
+        try:
+            response = json.loads(text)
+        except json.JSONDecodeError:
+            code = "truncated_output" if _incomplete_json(text) else "invalid_output"
+            raise StructuredOutputError(code) from None
+    return schema.model_validate(response)
+
+
 def describe_llm_error(exc: Exception) -> str:
-    """Turn a raw provider exception into a short, actionable message for the UI.
-
-    Covers the common failure modes users hit with OpenRouter / OpenAI-compatible
-    providers — out of credits, rate limited, bad key — and falls back to the raw
-    message for anything unrecognised.
-    """
-    low = str(exc).lower()
-
-    def has(*needles: str) -> bool:
-        return any(n in low for n in needles)
-
-    # Out of credits — OpenAI reports this as 429 "insufficient_quota", OpenRouter as 402.
-    if has("insufficient", "402", "payment required", "not enough credit", "requires more credit"):
-        return (
-            "Out of LLM credits. Check billing with your selected provider in Settings, "
-            "or switch to another provider — then retry."
-        )
-    if has("429", "rate limit", "rate-limit", "too many requests"):
-        return (
-            "Rate limited by the model provider. Wait a moment and retry, or check "
-            "the usage limits for your selected provider."
-        )
-    if has("upgrade_required"):
-        return "Your Command Code plan does not include API access. Check your plan in Command Code Studio."
-    if has("unsupported_model"):
-        return "The model is not available from this provider. Choose an available model in Settings."
-    if has("timeout", "timed out"):
-        return "The model provider took too long to respond. Please retry."
-    if has("401", "403", "authentication", "unauthorized", "invalid api key", "no auth credentials"):
-        return (
-            'The model provider rejected the API key. Reconnect in Settings '
-            '("API key") or re-enter your key.'
-        )
-    return str(exc)
+    """Return actionable guidance without echoing provider response text."""
+    return safe_error_guidance(exc)
 
 
 def get_chat_model(
@@ -162,7 +162,7 @@ def get_chat_model(
     if provider == "gemini":
         api_key = api_key or os.environ.get("GEMINI_API_KEY")
     if provider != "ollama" and not api_key:
-        raise ValueError(f"Missing {key_names[provider]}. Run: resume-generator setup")
+        raise StructuredOutputError("authentication")
 
     base_urls = {
         "ollama": settings.ollama_base_url,
@@ -183,8 +183,8 @@ def get_chat_model(
         temperature=temperature,
         max_tokens=MAX_LLM_OUTPUT_TOKENS,
         request_timeout=120,
-        max_retries=2,
-        # Retry once at the LangChain boundary; avoid nested SDK retry budgets.
+        max_retries=0,
+        # ModelTaskRunner (or the bounded legacy helper) is the sole retry owner.
         # LiteLLM drops parameters (such as temperature) that a model rejects.
         model_kwargs={"num_retries": 0, "drop_params": True},
         use_responses_api=False,

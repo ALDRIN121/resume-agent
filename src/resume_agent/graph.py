@@ -26,7 +26,6 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import RetryPolicy
 
 from .agents.base_resume_loader import load_base_resume_node
 from .agents.gap_analyzer import gap_analyzer_node
@@ -232,31 +231,26 @@ def build_graph(
         return _route_after_hr_review(state, max_retries=max_retries)
 
     builder = StateGraph(ResumeGenState)
-    llm_retry_policy = RetryPolicy(max_attempts=2)
 
     # ── Nodes ──────────────────────────────────────────────────────────────────
     builder.add_node("scrape_url", partial(jd_scraper_node, settings=settings))
     builder.add_node(
         "extract_jd",
         partial(jd_extractor_node, settings=settings),
-        retry_policy=llm_retry_policy,
     )
     builder.add_node("load_base_resume", load_base_resume_node)
     builder.add_node(
         "analyze_gaps",
         partial(gap_analyzer_node, settings=settings),
-        retry_policy=llm_retry_policy,
     )
     builder.add_node(
         HITL_MISSING_NODE,
         partial(hitl_node, settings=settings),
-        retry_policy=llm_retry_policy,
     )
     builder.add_node(HITL_SUGGESTIONS_NODE, suggestion_presenter_node)
     builder.add_node(
         "generate_latex",
         partial(resume_generator_node, settings=settings),
-        retry_policy=llm_retry_policy,
     )
     builder.add_node("resume_lint", resume_lint_node)
     builder.add_node("validate_latex", latex_validator_node)
@@ -265,12 +259,10 @@ def build_graph(
     builder.add_node(
         "validate_alignment",
         partial(pdf_validator_node, settings=settings),
-        retry_policy=llm_retry_policy,
     )
     builder.add_node(
         "hr_review",
         partial(hr_review_node, settings=settings),
-        retry_policy=llm_retry_policy,
     )
     builder.add_node("save_output", partial(output_saver_node, settings=settings))
     builder.add_node("terminal_failure", partial(terminal_failure_node, settings=settings))

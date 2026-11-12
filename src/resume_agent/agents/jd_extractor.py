@@ -6,11 +6,10 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import MAX_JD_TEXT_CHARS, ResumeAgentSettings
 from ..llm import get_chat_model
+from ..model_tasks import invoke_bounded
 from ..schemas import JobDescription
 from ..state import ResumeGenState
 from ..ui.panels import print_agent_step, print_info, print_warning
-
-_MAX_RETRIES = 3
 
 _SYSTEM = """\
 You are a precise job description parser. Extract structured information from the provided job posting text.
@@ -36,14 +35,6 @@ Job Posting:
 {text}
 """
 
-_RETRY_SUFFIX = """
-
-IMPORTANT: Your previous response could not be parsed as valid JSON.
-Respond with ONLY a raw JSON object. Do not include any text before or after it.
-Example format:
-{{"company": "Acme Corp", "role_title": "Software Engineer", "responsibilities": [], "must_have_skills": [], "nice_to_have_skills": []}}
-"""
-
 
 def jd_extractor_node(
     state: ResumeGenState, *, settings: ResumeAgentSettings | None = None
@@ -62,31 +53,14 @@ def jd_extractor_node(
 
     print_agent_step("JD Extractor", "Analyzing job requirements & extracting key skills…")
 
-    last_exc: Exception | None = None
-    for attempt in range(1, _MAX_RETRIES + 1):
-        if attempt > 1:
-            print_warning(f"JD extraction attempt {attempt}/{_MAX_RETRIES} (retrying after parse error)…")
-
-        system_content = _SYSTEM + (_RETRY_SUFFIX if attempt > 1 else "")
-        messages = [
-            SystemMessage(content=system_content),
-            HumanMessage(content=_HUMAN_TEMPLATE.format(text=text)),
-        ]
-
-        try:
-            jd = JobDescription.model_validate(structured_llm.invoke(messages))
-            jd = _with_job_context(jd, state, text)
-            print_info(f"Extracted JD: {jd.company} — {jd.role_title}")
-            return {"jd": jd}
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-
-    raise RuntimeError(
-        f"Failed to extract job description after {_MAX_RETRIES} attempts. "
-        f"Last error: {last_exc}\n\n"
-        "Tip: Try switching to a stronger model (e.g. anthropic or openai) with:\n"
-        "  resume-generator config set provider anthropic"
-    ) from last_exc
+    messages = [
+        SystemMessage(content=_SYSTEM),
+        HumanMessage(content=_HUMAN_TEMPLATE.format(text=text)),
+    ]
+    jd = invoke_bounded(structured_llm.invoke, messages, JobDescription)
+    jd = _with_job_context(jd, state, text)
+    print_info(f"Extracted JD: {jd.company} — {jd.role_title}")
+    return {"jd": jd}
 
 
 def _with_job_context(jd: JobDescription, state: ResumeGenState, text: str) -> JobDescription:
