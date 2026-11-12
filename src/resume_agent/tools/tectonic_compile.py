@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -18,6 +19,10 @@ class CompileResult:
     errors: list[str]      # parsed error lines from tectonic's stderr
     raw_log: str           # full stderr for debugging
     fatal: bool = False    # True = Tectonic env/network issue, retrying won't help
+    page_count: int | None = None
+    overfull_boxes: list[str] = field(default_factory=list)
+    overflow: bool = False
+    error_code: str | None = None
 
 
 def compile_latex(
@@ -45,6 +50,7 @@ def compile_latex(
                 "or via: cargo install tectonic"
             ],
             raw_log="",
+            error_code="compiler_unavailable",
         )
 
     with tempfile.TemporaryDirectory(prefix="resume_agent_") as tmp:
@@ -72,6 +78,7 @@ def compile_latex(
             )
             env = {**os.environ, "FONTCONFIG_FILE": str(fc_file)}
 
+        timed_out = False
         try:
             result = subprocess.run(
                 [
@@ -88,44 +95,65 @@ def compile_latex(
                 timeout=timeout,
                 env=env,
             )
-        except subprocess.TimeoutExpired:
-            return CompileResult(
-                ok=False,
-                pdf_path=None,
-                errors=[f"Tectonic timed out after {timeout}s"],
-                raw_log="",
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            def text_output(value: str | bytes | None) -> str:
+                return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+            result = subprocess.CompletedProcess(
+                exc.cmd, 1, stdout=text_output(exc.stdout), stderr=text_output(exc.stderr)
             )
 
         raw_log = result.stderr + result.stdout
+        tex_log_path = tmp_path / "resume.log"
+        if tex_log_path.exists():
+            raw_log += "\n=== TeX log ===\n" + tex_log_path.read_text(
+                encoding="utf-8", errors="replace"
+            )
+        dest_dir = output_dir or Path(tempfile.mkdtemp(prefix="resume_agent_pdf_"))
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        # Exclusive writes preserve prior attempt diagnostics and canonical bytes.
+        with (dest_dir / "tectonic_raw.log").open("x", encoding="utf-8") as stream:
+            stream.write(raw_log)
+        overfull = [line.strip() for line in raw_log.splitlines()
+                    if re.search(r"Overfull\s+\\[hv]box\b", line, re.IGNORECASE)]
+        pages = re.search(r"Output written on .*?\((\d+) pages?\b", raw_log)
+        diagnostics = {"overfull_boxes": overfull, "overflow": bool(overfull),
+                       "page_count": int(pages[1]) if pages else None}
         produced_pdf = tmp_path / "resume.pdf"
 
         if result.returncode != 0 or not produced_pdf.exists():
             # The TeX .log file contains the real error messages (package errors,
             # undefined commands, etc.) — stderr only has Tectonic's own notes.
-            tex_log_path = tmp_path / "resume.log"
-            if tex_log_path.exists():
-                try:
-                    tex_log = tex_log_path.read_text(encoding="utf-8", errors="replace")
-                    raw_log = raw_log + "\n=== TeX log ===\n" + tex_log
-                except OSError:
-                    pass
             errors = _parse_tectonic_errors(raw_log)
             fatal = False
-            if not errors:
+            error_code = "compile_syntax" if re.search(
+                r"(?m)^\s*!|(?:LaTeX|Package\s+\S+)\s+Error:", raw_log
+            ) else "compile_environment"
+            if timed_out:
+                errors = [f"Tectonic timed out after {timeout}s", *errors]
+                error_code = "compile_timeout"
+            elif not errors:
                 errors = ["Tectonic exited with an error but produced no diagnostic output."]
                 fatal = True
-            return CompileResult(ok=False, pdf_path=None, errors=errors, raw_log=raw_log, fatal=fatal)
+            return CompileResult(ok=False, pdf_path=None, errors=errors, raw_log=raw_log,
+                                 fatal=fatal, error_code=error_code, **diagnostics)
 
         # Copy PDF to a stable destination. If no destination is supplied, use
         # a second temp directory that survives this context manager; tmp_path
         # itself is deleted when the source build directory closes.
-        dest_dir = output_dir or Path(tempfile.mkdtemp(prefix="resume_agent_pdf_"))
-        dest_dir.mkdir(parents=True, exist_ok=True)
         dest_pdf = dest_dir / "resume.pdf"
         if produced_pdf.resolve() != dest_pdf.resolve():
-            shutil.copy2(str(produced_pdf), str(dest_pdf))
+            with produced_pdf.open("rb") as source, dest_pdf.open("xb") as target:
+                shutil.copyfileobj(source, target)
 
-        return CompileResult(ok=True, pdf_path=str(dest_pdf), errors=[], raw_log=raw_log)
+        if diagnostics["page_count"] is None:
+            try:
+                from pypdf import PdfReader
+                diagnostics["page_count"] = len(PdfReader(dest_pdf).pages)
+            except Exception:
+                pass  # Malformed/unreadable PDFs are rejected by the PDF validator.
+        return CompileResult(ok=True, pdf_path=str(dest_pdf), errors=[], raw_log=raw_log,
+                             **diagnostics)
 
 
 def _parse_tectonic_errors(log: str) -> list[str]:

@@ -38,6 +38,8 @@ def build_output_path(
     date_str = today.strftime("%Y-%m-%d")
 
     out_dir = base_dir / company_slug
+    if out_dir.is_symlink():
+        raise ValueError(f"Unexpected symlink output directory: {out_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     stem = f"{user_slug}_{company_slug}_{date_str}"
