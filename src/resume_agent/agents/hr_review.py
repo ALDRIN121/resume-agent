@@ -165,3 +165,12 @@ def _log_scores(result: HRReviewResult) -> None:
         icon = "✓" if score.score >= 0.7 else "⚠"
         note = f" — {score.note}" if score.note else ""
         print_info(f"  {icon} {score.name}: {score.score:.2f}{note}")
+
+
+async def hr_review_approved(manifest, *, reviewer=None, check_cancelled=None):
+    """Private v2 HR advice; never produce writer feedback or edited content."""
+    from ..approved_render import review_advisory
+    from ..content_review import expected_display_text
+
+    return await review_advisory('hr', expected_display_text(manifest), reviewer=reviewer,
+                                 check_cancelled=check_cancelled)

@@ -1,0 +1,21 @@
+\documentclass[10pt,letterpaper]{article}
+\usepackage[margin={{ layout.margin_in }}in]{geometry}
+\usepackage{fontspec}
+\setmainfont{lmroman10-regular.otf}[BoldFont=lmroman10-bold.otf,ItalicFont=lmroman10-italic.otf,BoldItalicFont=lmroman10-bolditalic.otf,Ligatures={NoCommon,TeXOff}]
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{ {{ layout.paragraph_skip_pt }}pt}
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\lefthyphenmin=1000
+\righthyphenmin=1000
+\raggedright
+\begin{document}
+{% for line in lines %}
+{% if line.group_start %}\addvspace{ {{ layout.group_skip_pt }}pt}{% endif %}
+{% if line.kind == 'name' %}{\fontsize{16}{19}\selectfont\bfseries {{ line.text }}}\par
+{% elif line.kind == 'heading' %}\addvspace{ {{ layout.heading_skip_pt }}pt}{\bfseries {{ line.text }}}\par\nopagebreak
+{% else %}{{ line.text }}\par
+{% endif %}
+{% endfor %}
+\end{document}
