@@ -5,6 +5,8 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
+
 # API imports initialize the library immediately, so a pytest fixture is too late.
 # Child processes inherit this environment, including isolated Python (-I).
 _state_directory = tempfile.TemporaryDirectory(prefix="resume-agent-tests-")
@@ -23,3 +25,14 @@ for _name in tuple(os.environ):
 os.environ["RESUME_GENERATOR_STATE_DIR"] = str(Path(_state_directory.name).resolve())
 # LiteLLM must use its bundled cost map rather than fetching one during imports.
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+
+
+@pytest.fixture
+def public_dns(monkeypatch):
+    """Keep mocked HTTP tests independent of public DNS availability."""
+    import socket
+
+    def resolve(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("8.8.8.8", port or 443))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)

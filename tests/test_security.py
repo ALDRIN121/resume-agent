@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 #  LaTeX escape — all user-controlled fields must survive injection attempts
 # ══════════════════════════════════════════════════════════════════════════════
@@ -154,8 +153,29 @@ class TestValidateURL:
         "https://example.com/job",
         "http://jobs.lever.co/acme/123",
     ])
-    def test_allows_public_https(self, validate, url):
+    def test_allows_public_https(self, validate, url, public_dns):
         validate(url)  # must not raise
+
+    @pytest.mark.parametrize("addresses", [["10.0.0.1"], ["8.8.8.8", "127.0.0.1"]])
+    def test_rejects_hostnames_with_internal_dns(self, validate, monkeypatch, addresses):
+        import socket
+
+        monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (address, 443))
+            for address in addresses
+        ])
+        with pytest.raises(ValueError, match="private|reserved"):
+            validate("https://example.com/job")
+
+    def test_rejects_unresolved_hostname(self, validate, monkeypatch):
+        import socket
+
+        def unresolved(*args, **kwargs):
+            raise socket.gaierror("synthetic DNS failure")
+
+        monkeypatch.setattr(socket, "getaddrinfo", unresolved)
+        with pytest.raises(ValueError, match="Could not resolve"):
+            validate("https://example.com/job")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -165,6 +185,7 @@ class TestValidateURL:
 class TestBuildOutputPathAtomic:
     def test_no_version_suffix_on_first_call(self, tmp_path):
         from datetime import date
+
         from resume_agent.tools.fs import build_output_path
 
         path = build_output_path(tmp_path, "Acme Corp", "Jane Doe", today=date(2026, 4, 15))
@@ -174,6 +195,7 @@ class TestBuildOutputPathAtomic:
 
     def test_version_suffix_on_collision(self, tmp_path):
         from datetime import date
+
         from resume_agent.tools.fs import build_output_path
 
         p1 = build_output_path(tmp_path, "Acme", "Jane Doe", today=date(2026, 4, 15))
@@ -183,6 +205,7 @@ class TestBuildOutputPathAtomic:
 
     def test_three_concurrent_claims(self, tmp_path):
         from datetime import date
+
         from resume_agent.tools.fs import build_output_path
 
         paths = [
