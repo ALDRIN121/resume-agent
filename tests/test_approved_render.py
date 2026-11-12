@@ -70,6 +70,49 @@ def images(pdf_path, *, output_dir):
     return [str(path)]
 
 
+@pytest.mark.parametrize('damage', ['missing_page', 'duplicate_page'])
+async def test_reopened_record_requires_distinct_image_for_every_page(tmp_path, damage):
+    from dataclasses import replace
+
+    from pypdf import PdfReader
+
+    from resume_agent.approved_render import RenderError
+
+    def all_images(pdf_path, *, output_dir):
+        paths = []
+        for index in range(len(PdfReader(pdf_path).pages)):
+            path = output_dir / f'page_{index + 1}.png'
+            Image.new('RGB', (10, 10), 'white').save(path, 'PNG')
+            paths.append(str(path))
+        return paths
+
+    artifacts = run(tmp_path)
+    record = await render(tmp_path, Compiler([(2, '')]), artifacts=artifacts,
+                          image_adapter=all_images)
+    if damage == 'missing_page':
+        damaged = replace(record, image_paths=record.image_paths[:1],
+                          image_hashes=record.image_hashes[:1])
+    else:
+        damaged = replace(record, image_paths=(record.image_paths[0],) * 2,
+                          image_hashes=(record.image_hashes[0],) * 2)
+    with pytest.raises(RenderError) as error:
+        await render(tmp_path, artifacts=artifacts, resume_record=damaged)
+    assert error.value.code == 'artifact_hash_mismatch'
+
+
+async def test_reopened_record_rejects_nonimage_even_with_matching_hash(tmp_path):
+    from dataclasses import replace
+
+    from resume_agent.approved_render import RenderError
+
+    artifacts = run(tmp_path)
+    record = await render(tmp_path, artifacts=artifacts)
+    damaged = replace(record, image_paths=(record.pdf_path,), image_hashes=(record.pdf_hash,))
+    with pytest.raises(RenderError) as error:
+        await render(tmp_path, artifacts=artifacts, resume_record=damaged)
+    assert error.value.code == 'artifact_hash_mismatch'
+
+
 async def render(tmp_path, compiler=None, **kwargs):
     from resume_agent.approved_render import render_approved
     return await render_approved(manifest(), kwargs.pop('artifacts', run(tmp_path)),

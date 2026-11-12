@@ -222,7 +222,9 @@ def _validate_record(record: RenderRecord, manifest: RenderManifest, run: RunArt
             or record.render_hash != render_identity(manifest.content_hash, template_hash, record.layout)
             or record.source_path != str(attempt.source_path)
             or record.pdf_path != str(attempt.pdf_path) or record.log_path != str(attempt.log_path)
-            or len(record.image_paths) != len(record.image_hashes) or not record.image_paths
+            or len(record.image_paths) != len(record.image_hashes)
+            or len(record.image_paths) != record.page_count
+            or len(set(record.image_paths)) != record.page_count
             or record.overflow or record.overfull_boxes or not 1 <= record.page_count <= max_pages):
         raise RenderError('artifact_hash_mismatch', 'Stored render identity is invalid.')
     for path, expected in ((record.source_path, record.source_hash),
@@ -233,6 +235,14 @@ def _validate_record(record: RenderRecord, manifest: RenderManifest, run: RunArt
         _check_hash(path, expected)
     if _page_count(attempt.pdf_path) != record.page_count:
         raise RenderError('artifact_hash_mismatch', 'Stored PDF page count changed.')
+    for path in record.image_paths:
+        try:
+            if not Path(path).is_relative_to(attempt.images_dir):
+                raise ValueError('Image escaped its owned image directory')
+            with Image.open(path) as opened:
+                opened.verify()
+        except (OSError, ValueError) as exc:
+            raise RenderError('artifact_hash_mismatch', 'Stored page image is invalid.') from exc
 
 
 async def render_approved(
