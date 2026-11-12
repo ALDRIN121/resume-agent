@@ -7,6 +7,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from ..contracts import PdfReview
+
 
 def now_iso() -> str:
     """Return a compact UTC timestamp for API events."""
@@ -36,9 +38,12 @@ class LogLineEvent(BaseEvent):
 
 class HITLPendingEvent(BaseEvent):
     type: Literal["hitl_pending"] = "hitl_pending"
-    kind: Literal["ask_missing", "present_suggestions"]
+    kind: Literal["ask_missing", "present_suggestions", "review_pdf"]
     questions: list[dict[str, Any]] = Field(default_factory=list)
     suggestions: list[dict[str, Any]] = Field(default_factory=list)
+    review: PdfReview | None = None
+    run_id: str | None = None
+    preview_url: str | None = None
 
 
 class LintWarning(BaseModel):
