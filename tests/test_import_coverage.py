@@ -21,7 +21,9 @@ def candidate():
 
 @pytest.mark.parametrize("size", [12_050, 48_000])
 def test_resume_parser_receives_complete_supported_text(tmp_path, monkeypatch, size):
-    text = "é" * (size - 12) + "FINAL_MARKER"
+    marker = "FINAL_MARKER"
+    text = "é" * (size - len(marker)) + marker
+    assert len(text) == size
     source = tmp_path / "resume.tex"
     source.write_text(text)
     monkeypatch.setattr(base_resume_loader, "BASE_RESUME_FILE", tmp_path / "profile.yaml")
