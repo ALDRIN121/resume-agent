@@ -6,6 +6,7 @@ from typing import Annotated, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
+from pydantic import JsonValue
 
 from .schemas import GapAnalysis, JobDescription, Suggestion, UserResume
 
@@ -17,6 +18,8 @@ STATE_SCHEMA_VERSION = 1
 class ResumeGenState(TypedDict, total=False):
     # ── Schema guard ───────────────────────────────────────────────────────────
     schema_version: int  # always set to STATE_SCHEMA_VERSION at graph entry
+    artifact_id: str  # optional transition metadata; graph remains schema 1
+    attempt_number: int
     # ── Input ──────────────────────────────────────────────────────────────────
     input_type: Literal["text", "url"]
     raw_input: str
@@ -73,3 +76,18 @@ class ResumeGenState(TypedDict, total=False):
 
     # ── Message history (for LLM context) ─────────────────────────────────────
     messages: Annotated[list[BaseMessage], add_messages]
+
+
+class ResumeGenStateV2(TypedDict, total=False):
+    """JSON-compatible v2 checkpoint values, separate from the active v1 graph."""
+
+    schema_version: Literal[2]
+    approved_content: dict[str, JsonValue]
+    render_manifest: dict[str, JsonValue]
+    review_ids: list[str]
+    preview_hash: str | None
+    release_hash: str | None
+    attempt_number: int
+    applied_action_ids: list[str]
+    model_attempts: dict[str, int]
+    legacy_parent: str | None

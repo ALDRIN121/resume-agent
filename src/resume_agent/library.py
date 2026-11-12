@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import CONFIG_DIR
+from .migrations import migrate
 
 LIBRARY_DB = CONFIG_DIR / "library.sqlite"
 _HISTORY_FILE = CONFIG_DIR / "run_history.jsonl"
@@ -54,6 +55,7 @@ def _connect() -> sqlite3.Connection:
 
 def init_db() -> None:
     """Create tables if they don't exist. Safe to call repeatedly."""
+    migrate(LIBRARY_DB)
     with _connect() as conn:
         conn.executescript(_SCHEMA)
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(resumes)")}

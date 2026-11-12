@@ -34,6 +34,7 @@ dependencies = [
     # Config / Utilities
     "pyyaml>=6.0.0",
     "python-slugify>=8.0.0",
+    "filelock>=3.32.7",
     # Local web app
     "fastapi>=0.115.0",
     "starlette>=1.0.1",
