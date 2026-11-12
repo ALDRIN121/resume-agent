@@ -116,12 +116,13 @@ class ReleaseService:
                 raise ReleaseConflict('run_cancelled')
             old = read_v2_checkpoint(self.store.checkpoint_path, 'release', run_id)
             if old and old['record'] == record.to_dict() and old['manifest'] == manifest.model_dump(mode='json'):
-                return PdfReview.model_validate(old['review'])
-            review = PdfReview(review_id=str(uuid4()), content_hash=record.content_hash,
-                render_hash=record.render_hash, pdf_hash=record.pdf_hash,
-                template_version=record.template_version, layout_id=record.layout_id)
-            self._save(run_id, {'review': review.model_dump(mode='json'),
-                'manifest': manifest.model_dump(mode='json'), 'record': record.to_dict()})
+                review = PdfReview.model_validate(old['review'])
+            else:
+                review = PdfReview(review_id=str(uuid4()), content_hash=record.content_hash,
+                    render_hash=record.render_hash, pdf_hash=record.pdf_hash,
+                    template_version=record.template_version, layout_id=record.layout_id)
+                self._save(run_id, {'review': review.model_dump(mode='json'),
+                    'manifest': manifest.model_dump(mode='json'), 'record': record.to_dict()})
             with self.store.connection(immediate=True) as conn:
                 if self.store.cancellation('run', run_id, conn):
                     raise ReleaseConflict('run_cancelled')

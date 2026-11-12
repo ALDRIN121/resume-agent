@@ -112,6 +112,10 @@ def parse_structured_response(response: object, schema: type[BaseModel], *, requ
         fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
         if fenced:
             text = fenced.group(1)
+        elif re.match(r"^```(?:json)?(?=\s|[\[{]|$)", text, re.IGNORECASE):
+            # An opening JSON fence without its closing delimiter is incomplete
+            # output. Do not treat it as a complete malformed response and retry.
+            raise StructuredOutputError("truncated_output")
         try:
             response = json.loads(text)
         except json.JSONDecodeError:

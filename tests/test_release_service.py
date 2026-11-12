@@ -240,6 +240,25 @@ def test_checkpoint_persistence_error_surfaces_before_reservation(setup):
     assert setup[0].release(setup[2]) is None
 
 
+def test_review_retry_repairs_pending_index_after_persistence_failure(setup):
+    import sqlite3
+
+    store, service, run_id, record, _, _ = setup
+    changed = replace(record, template_hash='e' * 64,
+        render_hash=render_identity(record.content_hash, 'e' * 64, record.layout))
+    with store.connection() as conn:
+        conn.execute("CREATE TRIGGER fail_review_index BEFORE UPDATE OF pending_json ON runs "
+                     "BEGIN SELECT RAISE(FAIL,'review index failure'); END")
+    with pytest.raises(sqlite3.IntegrityError, match='review index failure'):
+        service.create_review(run_id, make_manifest(), changed)
+    with store.connection() as conn:
+        conn.execute('DROP TRIGGER fail_review_index')
+    review = reopen(setup).create_review(run_id, make_manifest(), changed)
+    pending = RunService(store).get(run_id).pending
+    assert pending.review.review_id == review.review_id
+    assert pending.review.render_hash == changed.render_hash
+
+
 def test_approval_persists_full_plan_and_action_before_copy(setup):
     def crash(stage):
         if stage == 'after_approval':
