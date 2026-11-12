@@ -48,22 +48,22 @@ def test_resume_api_roundtrips_saved_work_preferences(tmp_path, monkeypatch):
     assert client.get("/api/resume").json() == data
 
 
-@pytest.mark.parametrize("fallback", [False, True])
+@pytest.mark.parametrize("retry", [False, True])
 @pytest.mark.parametrize("overrides,want", [
     ({"job_location": "Chennai, India", "work_mode": "On-site"}, ("Chennai, India", "On-site")),
     ({}, ("London, UK", None)),
 ])
-def test_job_context_overrides_extraction_without_inventing_missing_values(monkeypatch, fallback, overrides, want):
+def test_job_context_overrides_extraction_without_inventing_missing_values(monkeypatch, retry, overrides, want):
     parsed = JobDescription(company="Example", role_title="Engineer", location="London, UK", remote_policy="Hybrid: 2 days per week")
     llm = MagicMock()
     llm.with_structured_output.return_value.invoke.return_value = parsed
-    if fallback:
-        llm.with_structured_output.return_value.invoke.side_effect = ValueError("bad JSON")
-        llm.invoke.return_value.content = parsed.model_dump_json()
+    if retry:
+        llm.with_structured_output.return_value.invoke.side_effect = [ValueError("bad JSON"), parsed]
     monkeypatch.setattr(jd_extractor, "get_chat_model", lambda *a, **k: llm)
     result = jd_extractor.jd_extractor_node({"raw_input": "Job posting. " * 20, **overrides}, settings=ResumeAgentSettings(_env_file=None))
     assert (result["jd"].location, getattr(result["jd"], "work_mode", None)) == want
     assert result["jd"].remote_policy == "Hybrid: 2 days per week"
+    llm.invoke.assert_not_called()
 
 
 def test_gap_analysis_receives_both_sides_of_location_and_work_mode(monkeypatch):

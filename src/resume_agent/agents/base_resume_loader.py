@@ -13,7 +13,8 @@ from pathlib import Path
 import yaml
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from ..config import BASE_RESUME_FILE, MAX_RESUME_PARSE_CHARS, ResumeAgentSettings
+from ..config import BASE_RESUME_FILE, MAX_RESUME_UPLOAD_BYTES, ResumeAgentSettings
+from ..imports import validate_resume_text
 from ..llm import get_chat_model
 from ..schemas import UserResume
 from ..state import ResumeGenState
@@ -79,6 +80,8 @@ def parse_and_save_resume(
     """
     from ..ui.progress import phase_spinner
 
+    if source_path.stat().st_size > MAX_RESUME_UPLOAD_BYTES:
+        raise ValueError("Source exceeds the supported upload limit of 10 MiB")
     suffix = source_path.suffix.lower()
 
     def report(stage: str, status: str) -> None:
@@ -95,25 +98,15 @@ def parse_and_save_resume(
         else:
             raise ValueError(f"Unsupported format: {suffix}. Use .tex or .pdf")
 
-        if not text.strip():
-            raise ValueError("Could not extract any text from the provided file.")
+        validate_resume_text(text)
 
     print_info(f"Extracted {len(text):,} characters from resume.")
     report("extract", "done")
 
     # ── Step 2: LLM parsing (slow — can take 1–2 min) ─────────────────────────
     report("parse", "running")
-    settings = ResumeAgentSettings.load()
-    llm = get_chat_model(settings, task="structured")
-    structured_llm = llm.with_structured_output(UserResume)
-
-    messages = [
-        SystemMessage(content=_SYSTEM),
-        HumanMessage(content=_HUMAN_TEMPLATE.format(text=text[:MAX_RESUME_PARSE_CHARS])),
-    ]
-
     with phase_spinner("Parsing with AI  (may take 1–2 min)"):
-        resume: UserResume = structured_llm.invoke(messages)
+        resume = parse_resume_text(text)
     report("parse", "done")
 
     # ── Step 3: Save YAML ─────────────────────────────────────────────────────
@@ -138,3 +131,16 @@ def _extract_pdf_text(path: Path) -> str:
     reader = PdfReader(str(path))
     pages = [page.extract_text() or "" for page in reader.pages]
     return "\n".join(pages)
+
+
+def parse_resume_text(text: str, *, settings: ResumeAgentSettings | None = None) -> UserResume:
+    """Parse complete supported text without changing the canonical profile."""
+    validate_resume_text(text)
+    settings = settings or ResumeAgentSettings.load()
+    llm = get_chat_model(settings, task="structured")
+    structured_llm = llm.with_structured_output(UserResume)
+    messages = [
+        SystemMessage(content=_SYSTEM),
+        HumanMessage(content=_HUMAN_TEMPLATE.format(text=text)),
+    ]
+    return UserResume.model_validate(structured_llm.invoke(messages))

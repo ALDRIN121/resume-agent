@@ -13,9 +13,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ── Token / context budget constants ─────────────────────────────────────────
 # Centralised here so model swaps don't silently truncate in unexpected places.
-MAX_JD_TEXT_CHARS: int = 8_000       # scraped JD text sent to jd_extractor
-MAX_JD_STORAGE_CHARS: int = 2_000    # JD raw_text stored on JobDescription
-MAX_RESUME_PARSE_CHARS: int = 12_000 # resume text sent to base_resume_loader
+MAX_JD_TEXT_CHARS: int = 48_000      # inclusive supported JD text limit
+MAX_JD_STORAGE_CHARS: int = 48_000   # retained for compatibility; supported JDs are stored whole
+MAX_RESUME_PARSE_CHARS: int = 48_000 # inclusive supported resume text limit
+MAX_RESUME_UPLOAD_BYTES: int = 10 * 1024 * 1024
 MAX_LLM_OUTPUT_TOKENS: int = 16_384  # max_tokens for all LLM calls — full LaTeX resume needs ~5–8k tokens
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
