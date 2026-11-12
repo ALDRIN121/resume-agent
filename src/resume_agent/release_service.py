@@ -399,3 +399,117 @@ class ReleaseService:
         if hashlib.sha256(data).hexdigest() != released['pdf_hash']:
             raise ReleaseConflict('canonical_pdf_mismatch')
         return data
+
+    def _reexport_candidates(self, binding: dict) -> tuple[ExportPlan, ...]:
+        """Find only reservations created after this durable action intent."""
+        found = []
+        for path in Path(binding['base_dir']).rglob('.*.owner.json'):
+            try:
+                plan = ExportPlan.from_dict(json.loads(path.read_text())['plan'])
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            if (plan.artifact_id == binding['artifact_id']
+                    and plan.ownership_path == path
+                    and str(plan.canonical_pdf_path) == binding['canonical_pdf_path']
+                    and plan.expected_hash == binding['pdf_hash']
+                    and plan.ownership_token not in binding['excluded_tokens']):
+                found.append(plan)
+        return tuple(found)
+
+    def reexport(self, run_id: str, action_id: str, expected_pdf_hash: str, *,
+                 base_dir: Path, company_name: str, user_full_name: str,
+                 recover: bool = False) -> dict:
+        """Explicitly export approved canonical bytes without replacing approval.
+
+        Each action has its own durable plan and result. Intent precedes filename
+        reservation, so explicit recovery also finds a process-death window
+        before the plan checkpoint. Final rename and action result share a txn.
+        """
+        if not isinstance(action_id, str) or not action_id:
+            raise ReleaseConflict('action_id_required')
+        payload = {'action_id': action_id, 'expected_pdf_hash': expected_pdf_hash,
+                   'base_dir': str(Path(base_dir).resolve()), 'company_name': company_name,
+                   'user_full_name': user_full_name}
+        request_hash = content_hash(payload)
+        checkpoint_id = run_id + ':' + action_id
+        with self.store.ownership('run', run_id):
+            with self.store.connection() as conn:
+                previous = self.store.action('run_reexport', run_id, action_id, conn)
+                if previous:
+                    if previous['request_hash'] != request_hash:
+                        raise ReleaseConflict('action_payload_conflict')
+                    if previous['result_json'] is not None:
+                        if recover:
+                            saved = read_v2_checkpoint(self.store.checkpoint_path, 'reexport', checkpoint_id)
+                            if saved and 'plan' in saved:
+                                plan = ExportPlan.from_dict(saved['plan'])
+                                if plan.ownership_path.exists():
+                                    self._cleanup(plan)
+                        return json.loads(previous['result_json'])
+                    if not recover:
+                        raise ReleaseConflict('explicit_recovery_required')
+                elif self.store.unfinished('run_reexport', run_id, conn):
+                    raise ReleaseConflict('explicit_recovery_required')
+            released = self.store.release(run_id)
+            if not released or released['status'] != 'released':
+                raise ReleaseConflict('release_required')
+            if released['pdf_hash'] != expected_pdf_hash:
+                raise ReleaseConflict('canonical_pdf_mismatch')
+            self.get_final(run_id)
+            artifact_id = self.store.row('run', run_id)['artifact_id']
+            binding = read_v2_checkpoint(self.store.checkpoint_path, 'reexport', checkpoint_id)
+            if previous is None:
+                with self.store.connection(immediate=True) as conn:
+                    self.store.accept('run_reexport', run_id, payload, request_hash, conn)
+            if binding is None:
+                # Existing reservations belong to the original release or earlier
+                # reexports and must never be claimed by this action's recovery.
+                binding = {'base_dir': payload['base_dir'], 'artifact_id': artifact_id,
+                    'canonical_pdf_path': released['canonical_pdf_path'], 'pdf_hash': expected_pdf_hash,
+                    'excluded_tokens': []}
+                binding['excluded_tokens'] = [plan.ownership_token for plan in self._reexport_candidates(binding)]
+                write_v2_checkpoint(self.store.checkpoint_path, 'reexport', checkpoint_id, binding)
+            if (binding['artifact_id'] != artifact_id or binding['canonical_pdf_path'] != released['canonical_pdf_path']
+                    or binding['pdf_hash'] != expected_pdf_hash or binding['base_dir'] != payload['base_dir']):
+                raise ReleaseConflict('export_plan_mismatch')
+            if 'plan' in binding:
+                plan = ExportPlan.from_dict(binding['plan'])
+            else:
+                candidates = self._reexport_candidates(binding)
+                if len(candidates) > 1:
+                    raise ReleaseConflict('export_ownership_conflict')
+                plan = candidates[0] if candidates else prepare_export(artifact_id,
+                    released['canonical_pdf_path'], expected_pdf_hash, Path(payload['base_dir']),
+                    company_name, user_full_name)
+                self._boundary('reexport_after_reservation')
+                binding['plan'] = plan.to_dict()
+                write_v2_checkpoint(self.store.checkpoint_path, 'reexport', checkpoint_id, binding)
+            if (plan.artifact_id != artifact_id or str(plan.canonical_pdf_path) != released['canonical_pdf_path']
+                    or plan.expected_hash != expected_pdf_hash
+                    or not plan.destination.is_relative_to(Path(payload['base_dir']))):
+                raise ReleaseConflict('export_plan_mismatch')
+            self._boundary('reexport_after_plan')
+            try:
+                renamed = (not plan.temporary_path.exists() and plan.destination.exists()
+                           and hash_file(plan.destination) == plan.expected_hash)
+                if not renamed:
+                    prepare_copy(plan, recover=True)
+            except (OSError, ValueError) as exc:
+                raise ReleaseConflict('export_ownership_conflict') from exc
+            self._boundary('reexport_after_copy')
+            with self.store.connection(immediate=True) as conn:
+                self.get_final(run_id)
+                try:
+                    commit_export(plan)
+                except (OSError, ValueError) as exc:
+                    raise ReleaseConflict('export_ownership_conflict') from exc
+                self._boundary('reexport_after_rename')
+                result = {'status': 'complete', 'run_id': run_id, 'destination': str(plan.destination),
+                          'canonical_pdf_path': released['canonical_pdf_path'], 'pdf_hash': expected_pdf_hash}
+                self.store.finish_actions('run_reexport', run_id, [action_id], result, conn)
+            self._boundary('reexport_after_commit')
+            try:
+                self._cleanup(plan)
+            except (ReleaseConflict, OSError):
+                pass  # The durable action result remains authoritative.
+            return result

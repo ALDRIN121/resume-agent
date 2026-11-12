@@ -78,16 +78,48 @@ class RunStore:
         # Always deserialize a fresh copy: driver mutations cannot alter fixed input.
         return json.loads(self.row(kind, owner_id)["input_json"])
 
-    def create_run(self, fixed: dict) -> str:
+    def _create_run(self, fixed: dict, conn: sqlite3.Connection) -> str:
         owner_id, artifact_id, now = str(uuid4()), str(uuid4()), utc_now()
-        with self.connection(immediate=True) as conn:
-            conn.execute(
-                "INSERT INTO runs(id,schema_version,artifact_id,parent_run_id,status,input_json,"
-                "source_revision,created_at,updated_at) VALUES(?,2,?,?,'queued',?,?,?,?)",
-                (owner_id, artifact_id, fixed["request"]["parent_run_id"], canonical_json(fixed),
-                 fixed["profile_revision"], now, now),
-            )
+        conn.execute(
+            "INSERT INTO runs(id,schema_version,artifact_id,parent_run_id,status,input_json,"
+            "source_revision,created_at,updated_at) VALUES(?,2,?,?,'queued',?,?,?,?)",
+            (owner_id, artifact_id, fixed["request"]["parent_run_id"], canonical_json(fixed),
+             fixed["profile_revision"], now, now),
+        )
         return owner_id
+
+    def create_run(self, fixed: dict) -> str:
+        with self.connection(immediate=True) as conn:
+            return self._create_run(fixed, conn)
+
+    def legacy_child(self, legacy_id: str) -> str | None:
+        with self.connection() as conn:
+            row = conn.execute("SELECT value FROM migration_meta WHERE key=?",
+                               ("legacy_recovery:" + legacy_id,)).fetchone()
+            return row[0] if row else None
+
+    def create_legacy_child(self, legacy_id: str, fixed: dict, evidence: dict) -> str:
+        """Publish one child and link atomically; never constrain other revisions."""
+        from .checkpoint import write_v2_checkpoint
+
+        with self.connection(immediate=True) as conn:
+            key = "legacy_recovery:" + legacy_id
+            existing = conn.execute("SELECT value FROM migration_meta WHERE key=?", (key,)).fetchone()
+            if existing:
+                return existing[0]
+            owner_id = self._create_run(fixed, conn)
+            # The child remains invisible until its evidence checkpoint exists.
+            # A failed cross-database write rolls back both child and link.
+            write_v2_checkpoint(self.checkpoint_path, "run", owner_id, {
+                "schema_version": 2, "values": {"legacy_parent": legacy_id, "legacy_evidence_answers": evidence},
+                "index": None, "inflight_action_ids": [],
+            })
+            conn.execute("INSERT INTO migration_meta VALUES (?,?)", (key, owner_id))
+            return owner_id
+
+    def run_ids(self) -> list[str]:
+        with self.connection() as conn:
+            return [row[0] for row in conn.execute("SELECT id FROM runs ORDER BY created_at,id")]
 
     def create_operation(self, kind: str, values: dict) -> str:
         owner_id, now = str(uuid4()), utc_now()

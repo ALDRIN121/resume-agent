@@ -83,3 +83,26 @@ def write_v2_checkpoint(path: Path, owner_kind: str, owner_id: str, state: dict)
 
 def _v2_config(owner_kind: str, owner_id: str) -> dict:
     return {"configurable": {"thread_id": f"{owner_kind}:{owner_id}", "checkpoint_ns": "resume-agent-v2"}}
+
+
+def inspect_v1_checkpoint(path: Path, run_id: str) -> dict | None:
+    """Inspect a v1 thread through LangGraph against a read-only snapshot.
+
+    SqliteSaver's public reads may set up tables/PRAGMAs. Run them against an
+    in-memory SQLite backup so even an old checkpoint database stays untouched.
+    A legacy identifier is a bound thread key, never a filesystem path.
+    """
+    import sqlite3
+
+    path = Path(path)
+    if not path.is_file():
+        return None
+    with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as original:
+        snapshot = sqlite3.connect(":memory:")
+        try:
+            original.backup(snapshot)
+            saver = SqliteSaver(snapshot, serde=JsonPlusSerializer(allowed_msgpack_modules=_CHECKPOINT_TYPES))
+            saved = saver.get_tuple({"configurable": {"thread_id": run_id, "checkpoint_ns": ""}})
+            return dict(saved.checkpoint["channel_values"]) if saved else None
+        finally:
+            snapshot.close()

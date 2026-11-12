@@ -389,3 +389,18 @@ class RunService:
 
     def cancel(self, run_id: str) -> RunView:
         return self._lifecycle.cancel(run_id)
+
+    def recover_legacy(self, run_id: str, *, provider: str | None = None,
+                       model: str | None = None) -> RunView:
+        from .recovery import recover_legacy
+        return self.get(recover_legacy(self.store, run_id, provider=provider, model=model))
+
+    def reconcile_startup(self) -> list[RunView]:
+        from .recovery import reconcile_startup
+        return reconcile_startup(self)
+
+    def recover_release(self, run_id: str, *, continue_export: bool = False,
+                        cancel: bool = False) -> RunView:
+        from .release_service import ReleaseService
+        return ReleaseService(self.store).recover_unfinished(
+            run_id, continue_export=continue_export, cancel=cancel)
