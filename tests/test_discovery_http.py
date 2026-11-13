@@ -104,3 +104,35 @@ async def test_retry_after_over_sixty_seconds_stops_source():
         with pytest.raises(DiscoveryRequestError) as failure:
             await client.fetch_once(URL)
     assert failure.value.code=='retry_after_exceeds_limit' and not failure.value.transient
+
+
+@pytest.mark.asyncio
+async def test_http_date_retry_after_is_bounded_and_exact_body_limit_is_inclusive():
+    from datetime import UTC,datetime
+    from email.utils import format_datetime
+    from resume_agent.discovery.http import BoundedHttpClient,DiscoveryRequestError
+    current=1000
+    async def handler(request):
+        return httpx.Response(429,headers={'retry-after':format_datetime(datetime.fromtimestamp(current+60,UTC),usegmt=True)},stream=Chunks([]))
+    async with BoundedHttpClient(transport=httpx.MockTransport(handler),validator=lambda _:None,clock=lambda:current) as client:
+        with pytest.raises(DiscoveryRequestError) as failed:
+            await client.fetch_once(URL)
+    assert failed.value.transient and failed.value.retry_after==60
+    body=b'{"jobs":[]}'
+    async def exact(request):
+        return httpx.Response(200,headers={'content-type':'application/json'},stream=Chunks([body]))
+    async with BoundedHttpClient(transport=httpx.MockTransport(exact),validator=lambda _:None,max_bytes=len(body)) as client:
+        assert (await client.fetch_once(URL)).body==body
+
+
+@pytest.mark.asyncio
+async def test_same_host_redirect_loop_is_bounded_to_six_gets():
+    from resume_agent.discovery.http import BoundedHttpClient,DiscoveryRequestError
+    calls=[]
+    async def handler(request):
+        calls.append(request.method)
+        return httpx.Response(302,headers={'location':'/still-redirecting'},stream=Chunks([]))
+    async with BoundedHttpClient(transport=httpx.MockTransport(handler),validator=lambda _:None) as client:
+        with pytest.raises(DiscoveryRequestError) as failed:
+            await client.fetch_once(URL)
+    assert failed.value.code=='redirect_limit' and calls==['GET']*6

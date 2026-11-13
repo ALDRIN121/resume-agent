@@ -8,6 +8,7 @@ from . import library
 from .applications import ApplicationService
 from .config import CONFIG_DIR, ResumeAgentSettings
 from .contracts import content_hash
+from .discovery.service import DiscoveryService
 from .imports import ImportService
 from .job_store import JobStore
 from .memory import MemoryService
@@ -39,6 +40,7 @@ class Runtime:
                                             settings=lambda: self.settings, model=model)
         self.applications = ApplicationService(self.store, self.jobs, self.evaluations)
         self.outcomes = OutcomeService(self.applications)
+        self.discovery = DiscoveryService(self.store, self.jobs)
         if compile_adapter is None:
             compile_adapter = self._compile
         self.workflow = Workflow(self.store, artifacts_root=self.root / 'runs',

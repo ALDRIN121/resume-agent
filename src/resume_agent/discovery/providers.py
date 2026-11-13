@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 
 from ..config import MAX_JD_TEXT_CHARS
 from ..contracts import content_hash
-from .schemas import BoardResult, DiscoveredJob, DiscoveryError
+from .schemas import BoardResult, DiscoveredJob, DiscoveryError, PagePayload
 
 
 def board_url(source, *, skip=0, limit=100):
@@ -124,11 +124,17 @@ async def fetch_board(source, fetch_json, *, max_jobs=1000):
     jobs, seen, conflicts = {}, {}, set()
     received = examined = malformed = duplicate = truncated = filtered = 0
     diagnostics, limit_reached, successful_page, fetch_failed = [], False, False, False
+    observation_orders, observed_times = [], []
     skip = 0
     while True:
         limit = min(100, max_jobs - examined)
         try:
             payload = await fetch_json(board_url(source, skip=skip, limit=limit))
+            page = payload if isinstance(payload, PagePayload) else None
+            if page:
+                observation_orders.append(page.observation_order)
+                observed_times.append(page.observed_at)
+                payload = page.payload
             if source.provider == 'lever':
                 records = payload
             elif isinstance(payload, dict):
@@ -142,7 +148,7 @@ async def fetch_board(source, fetch_json, *, max_jobs=1000):
         except DiscoveryError as exc:
             diagnostics.append(exc.code)
             fetch_failed = not exc.partial
-            limit_reached = limit_reached or exc.partial
+            limit_reached = limit_reached or exc.code == 'response_body_limit'
             break
         successful_page = True
         received += len(records)
@@ -168,6 +174,8 @@ async def fetch_board(source, fetch_json, *, max_jobs=1000):
                 else:
                     seen[identity] = raw_hash
                 identity, job = _record(raw, source)
+                if job is not None and page is not None:
+                    job = job.model_copy(update={'observed_at': page.observed_at, 'observation_order': page.observation_order})
                 if job is None:
                     filtered += 1
                 elif not repeated and identity not in conflicts:
@@ -191,9 +199,12 @@ async def fetch_board(source, fetch_json, *, max_jobs=1000):
         diagnostics.append('duplicate_external_ids')
     if conflicts:
         diagnostics.append('conflicting_external_ids')
-    if limit_reached:
+    if limit_reached and 'response_body_limit' not in diagnostics:
         diagnostics.append('record_limit_reached')
     status = 'failed' if fetch_failed and not successful_page else 'partial' if diagnostics else 'complete'
     return BoardResult(status=status, jobs=list(jobs.values()), received_count=received, valid_count=len(jobs),
         malformed_count=malformed, duplicate_count=duplicate, conflicting_count=len(conflicts), truncated_count=truncated,
-        filtered_count=filtered, limit_reached=limit_reached, diagnostics=list(dict.fromkeys(diagnostics)))
+        filtered_count=filtered, limit_reached=limit_reached, diagnostics=list(dict.fromkeys(diagnostics)),
+        observed_at=max(observed_times) if observed_times else None,
+        first_observation_order=min(observation_orders) if observation_orders else None,
+        last_observation_order=max(observation_orders) if observation_orders else None)

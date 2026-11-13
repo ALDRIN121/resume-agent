@@ -142,3 +142,12 @@ async def test_malformed_total_metadata_prevents_clean_completeness():
     async def fetch(url):
         return {'jobs':[greenhouse()], 'meta':[]}
     assert (await fetch_board(source(),fetch)).status=='partial'
+
+
+@pytest.mark.asyncio
+async def test_default_thousand_record_bound_is_inclusive_for_unpaginated_boards():
+    from resume_agent.discovery.providers import fetch_board
+    async def exact(url):
+        return {'jobs':[greenhouse(i) for i in range(1,1001)],'meta':{'total':1000}}
+    result=await fetch_board(source(),exact)
+    assert result.status=='complete' and result.valid_count==1000 and not result.limit_reached

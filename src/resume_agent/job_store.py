@@ -1,5 +1,6 @@
 """Immutable job snapshots with explicit logical identities and current pointers."""
 import json
+from contextlib import nullcontext
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -31,7 +32,7 @@ class JobStore:
             rows = conn.execute('SELECT j.document FROM job_heads h JOIN career_jobs j ON h.snapshot_id=j.id ORDER BY j.rowid DESC').fetchall()
             return [CareerJob.model_validate(json.loads(row[0])) for row in rows]
 
-    def capture(self, text, *, source_kind='manual', source_key=None, source_url=None, company=None, role=None):
+    def capture(self, text, *, source_kind='manual', source_key=None, source_url=None, company=None, role=None, connection=None):
         if not isinstance(text, str) or not text.strip() or len(text) > MAX_JD_TEXT_CHARS:
             raise ValueError('invalid_job_text')
         if source_url:
@@ -39,7 +40,7 @@ class JobStore:
             if parts.scheme not in ('http', 'https') or not parts.hostname or parts.username or parts.password:
                 raise ValueError('invalid_job_source_url')
         source_key = source_key or str(uuid4())
-        with self.store.connection(immediate=True) as conn:
+        with (self.store.connection(immediate=True) if connection is None else nullcontext(connection)) as conn:
             head = conn.execute('SELECT j.document FROM job_heads h JOIN career_jobs j ON h.snapshot_id=j.id '
                                 'WHERE h.source_kind=? AND h.source_key=?', (source_kind, source_key)).fetchone()
             previous = CareerJob.model_validate(json.loads(head[0])) if head else None

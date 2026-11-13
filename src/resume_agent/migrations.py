@@ -119,7 +119,23 @@ def _applications(conn: sqlite3.Connection) -> None:
             conn.execute("INSERT INTO company_references VALUES (?,'job',?)", (company, job_id))
 
 
-MIGRATIONS = (_core, _memory, _career, _applications)
+def _discovery(conn: sqlite3.Connection) -> None:
+    statements = (
+        'CREATE TABLE discovery_sources (id TEXT PRIMARY KEY, identity TEXT UNIQUE NOT NULL, document TEXT NOT NULL)',
+        'CREATE TABLE discovery_config (singleton INTEGER PRIMARY KEY CHECK(singleton=1), document TEXT NOT NULL)',
+        'CREATE TABLE discovery_syncs (id TEXT PRIMARY KEY, input_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)',
+        'CREATE TABLE discovery_boards (sync_id TEXT NOT NULL REFERENCES discovery_syncs(id), source_id TEXT NOT NULL REFERENCES discovery_sources(id), result_json TEXT NOT NULL, PRIMARY KEY(sync_id,source_id))',
+        'CREATE TABLE discovery_activity (seq INTEGER PRIMARY KEY AUTOINCREMENT, sync_id TEXT NOT NULL REFERENCES discovery_syncs(id), source_id TEXT NOT NULL REFERENCES discovery_sources(id), url TEXT NOT NULL, kind TEXT NOT NULL, recorded_at TEXT NOT NULL)',
+        "CREATE TABLE discovery_requests (sync_id TEXT NOT NULL REFERENCES discovery_syncs(id), source_id TEXT NOT NULL REFERENCES discovery_sources(id), url TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 3), status TEXT NOT NULL DEFAULT 'pending', body BLOB, body_hash TEXT, metadata_json TEXT, retry_at REAL, error_code TEXT, transient INTEGER NOT NULL DEFAULT 0, partial INTEGER NOT NULL DEFAULT 0, attempt_order INTEGER, response_order INTEGER, PRIMARY KEY(sync_id,source_id,url))",
+        'CREATE TABLE discovery_source_state (source_id TEXT PRIMARY KEY REFERENCES discovery_sources(id), document TEXT NOT NULL)',
+        "CREATE TABLE discovery_postings (source_id TEXT NOT NULL REFERENCES discovery_sources(id), external_id TEXT NOT NULL, job_id TEXT NOT NULL REFERENCES career_jobs(id), raw_hash TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('active','removed')), first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, last_seen_sync TEXT NOT NULL REFERENCES discovery_syncs(id), last_seen_order INTEGER NOT NULL, removed_at TEXT, removed_sync TEXT, removed_order INTEGER, PRIMARY KEY(source_id,external_id))",
+        'CREATE TABLE discovery_posting_versions (source_id TEXT NOT NULL REFERENCES discovery_sources(id), external_id TEXT NOT NULL, raw_hash TEXT NOT NULL, job_id TEXT NOT NULL REFERENCES career_jobs(id), raw_json TEXT NOT NULL, observed_at TEXT NOT NULL, PRIMARY KEY(source_id,external_id,raw_hash,job_id))',
+    )
+    for statement in statements:
+        conn.execute(statement)
+
+
+MIGRATIONS = (_core, _memory, _career, _applications, _discovery)
 
 
 def migrate(path: Path, *, migrations: Sequence[Callable[[sqlite3.Connection], None]] = MIGRATIONS) -> None:
