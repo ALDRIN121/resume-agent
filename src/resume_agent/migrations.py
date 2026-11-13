@@ -88,7 +88,14 @@ def _core(conn: sqlite3.Connection) -> None:
             conn.execute(statement)
 
 
-MIGRATIONS = (_core,)
+def _memory(conn: sqlite3.Connection) -> None:
+    conn.execute('CREATE TABLE memory_records (id TEXT PRIMARY KEY, document TEXT NOT NULL)')
+    conn.execute('CREATE TABLE memory_decisions (record_id TEXT NOT NULL REFERENCES memory_records(id), '
+                 'action_id TEXT NOT NULL, decision TEXT NOT NULL, request_json TEXT NOT NULL, '
+                 'recorded_at TEXT NOT NULL, PRIMARY KEY(record_id,action_id))')
+
+
+MIGRATIONS = (_core, _memory)
 
 
 def migrate(path: Path, *, migrations: Sequence[Callable[[sqlite3.Connection], None]] = MIGRATIONS) -> None:

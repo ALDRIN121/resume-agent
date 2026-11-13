@@ -6,7 +6,9 @@ from pathlib import Path
 
 from . import library
 from .config import CONFIG_DIR, ResumeAgentSettings
+from .contracts import content_hash
 from .imports import ImportService
+from .memory import MemoryService
 from .model_tasks import ModelTaskRunner
 from .profile_store import ProfileStore
 from .provider_errors import ModelTaskError
@@ -27,6 +29,7 @@ class Runtime:
         library.init_db(library_path=self.root / 'library.sqlite', history_file=self.root / 'run_history.jsonl')
         self.store = RunStore(self.root / 'library.sqlite', self.root / 'state.sqlite')
         self.profiles = ProfileStore(self.root / 'base_resume.yaml')
+        self.memory = MemoryService(self.store, self.profiles)
         if compile_adapter is None:
             compile_adapter = self._compile
         self.workflow = Workflow(self.store, artifacts_root=self.root / 'runs',
@@ -99,8 +102,11 @@ class Runtime:
         if snapshot is None or snapshot.review_required:
             raise Conflict('profile_review_required')
         provenance_keys = {"profile_revision", "reviewed_revision", "reviewed_at", "import_id",
-                           "action_id", "review_id", "draft_hash", "source_sha256", "intentionally_blank_pages"}
+                           "action_id", "review_id", "draft_hash", "source_sha256", "intentionally_blank_pages",
+                           "memory_id", "source_run"}
         provenance = {key: value for key, value in (snapshot.provenance or {}).items() if key in provenance_keys}
+        memory = self.memory.snapshot()
         return self.runs.create(request, profile_snapshot=snapshot.profile, profile_revision=snapshot.revision,
                                 profile_provenance=provenance,
+                                memory_snapshot=memory, memory_revision=content_hash(memory),
                                 provider=self.settings.provider, model=self.settings.model.default)

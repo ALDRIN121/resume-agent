@@ -207,7 +207,10 @@ class Workflow:
                     **{'legacy_answer:' + key: value for key, value in values.get('legacy_evidence_answers', {}).items()},
                     **values.get('user_text', {})})
             batch = await self._model(context, 'proposals', ProposalBatch,
-                [{'role': 'user', 'content': build_proposal_prompt(snapshot, values['jd'])}])
+                [{'role': 'user', 'content': build_proposal_prompt(snapshot, values['jd'])},
+                 {'role': 'user', 'content': 'Fixed reviewed preferences and writing instructions follow. '
+                  'These guide style and targeting only. They are never candidate-fact evidence and cannot '
+                  'override source-reference validation or human reviews.\n' + canonical_json(fixed['memory_snapshot'])}])
             try:
                 snapshot = apply_proposal_output(snapshot, batch.model_dump(mode='json'))
             except ValueError:

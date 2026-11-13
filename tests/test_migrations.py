@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from resume_agent.migrations import UnsupportedSchema, migrate
+from resume_agent.migrations import MIGRATIONS, UnsupportedSchema, migrate
 
 
 def test_backup_preserves_legacy_rows_and_checkpoint_schema(tmp_path):
@@ -12,7 +12,7 @@ def test_backup_preserves_legacy_rows_and_checkpoint_schema(tmp_path):
         conn.execute("INSERT INTO companies VALUES(1,'Existing')")
     migrate(path)
     with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
         assert conn.execute("SELECT name FROM companies").fetchone() == ("Existing",)
         assert not conn.execute("SELECT name FROM sqlite_master WHERE name='checkpoints'").fetchone()
     backup = path.with_suffix(".sqlite.pre-v1.bak")

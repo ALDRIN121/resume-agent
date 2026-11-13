@@ -102,3 +102,8 @@ export const reexportRun = async (id, body) => {
   return getRun(id);
 };
 export const recoverRun = id => request(`/api/runs/${id}/recover`, {method:"POST"});
+export const listMemory = () => request('/api/memory/proposals');
+export const proposeMemory = body => request('/api/memory/proposals',{method:'POST',body:JSON.stringify(body)});
+export const previewMemory = id => request(`/api/memory/${id}/preview`);
+export const memoryHistory = id => request(`/api/memory/${id}/history`);
+export const decideMemory = (id,body) => request(`/api/memory/${id}/decision`,{method:'POST',body:JSON.stringify(body)});

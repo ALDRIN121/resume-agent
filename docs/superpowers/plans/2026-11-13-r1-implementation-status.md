@@ -11,7 +11,7 @@ The reliable generation workflow now serves the web app, API and CLI. It saves c
 | T09: shared app/API/CLI, saved form drafts, readiness and review screens | Integrated; controller verification passed locally |
 | T10: durable model retry owner | Implemented; independent review and regression fixes approved |
 | T11/C1: acceptance, package and platform checks | Python 3.12 and 3.13: **710 passed, 46 skipped** each. Required browser/PDF/native-path suite: **54 passed, zero skips** before final recovery regressions. The two new navigation fixtures were corrected; all three real journeys then passed. All 55 distinct required checks pass across the combined and focused runs. Local C1 behavior gate passes. |
-| T12–T14/C2: reviewed memory, immutable jobs and evidence-based role decisions | Next. Memory tests prepared; implementation not complete. |
+| T12–T14/C2: reviewed memory, immutable jobs and evidence-based role decisions | T12 reviewed memory implemented: full Python suite 732 passed, 49 browser-disabled skips; both real memory browser journeys pass; frontend 13 tests and build pass. T13 job/evaluation work is next; C2 remains pending. |
 | T15–T18/C3: applications, outcomes and bounded discovery | Not implemented |
 | T19–T22/C4: structured CLI, host execution and distribution | Not implemented |
 

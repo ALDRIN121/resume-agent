@@ -64,8 +64,11 @@ class FixedRunInput(Contract):
         normalized = UserResume.model_validate(self.profile_snapshot).model_dump(mode="json")
         if normalized != self.profile_snapshot or content_hash(normalized) != self.profile_revision:
             raise ValueError("profile snapshot/revision mismatch")
-        if self.memory_snapshot or self.memory_revision != content_hash({}):
-            raise ValueError("R1 memory must be the empty snapshot")
+        if self.memory_snapshot:
+            from .memory import MemorySnapshot
+            MemorySnapshot.model_validate(self.memory_snapshot)
+        if self.memory_revision != content_hash(self.memory_snapshot):
+            raise ValueError("memory snapshot/revision mismatch")
         return self
 
 
