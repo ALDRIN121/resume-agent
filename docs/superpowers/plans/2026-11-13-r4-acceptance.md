@@ -21,6 +21,7 @@ The first candidate freeze was `b075271255b8ef02155aaa0f024c4a68eddc20b4`. The i
 | Synthetic journeys | All **30 named journeys** passed in the final complete matrix, including six new recovery cases. See the [journey record](../../validation/synthetic-journeys-2026-11-13.md). |
 | Representative PDFs | Ten released fictional PDFs, eleven pages. Actual compiler, extraction, rendering, exact content guard and byte-hash checks passed. All eleven page images were inspected. See the [PDF review](../../validation/pdf-review-2026-11-13.md). |
 | Independent branch review | One fresh reviewer; three Important findings accepted and fixed with failing-then-passing regression tests. No Critical or separate Minor findings. No second review claim. |
+| Additional live configured-provider check, 14 November | Actual browser Settings → Re-test failed for Command Code / `deepseek/deepseek-v4.1-flash`: authentication/access error, 909 ms, empty reply. A key/access update is needed before a full live-model journey. See the [live result](../../validation/live-provider-2026-11-14.md). |
 
 The initial stale fixture matched `/api/resume/upload` exactly and missed `?defer_processing=true`. It therefore did not inject its intended upload error. The corrected fixture accepts the query and asserts that the actual request contains it. No production behavior was weakened to make that test pass.
 

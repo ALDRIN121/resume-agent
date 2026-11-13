@@ -48,6 +48,8 @@ The original design now links all execution supplements. The added alternatives 
 
 ## Completed local evidence
 
+Additional request on 14 November: test the actual configured LLM through the running interface. That connection failed with an authentication/access error. The owner must update the key or access before a full live-model journey can run. This is separate from the original controlled-response matrix. See the [live result](live-provider-2026-11-14.md).
+
 - Complete runtime matrix: 935 passed, zero failures and zero skips at `b0098aa`.
 - Python 3.13: 873 passed; 62 browser/PDF checks explicitly disabled and covered in the flagged Python 3.12 run.
 - Frontend: 15 tests and the production build passed.
