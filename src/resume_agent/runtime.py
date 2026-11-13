@@ -12,6 +12,7 @@ from .imports import ImportService
 from .job_store import JobStore
 from .memory import MemoryService
 from .model_tasks import ModelTaskRunner
+from .outcomes import OutcomeService
 from .profile_store import ProfileStore
 from .provider_errors import ModelTaskError
 from .release_service import ReleaseService
@@ -37,6 +38,7 @@ class Runtime:
         self.evaluations = EvaluationService(self.store, self.jobs, self.profiles, self.memory,
                                             settings=lambda: self.settings, model=model)
         self.applications = ApplicationService(self.store, self.jobs, self.evaluations)
+        self.outcomes = OutcomeService(self.applications)
         if compile_adapter is None:
             compile_adapter = self._compile
         self.workflow = Workflow(self.store, artifacts_root=self.root / 'runs',

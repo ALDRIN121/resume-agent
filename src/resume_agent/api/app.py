@@ -37,6 +37,7 @@ def create_app(*, services=None) -> FastAPI:
     from .routers.jobs import evaluation_router
     from .routers.jobs import router as jobs_router
     from .routers.memory import router as memory_router
+    from .routers.outcomes import router as outcomes_router
     from .routers.readiness import router as readiness_router
     from .routers.resume import create_profile_router
     from .v2_manager import V2RunManager
@@ -51,6 +52,7 @@ def create_app(*, services=None) -> FastAPI:
     app.include_router(jobs_router)
     app.include_router(evaluation_router)
     app.include_router(applications_router)
+    app.include_router(outcomes_router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

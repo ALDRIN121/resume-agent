@@ -115,3 +115,6 @@ export const createEvaluation = (id,body={}) => request(`/api/jobs/${id}/evaluat
 export const getEvaluation = id => request(`/api/evaluations/${id}`);
 export const continueEvaluation = (id,body=null) => request(`/api/evaluations/${id}/continue`,{method:'POST',body:JSON.stringify(body)});
 export const cancelEvaluation = id => request(`/api/evaluations/${id}/cancel`,{method:'POST'});
+export const getMetrics = () => request('/api/metrics');
+export const getOutcomes = () => request('/api/outcomes');
+export const outcomesExportUrl = () => `${API_BASE}/api/outcomes/export`;

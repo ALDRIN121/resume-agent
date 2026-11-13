@@ -83,7 +83,14 @@ async def prepare(page, status='awaiting-input', resume_error=False):
         elif path in ['runs', 'library/resumes']:
             body = [run]
         elif path == 'library/companies':
-            body = [{'name': 'QA Company', 'count': 1}]
+            body = [{'name':'QA Company','total':1,'final':int(status=='complete'),'needs':int(status=='awaiting-input'),
+                     'failed':int(status=='failed'),'cancelled':int(status=='cancelled'),'jobs':0,'applications':0,
+                     'submitted':0,'positive':0,'responses':0,'latest_run_id':'test-run','latest_job_id':None}]
+        elif path == 'metrics':
+            body = {'generation':{'total':1,'completed':int(status=='complete'),'failed':int(status=='failed'),
+                    'cancelled':int(status=='cancelled'),'denominator':int(status in ('complete','failed')),
+                    'percent':100 if status=='complete' else 0 if status=='failed' else None},
+                    'applications':{'recorded':0,'submitted':0,'positive':0},'jobs':0,'companies':1}
         elif path.endswith('/resume'):
             code = 409 if resume_error else 200
             body = {'detail': 'Connection interrupted. Try again.'} if resume_error else run

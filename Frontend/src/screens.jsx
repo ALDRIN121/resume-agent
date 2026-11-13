@@ -6,6 +6,8 @@ import { JobContextFields, JobContextLine, WorkPreferencesFields } from "./work-
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
 import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders, getProfile,captureJob } from "./api/client.js";
 import { startOpenRouterSignIn } from "./api/openrouter-oauth.js";
+import { getMetrics } from "./api/client.js";
+import { CareerCompanies } from "./career-companies.jsx";
 import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS } from "./data.jsx";
 
 // Fetch the live provider catalogue (A4); fall back to the static data.jsx
@@ -133,10 +135,18 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
   const runs = useRuns();
   const settings = useSettings();
   const [tab, setTab] = React.useState("overview");
+  const [metrics,setMetrics]=React.useState(null),[metricsError,setMetricsError]=React.useState(null);
+  React.useEffect(()=>{
+    let alive=true;
+    const refresh=()=>getMetrics().then(data=>{
+      if(!data.generation||typeof data.applications?.submitted!=='number')throw new Error('Application counts are unavailable.');
+      if(alive){setMetrics(data);setMetricsError(null);}
+    }).catch(e=>{if(alive){setMetrics(null);setMetricsError(e.message);}});
+    refresh();const timer=setInterval(refresh,5000);return()=>{alive=false;clearInterval(timer);};
+  },[]);
 
-  const totalRuns = runs.length;
   const activityData = computeActivity(runs);
-  const durations = runs.map(r => parseDurationSecs(r.duration)).filter(n => n !== null);
+  const durations = runs.filter(r=>['complete','failed'].includes(r.status)).map(r => parseDurationSecs(r.duration)).filter(n => n !== null);
   const avgDuration = durations.length
     ? (() => { const a = Math.round(durations.reduce((x, y) => x + y, 0) / durations.length); return a >= 60 ? `${Math.floor(a / 60)}m ${a % 60}s` : `${a}s`; })()
     : "—";
@@ -147,20 +157,20 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
   const doctorFailing = (doctor?.checks || []).filter(c => !c.ok).length;
 
   const weekCount = activityData.slice(-7).reduce((a, b) => a + b, 0);
-  const needsInput = runs.filter(r => r.status === "awaiting-input").length;
-  const successRate = totalRuns ? Math.round((completed / totalRuns) * 100) : 0;
+  const needsInput = runs.filter(r => ["awaiting-input","interrupted"].includes(r.status)).length;
+  const completedWeekCount=computeActivity(runs.filter(r=>r.status==='complete')).slice(-7).reduce((a,b)=>a+b,0);
   // Full lists for tab content (no artificial cap)
-  const activeRuns = runs.filter(r => ["running", "awaiting-input", "queued", "retrying"].includes(r.status));
+  const activeRuns = runs.filter(r => ["running", "awaiting-input", "queued", "retrying","interrupted"].includes(r.status));
   const activeRunsSummary = activeRuns.slice(0, 3);
   const completedRuns = runs.filter(r => r.status === "complete");
   const recentDone = completedRuns.slice(0, 4);
-  const needsRuns = runs.filter(r => r.status === "awaiting-input");
+  const needsRuns = runs.filter(r => ["awaiting-input","interrupted"].includes(r.status));
   const failedRuns = runs.filter(r => r.status === "failed");
   const activityFeed = [...runs].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 5);
   const maxBar = Math.max(1, ...activityData);
 
-  const Stat = ({ icon, label, value, sub, alert }) => (
-    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)", padding: "15px 16px 13px", boxShadow: "var(--shadow-sm)" }}>
+  const Stat = ({ icon, label, value, sub, alert,testId }) => (
+    <div data-testid={testId} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)", padding: "15px 16px 13px", boxShadow: "var(--shadow-sm)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-muted)", fontWeight: 500 }}>
         <Icon name={icon} size={15} style={{ color: "var(--text-faint)" }}/>{label}
       </div>
@@ -447,12 +457,15 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
 
       {/* KPI stats — visible on every tab */}
       <div className="kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, margin: "22px 0" }}>
-        <Stat icon="file-text" label="Resumes generated" value={completed} sub={<><span style={{ color: "var(--success)", fontWeight: 600 }}>+{weekCount}</span> this week</>}/>
-        <Stat icon="check-circle" label="Success rate" value={`${successRate}%`} sub={`${completed} of ${totalRuns || 0} compiled`}/>
-        <Stat icon="loader" label="Avg generation" value={avgDuration} sub="across all runs"/>
+        <Stat icon="file-text" label="Resumes generated" value={completed} sub={<><span style={{ color: "var(--success)", fontWeight: 600 }}>+{completedWeekCount}</span> this week</>}/>
+        <Stat icon="check-circle" testId="generation-health" label="Generation health" value={metrics?(metrics.generation.percent==null?'—':`${metrics.generation.percent}%`):metricsError?'Unavailable':'…'} sub={metrics?`${metrics.generation.completed} complete · ${metrics.generation.failed} failed · ${metrics.generation.cancelled} cancelled`:'Checking completed and failed runs'}/>
+        <Stat icon="loader" label="Avg generation" value={avgDuration} sub="completed and failed runs"/>
         <Stat icon="alert" label="Needs your input" value={needsInput} alert sub={needsInput ? <span style={{ color: "var(--warning)", fontWeight: 600 }}>waiting on you</span> : "all clear"}/>
-        <Stat icon="building" label="Companies" value={companies.length} sub="targeted"/>
+        <Stat icon="building" label="Companies" value={metrics?metrics.companies:metricsError?'Unavailable':'…'} sub="with saved records"/>
+        <Stat icon="file-text" testId="submitted-applications" label="Submitted applications" value={metrics?metrics.applications.submitted:metricsError?'Unavailable':'…'} sub="explicit submission events"/>
+        <Stat icon="check-circle" testId="positive-outcomes" label="Positive evidence" value={metrics?metrics.applications.positive:metricsError?'Unavailable':'…'} sub="favorable reply or recorded progress"/>
       </div>
+      {metricsError&&<p role="alert">{metricsError}</p>}
 
       {/* Tab content */}
       <div key={tab} className="route-in">
@@ -2287,50 +2300,7 @@ const TreeItem = ({ label, icon, count, active, onClick }) => (
 );
 
 // ============== COMPANIES (the cabinet) ==============
-const CompaniesView = ({ goto, openRun }) => {
-  const rows = useLibrary();
-  const all = rows || [];
-  const groups = groupByCompany(all);
-
-  return (
-    <div className="page-pad" style={{ padding: "40px 40px 64px", maxWidth: 1240, margin: "0 auto" }}>
-      <Masthead crumb="Workspace / Companies" title="Companies"
-        sub={`${groups.length} compan${groups.length === 1 ? "y" : "ies"} you've applied to`}
-        action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>New résumé</Button>}
-      />
-      {rows === null ? (
-        <Card padding={0}><EmptyState icon="loader" title="Opening the cabinet…"/></Card>
-      ) : groups.length === 0 ? (
-        <Card padding={0}><EmptyState icon="building" title="No companies yet" sub="Start a résumé for a company and a folder appears here."
-          action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>Create a résumé</Button>}/></Card>
-      ) : (
-        <div className="provider-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(244px, 1fr))", gap: 16 }}>
-          {groups.map(([name, rs]) => {
-            const final = rs.filter(r => libMeta(r.status).key === "final").length;
-            const needs = rs.filter(r => libMeta(r.status).key === "needs").length;
-            const failed = rs.filter(r => libMeta(r.status).key === "failed").length;
-            const roles = Array.from(new Set(rs.map(r => r.role))).slice(0, 2).join(" · ");
-            return (
-              <Card key={name} padding={20} hover onClick={() => openRun(rs[0].id, rs[0].status, rs[0])}>
-                <div style={{ width: 42, height: 42, borderRadius: "var(--radius-md)", background: companyColor(name).bg, color: companyColor(name).fg, display: "grid", placeItems: "center", marginBottom: 14, fontSize: 17, fontWeight: 800 }}>
-                  {name[0].toUpperCase()}
-                </div>
-                <div className="serif" style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.1 }}>{name}</div>
-                <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }} title={roles}>{roles || "—"}</div>
-                <div style={{ display: "flex", gap: 6, marginTop: 15, flexWrap: "wrap" }}>
-                  {final > 0 && <span style={tagStyle("#052E16", "var(--success-chip)")}>{final} final</span>}
-                  {needs > 0 && <span style={tagStyle("#422006", "var(--warning-chip)")}>{needs} needs you</span>}
-                  {failed > 0 && <span style={tagStyle("var(--danger)", "var(--danger-soft)")}>{failed} failed</span>}
-                  <span style={tagStyle("var(--text-muted)")}>{rs.length} total</span>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
+const CompaniesView = ({goto,openRun}) => <CareerCompanies goto={goto} openRun={openRun}/>;
 
 const tagStyle = (color, bg) => ({
   fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 9px", borderRadius: 99,

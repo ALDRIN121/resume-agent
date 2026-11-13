@@ -236,6 +236,8 @@ Retain existing run endpoints. Add fields without deleting existing response key
 | `GET/POST /api/applications` | List or create planned applications |
 | `POST /api/applications/{id}/events` | Record explicit progress or a linked correction |
 | `GET /api/outcomes` | Return local descriptive bands, counts, and exclusions |
+| `GET /api/outcomes/export` | Download the standalone local outcome report |
+| `GET /api/metrics` | Separate generation health, explicit application counts, jobs and known companies |
 | `GET/PUT /api/discovery/sources` | Read or replace the reviewed public-board configuration |
 | `POST /api/discovery/sync` | Start one bounded manual sync |
 | `GET /api/discovery/syncs/{id}` | Return source results, limits, and freshness |

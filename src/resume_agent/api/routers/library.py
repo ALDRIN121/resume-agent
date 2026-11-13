@@ -4,22 +4,15 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from ... import library
+from ...outcomes import company_metrics
 
 router = APIRouter(prefix='/api/library', tags=['library'])
 
 
 @router.get('/companies')
 async def list_companies(request: Request):
-    companies = {}
-    for record in request.app.state.run_manager.list_runs():
-        name = record['company']
-        entry = companies.setdefault(name, {'name': name, 'total': 0, 'final': 0, 'needs': 0, 'failed': 0,
-                                            'last_updated': record.get('created_at')})
-        entry['total'] += 1
-        entry['final'] += record['status'] == 'complete'
-        entry['needs'] += record['status'] in ('awaiting-input', 'interrupted')
-        entry['failed'] += record['status'] == 'failed'
-    return list(companies.values())
+    services = request.app.state.services
+    return company_metrics(request.app.state.run_manager.list_runs(), services.jobs.list(), services.applications.list())
 
 
 @router.get('/resumes')

@@ -5,6 +5,7 @@ import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView
 import { LiveRunView } from "./live-run.jsx";
 import { CareerMemory } from "./career-memory.jsx";
 import { CareerJobs } from "./career-jobs.jsx";
+import { CareerOutcomes } from "./career-outcomes.jsx";
 import { BaseResumeParseModal, ParsingBanner, ReplaceBaseResumeModal } from "./resume-upload.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PROVIDERS } from "./data.jsx";
@@ -249,6 +250,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
   const secondary = [
     { id: "settings", icon: "settings", label: "Settings" },
     { id: "setup", icon: "stethoscope", label: "Doctor & setup" },
+    { id: "outcomes", icon: "check-circle", label: "Outcomes" },
   ];
 
   const provider = PROVIDERS.find(p => p.id === settings.providerId) || PROVIDERS[0];
@@ -942,6 +944,7 @@ export const App = () => {
       case "resume":    return <ResumeEditor onReplace={() => setReplaceOpen(true)} parsing={parsing}/>;
       case "memory":    return <CareerMemory/>;
       case "jobs":      return <CareerJobs initialJobId={careerJobId} goto={goto} onRunStarted={run=>openRun(run.id,run.status,run)}/>;
+      case "outcomes":  return <CareerOutcomes/>;
       case "history":   return <HistoryView goto={goto} openRun={openRun}/>;
       case "settings":  return <SettingsView tweaks={tweaks} setTweak={setTweak} onSettingsSaved={handleSettingsSaved}/>;
       case "setup":     return <SetupWizard goto={goto} startParse={startParse} parsing={parsing} onSettingsSaved={handleSettingsSaved}/>;
