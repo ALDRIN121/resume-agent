@@ -2,7 +2,9 @@
 
 Date: 14 November 2026, Asia/Kolkata. Application revision: `e5d5d0f`. Provider: Command Code. Model: `deepseek/deepseek-v4.1-flash`.
 
-**The updated API connection works. The complete live workflow did not pass. Two issues remain: truncated role evaluation and a PDF extraction mismatch.** The earlier controlled-response matrix does not close these live failures.
+This report preserves the failed pre-fix run. Both failures were subsequently [fixed and verified](live-fixes-2026-11-14.md). The fresh live workflow passed at `362a3b5`.
+
+**Result at the time:** the updated API connection worked, but the complete live workflow failed on truncated evaluation and a PDF extraction mismatch.
 
 ## Method
 
@@ -54,7 +56,7 @@ A separate diagnostic copy added `Kerning=Off` to the font setup. It used the ex
 
 Required work: add a real-compiler regression for this case, correct font setup without weakening the guard, then rerun layout/content checks and the live reviewed-export journey.
 
-## Current acceptance status
+## Acceptance status at the time
 
 The prior “only external gates remain” status is superseded by this live evidence. The two issues above now require local repair and verification. Five pilots, remote Linux/native Windows checks and authenticated Claude validation also remain open. C4 is not passed.
 

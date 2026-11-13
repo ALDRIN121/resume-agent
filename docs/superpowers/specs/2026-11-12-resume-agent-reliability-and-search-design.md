@@ -1,6 +1,6 @@
 # Resume Agent: Reliable Resume and Job Search Design
 
-Date: 12 November 2026. Updated: 14 November 2026. Status: feature implementation is present and controlled-response C1–C3 checks passed. Live validation found PDF/evaluation issues that need repair. C4 remains open.
+Date: 12 November 2026. Updated: 14 November 2026. Status: feature implementation, controlled-response checks and a fresh live-model reviewed export passed. Both live failures were fixed. C4 remains open for external evidence.
 
 The [R1 execution contract](2026-11-12-r1-execution-contract.md) resolves the storage, recovery, identity, and activation decisions from the EGM review.
 The [career-domain contract](2026-11-13-career-domain-execution-contract.md) resolves memory, requirement groups, outcomes and application events.
@@ -328,6 +328,8 @@ Keep existing `JobDescription` fields for generation compatibility.
 
 Define requirement evidence as `supported`, `transferable`, `contradicted`, or `unknown`.
 Every requirement cites its JD span. Every supported finding cites a profile path or confirmed answer.
+Before model evaluation, supply an exact citation catalog computed from the complete job text. The model copies these offsets and quotes.
+Validate every returned citation against the unchanged original source. Do not delegate character counting to the model.
 Missing profile text is unknown evidence, not a proven lack of skill.
 
 Use rubric `fit-v1`:

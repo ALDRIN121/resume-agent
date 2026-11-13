@@ -2,6 +2,8 @@
 
 The independent reviewer inspected `5c1938f670ce5fc1322d3b26bcac5cb85e377743..b075271255b8ef02155aaa0f024c4a68eddc20b4`. The review found three Important defects and no Critical defects. The author accepted all three findings. Commit `aa19fea` fixes them in one test-first pass. The reviewer independently ran seven focused checks; all passed. No second review was used to certify the fixes.
 
+Later actual-model testing exposed two additional issues after this review. Both were [fixed and verified](live-fixes-2026-11-14.md) at `362a3b5`. This earlier independent review is retained as scoped evidence.
+
 ## Findings and changes
 
 | Finding | Effect before the fix | Implemented change | Regression proof |

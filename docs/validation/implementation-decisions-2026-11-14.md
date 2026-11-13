@@ -47,6 +47,8 @@ This record carries every ruling from the execution ledger, in ledger order. Som
 | 39 | Keep labelled unverified legacy downloads and deferred v2 history deletion. Preserve compatibility and the audit until retention is designed. | Legacy files lack new approval guarantees; v2 deletion remains unavailable. |
 | 40 | Preserve the ignored execution evidence while C4 remains open. Leave the existing `.egm/` directory untouched. | Local evidence occupies disk until gate closure. |
 
+| 41 | Supply exact precomputed JD citation spans to the model. Keep full source, schema and strict source validation. Do not rely on unsupported provider controls or increase the output budget. | The prompt and repeated citation quotes grow slightly. Large or difficult inputs can still exhaust the model limit. |
+
 ## Deferred minors
 
 The final independent review returned no separate Minor findings. The presentation limitations and compatibility decisions above are retained explicitly; they are not silently treated as completed improvements.

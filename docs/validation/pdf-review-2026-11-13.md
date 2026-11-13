@@ -1,10 +1,10 @@
 # Representative PDF review
 
-Ten fictional profiles/selections produced ten released PDFs and eleven page images. All pages were inspected.
+Revalidated 14 November 2026 after the font fix at `362a3b5`. Ten fictional profiles/selections produced ten released PDFs and eleven page images. All eleven new page images were inspected.
 
 Actual Tectonic 0.15.0 and Poppler performed compilation, extraction and rendering. Each released file matched its approved PDF hash.
 
-Source snapshots, complete display manifests, expected text, logs, canonical PDFs, exports and images remain in `task22-pdf-evidence/`.
+Source snapshots, complete display manifests, expected text, logs, canonical PDFs, exports and images remain in `live-fixes-2026-11-14/representative-pdfs/`. The earlier `task22-pdf-evidence/` inventory is retained as historical evidence.
 
 | Case | Pages | Content and identity | Visual observation |
 | --- | --- | --- | --- |

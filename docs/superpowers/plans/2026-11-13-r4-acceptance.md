@@ -2,20 +2,20 @@
 
 Updated 14 November 2026. Branch: `codex/resume-agent-r1`. **C4 remains OPEN.** The candidate has not been pushed, tagged or published. Local implementation is distinct from external release certification.
 
-**Latest live retest:** the updated key connects successfully, but role evaluation returns `truncated_output` and PDF export is blocked by kerning-induced extraction of `Tools` as `T ools`. These require local repair and a repeated live journey. The earlier controlled-response results remain historical evidence. See the [retest report](../../validation/live-provider-retest-2026-11-14.md).
+**Latest live result:** both failures are fixed at `362a3b5`. The 943-test required matrix passed without failures or skips. A fresh actual-model browser journey reached reviewed PDF export, with identical preview/download/export bytes. See the [fix verification](../../validation/live-fixes-2026-11-14.md).
 
 ## Scope and revisions
 
 T01–T21 are implemented locally. T22's author-owned checks, representative PDF inspection, final review and package preparation are recorded here. T22 cannot close until its external evidence exists.
 
-The first candidate freeze was `b075271255b8ef02155aaa0f024c4a68eddc20b4`. The independent review found three Important recovery defects. Runtime fix `aa19fea78c6bcc557c3d550f69a277a3ec26e05c` addresses all three. The final test revision is `b0098aa01490df784645a8ca6639f5e38400f4fc`; it also checks the updated upload test fixtures. See the [review and fix record](../../validation/final-branch-review-2026-11-14.md).
+The first candidate freeze was `b075271255b8ef02155aaa0f024c4a68eddc20b4`. The independent review found three Important recovery defects. Runtime fix `aa19fea78c6bcc557c3d550f69a277a3ec26e05c` addresses all three. The earlier test revision was `b0098aa01490df784645a8ca6639f5e38400f4fc`. The latest code and required matrix are at `362a3b5`, including the eight new font/citation regressions. See the [review and fix record](../../validation/final-branch-review-2026-11-14.md).
 
 ## Local verification
 
 | Check | Result and evidence |
 | --- | --- |
-| Python 3.12, all required flags | **935 passed, zero failures, zero skips**, 7 upstream warnings, 228.12 seconds. JUnit failure/error/skip guard passed. The earlier 934-pass/one-failure run and its stale-fixture diagnosis are retained. |
-| Python 3.13 compatibility | 873 passed, 62 explicitly disabled browser/PDF tests, 7 upstream warnings, 54.32 seconds. Those 62 checks must run in the flagged Python 3.12 matrix. |
+| Python 3.12, all required flags | **943 passed, zero failures, zero skips**, 7 upstream warnings, 271.54 seconds. JUnit failure/error/skip guard passed. The earlier 934-pass/one-failure run and its stale-fixture diagnosis are retained. |
+| Python 3.13 compatibility | 878 passed, 65 explicitly disabled browser/PDF tests, 7 upstream warnings, 54.18 seconds. Those 65 checks must run in the flagged Python 3.12 matrix. |
 | Frontend | 15 tests passed. Production build passed. Bundle: `index-D-KELynJ.js`, `index-D26JeVwS.css`. |
 | Recovery regressions | 100 focused backend tests passed. Both new actual API/browser restart journeys passed. |
 | Source lint and whitespace | Ruff passed for source and the new recovery tests. `git diff --check` passed. |
@@ -23,7 +23,7 @@ The first candidate freeze was `b075271255b8ef02155aaa0f024c4a68eddc20b4`. The i
 | Synthetic journeys | All **30 named journeys** passed in the final complete matrix, including six new recovery cases. See the [journey record](../../validation/synthetic-journeys-2026-11-13.md). |
 | Representative PDFs | Ten released fictional PDFs, eleven pages. Actual compiler, extraction, rendering, exact content guard and byte-hash checks passed. All eleven page images were inspected. See the [PDF review](../../validation/pdf-review-2026-11-13.md). |
 | Independent branch review | One fresh reviewer; three Important findings accepted and fixed with failing-then-passing regression tests. No Critical or separate Minor findings. No second review claim. |
-| Additional live configured-provider check, 14 November | Actual browser Settings → Re-test failed for Command Code / `deepseek/deepseek-v4.1-flash`: authentication/access error, 909 ms, empty reply. A key/access update is needed before a full live-model journey. See the [live result](../../validation/live-provider-2026-11-14.md). |
+| Live configured-provider verification, 14 November | The new key works. After the font/citation fixes, actual import → evaluation → questions → selected content → inspected PDF → exact export passed. Initial failures remain recorded in the [retest](../../validation/live-provider-retest-2026-11-14.md); current results are in the [fix report](../../validation/live-fixes-2026-11-14.md). |
 
 The initial stale fixture matched `/api/resume/upload` exactly and missed `?defer_processing=true`. It therefore did not inject its intended upload error. The corrected fixture accepts the query and asserts that the actual request contains it. No production behavior was weakened to make that test pass.
 
@@ -43,7 +43,7 @@ Final archive inspection found local `Frontend/node_modules` in the source archi
 | Data | Fictional profiles, role descriptions, feeds and answers. Isolated local application state. |
 | Interfaces | Actual API, WebSocket, SQLite, checkpoint store, browser, CLI and installed wheel where named by the tests. External model/feed boundaries are substituted where documented. |
 
-Ten-PDF visual evidence was generated on `b075271`; the recovery fixes do not change the renderer, templates, content projection or PDF guard. Its original provenance is retained. The final full matrix reruns real-tool PDF checks against the repaired code.
+The ten representative PDFs were regenerated at `362a3b5` after the font change. All eleven new page images were inspected and all content/export hashes passed. The original `b075271` inventory remains historical evidence.
 
 ## C4 requirements
 

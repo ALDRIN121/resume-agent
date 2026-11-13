@@ -2,7 +2,7 @@
 
 Updated 14 November 2026. Branch `codex/resume-agent-r1`. All commits are local. Nothing has been pushed, tagged or published.
 
-**Roadmap feature code and candidate artifacts exist. The live retest found two unresolved issues: incomplete role evaluation and a PDF extraction false mismatch. Local repairs and renewed live acceptance are required. C4 remains OPEN.** The build remains a 3.3.0 candidate. See the [live retest](../../validation/live-provider-retest-2026-11-14.md).
+**Feature code and both live fixes are implemented locally. The required suite passed 943 tests with zero failures or skips. A fresh real-model browser journey reached reviewed export with identical preview/download/export bytes. C4 remains OPEN for external evidence.** See the [verified fixes](../../validation/live-fixes-2026-11-14.md).
 
 | Work | Implemented result | Checkpoint |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ The web app, API and CLI share the reviewed workflow. Full source inputs remain 
 
 The final independent review found three Important recovery defects and no Critical defects. All three were accepted and fixed in one test-first pass: Continue now reuses an owned export reservation; a cleanup ownership conflict stays attached to its run; saved imports are discoverable and have explicit Continue/Cancel controls. See the [review report](../../validation/final-branch-review-2026-11-14.md).
 
-The final Python 3.12 matrix passed **935 tests with zero failures and zero skips**. Python 3.13 passed **873 tests**, with 62 browser/PDF checks explicitly disabled and covered by the flagged 3.12 run. All 15 frontend tests and the production build passed. Seven upstream warnings remain visible.
+The final Python 3.12 matrix passed **943 tests with zero failures and zero skips**. Python 3.13 passed **878 tests**, with 65 browser/PDF checks explicitly disabled and covered by the flagged 3.12 run. All 15 frontend tests and the production build passed. Seven upstream warnings remain visible.
 
 The final local evidence uses fictional data, isolated state, actual API/browser/checkpoint infrastructure and real PDF tools. Model and feed boundaries use controlled responses where documented. The separate actual Codex probe covers a named review handoff, not every host, model or setup journey.
 

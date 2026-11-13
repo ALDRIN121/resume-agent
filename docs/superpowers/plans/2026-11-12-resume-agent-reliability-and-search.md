@@ -14,9 +14,9 @@
 
 **Repository root:** `/Users/aldrinjoseph/Developer/Resume-agent/resume-agent`. Paths in task inventories are relative to this root.
 
-**Status:** Updated 14 November 2026. T01–T21 feature code is present on `codex/resume-agent-r1`. Controlled-response C1–C3 checks passed. The live retest found T06/T13 issues requiring repair. C4 remains open.
+**Status:** Updated 14 November 2026. T01–T21 feature code and the two live fixes are implemented on `codex/resume-agent-r1`. The 943-test required matrix and a fresh live-model reviewed export passed. C4 remains open for external evidence.
 
-**Current checkpoint:** [Implementation status](2026-11-13-r1-implementation-status.md) and [R4 acceptance](2026-11-13-r4-acceptance.md). PDF extraction and live evaluation repairs, five pilots, remote platform certification and authenticated Claude validation remain open. All work is local and unpublished.
+**Current checkpoint:** [Implementation status](2026-11-13-r1-implementation-status.md) and [R4 acceptance](2026-11-13-r4-acceptance.md). Five pilots, remote platform certification and authenticated Claude validation remain open. The [live fixes and verification](../../validation/live-fixes-2026-11-14.md) are complete. All work is local and unpublished.
 
 **Final transitions:** [Runtime transition and dispatch inventory](../../validation/runtime-dispatch-2026-11-14.md).
 
@@ -185,8 +185,8 @@ Display ordering and omissions must appear in the approved manifest.
 
 **Run:** `uv run pytest tests/test_approved_render.py tests/test_template_render.py tests/test_graph_flow.py -q`.
 
-- [ ] Add a real-compiler regression for the live `Tools` → `T ools` extraction case.
-- [ ] Correct font setup while retaining the exact content guard.
+- [x] Add a real-compiler regression for the live `Tools` → `T ools` extraction case.
+- [x] Correct font setup while retaining the exact content guard.
 
 **Done when:** lint, HR review, vision review, retries, and layout changes cannot rewrite approved wording.
 A layout failure must request a new run or content revision instead of dropping text.
@@ -339,7 +339,7 @@ Store profile/JD hashes and rubric `fit-v1` with every result.
 
 **Run:** `uv run pytest tests/test_role_evaluation.py tests/test_job_store.py -q`.
 
-- [ ] Diagnose and resolve the live configured-model `truncated_output` evaluation failure.
+- [x] Diagnose and resolve the live configured-model `truncated_output` evaluation failure.
 
 **Done when:** two equally weighted criteria yield `[50,100]` at 50% coverage for supported plus unknown.
 Supported plus transferable must yield `[75,75]` at 100% coverage.
@@ -510,7 +510,7 @@ Prepared publication files do not authorize registry publication or GitHub setti
 
 - [ ] Record the configured Linux and native Windows certification results.
 - [ ] Record the authenticated Claude smoke result before claiming support.
-- [ ] Repeat the complete live-model reviewed-export journey after the local fixes.
+- [x] Repeat the complete live-model reviewed-export journey after the local fixes.
 - [ ] Close C4 only after its required evidence passes.
 
 **Checkpoint C4 — Pass only when all conditions hold:**
@@ -528,7 +528,7 @@ Prepared publication files do not authorize registry publication or GitHub setti
 
 If C4 fails, keep the build as a candidate. Do not describe it as released or production-verified.
 
-Local closure and the remaining external gates are recorded in the [R4 acceptance record](2026-11-13-r4-acceptance.md), updated 14 November 2026. T22 and C4 remain open for the new local live-test issues and required pilot, platform and authenticated-host evidence. See the [live retest](../../validation/live-provider-retest-2026-11-14.md).
+Local closure and the remaining external gates are recorded in the [R4 acceptance record](2026-11-13-r4-acceptance.md), updated 14 November 2026. T22 and C4 remain open for required pilot, platform and authenticated-host evidence. The two local live-test failures are [fixed and verified](../../validation/live-fixes-2026-11-14.md).
 
 ## 6. Implementation Control and Evidence
 

@@ -2,15 +2,12 @@
 
 Checked 14 November 2026 against the original consolidated EGM report, implementation plan, specification, execution supplements and recorded implementation evidence.
 
-**Feature code and document reconciliation are present. The live retest found two local issues requiring repair. Final acceptance is not complete.** The original plan now distinguishes completed work from its remaining external checks. The historical EGM report remains unchanged; this is not a new formal EGM certificate.
+**Feature code, document reconciliation and both live fixes are complete locally. A fresh live-model reviewed export passed. Final external acceptance is not complete.** The original plan now distinguishes completed work from its remaining external checks. The historical EGM report remains unchanged; this is not a new formal EGM certificate.
 
 ## Remaining acceptance work
 
 | Work | Owner or dependency | Completion checkpoint |
 | --- | --- | --- |
-| Repair the PDF extraction mismatch in T06 | Local implementation | Add a real-compiler regression. Correct the font setup. Preserve the strict guard and repeat the reviewed export. |
-| Repair live role evaluation in T13 | Local model/prompt diagnosis | Resolve the observed truncated response and obtain a validated live evaluation. |
-| Repeat live end-to-end acceptance | Both local fixes | Run the complete live model, review and exact PDF export journey. |
 | Validate Claude Code for T21 | Owner restores host authentication; then run its recorded smoke | Named host version completes the required reviewed handoff. Keep Claude unsupported until then. |
 | Run Linux and native Windows certification | Remote jobs against the exact candidate | Save successful platform results. Do not infer them from macOS tests. |
 | Run five volunteer pilots for T22 | Owner arranges voluntary sessions | Four of five reach a reviewed PDF without developer help. No artifact identity mismatch. Record timing, factual review and recovery. |
@@ -51,10 +48,10 @@ The original design now links all execution supplements. The added alternatives 
 
 ## Completed local evidence
 
-Additional live request on 14 November: the initial connection failed, then passed after the owner updated the key. The full workflow exposed truncated role evaluation and a kerning-induced PDF mismatch. Local repair is now pending in addition to the external gates. See the [live retest](live-provider-retest-2026-11-14.md).
+The initial live failures are now [fixed and verified](live-fixes-2026-11-14.md). The new key works, evaluation completes with exact source references, and a fresh actual browser journey released the reviewed PDF. External gates remain open.
 
-- Complete runtime matrix: 935 passed, zero failures and zero skips at `b0098aa`.
-- Python 3.13: 873 passed; 62 browser/PDF checks explicitly disabled and covered in the flagged Python 3.12 run.
+- Complete runtime matrix: 943 passed, zero failures and zero skips at `362a3b5`.
+- Python 3.13: 878 passed; 65 browser/PDF checks explicitly disabled and covered in the flagged Python 3.12 run.
 - Frontend: 15 tests and the production build passed.
 - All three Important final branch-review defects were fixed and reproduced by regression tests.
 - Ten fictional PDFs and all eleven page images were inspected. Known presentation limits remain recorded.
