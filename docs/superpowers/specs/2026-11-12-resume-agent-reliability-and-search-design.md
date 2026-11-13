@@ -1,12 +1,19 @@
 # Resume Agent: Reliable Resume and Job Search Design
 
-Date: 12 November 2026. Status: R1 implementation in progress after the user's instruction to start. The C1 release gate is pending.
+Date: 12 November 2026. Updated: 14 November 2026. Status: feature implementation and local C1–C3 behavior checks are complete. C4 remains open.
 
 The [R1 execution contract](2026-11-12-r1-execution-contract.md) resolves the storage, recovery, identity, and activation decisions from the EGM review.
+The [career-domain contract](2026-11-13-career-domain-execution-contract.md) resolves memory, requirement groups, outcomes and application events.
+The [provider contract](2026-11-13-discovery-provider-contract.md) defines discovery details.
+The [external-model contract](2026-11-13-external-model-contract.md) defines host request persistence and response budgets.
+These supplements resolve detail in this original design. Read the [current acceptance record](../plans/2026-11-13-r4-acceptance.md) for evidence and exclusions.
 
 ## 1. Purpose and defaults
 
 Build a dependable resume engine. Then add role decisions, application records, job discovery, and an agent skill.
+
+A software release is an application version approved for distribution. A reviewed PDF export copies the exact approved document bytes.
+Code retains identifiers such as `ReleaseService` and `release_records` for that PDF operation.
 
 Keep the current web app and interactive CLI. Keep Python, Pydantic, LangGraph, SQLite, FastAPI, Typer, React, and LaTeX.
 
@@ -35,6 +42,21 @@ Source: [comparison report](/Users/aldrinjoseph/Developer/Resume-agent/Career-Op
 | R4 — 3.3.0 | Use the same workflow from an agent skill | JSON commands do not prompt. External-agent mode makes no configured-provider model calls. |
 
 These criteria measure software behavior. They do not establish candidate truth, active-user adoption, or hiring probability.
+
+### Alternatives and costs
+
+| Choice | Alternative considered | Reason and cost |
+| --- | --- | --- |
+| Existing stack and checkpoint store | Replace the agent framework and database | Reuse compatible profiles and saved runs. The index/checkpoint boundary needs reconciliation. |
+| Canonical YAML facts | Add a second candidate-fact overlay | Keep one fact authority. A YAML write and audit update need hash-based recovery. |
+| Revision-bound JSON pointers | Add permanent IDs to every field | Preserve old profile files. A changed revision requires fresh proposals. |
+| Deterministic templates | Let a model write and repair LaTeX | Preserve approved wording. Styling choices are limited. |
+| Explicit size limits | Merge model-parsed chunks | Keep supported input complete. Larger inputs require another source. |
+| Per-operation locks and SQLite commands | Require a single application worker | Protect concurrent CLI and web use. Ownership and crash recovery add complexity. |
+| Versioned interval scoring | Ask a model for one opaque score | Show exact arithmetic and unknown evidence. Requirement interpretation still needs review. The score is not a hiring predictor. |
+| Explicit application events | Treat generated PDFs as applications | Preserve truthful submission counts. Users must record submissions and corrections. |
+| Configured public-board APIs | Crawl the unrestricted web | Bound requests and preserve provider identity. Coverage is limited to supported boards and contracts can change. |
+| Shared JSON host boundary | Add a separate workflow for each host | Reuse validation and approval rules. Each host still needs its own authenticated smoke check. |
 
 ## 3. Core workflow and content contract
 
@@ -93,7 +115,9 @@ An accepted proposal is a user-approved claim. Source references do not independ
 
 ### 3.3 Display and final review
 
-Define `RenderManifest` with ordered display fields, explicit omissions, template version, layout ID, and content hash.
+Define `RenderManifest` with ordered display fields, explicit omissions and a content hash.
+The content hash excludes layout and template parameters. A separate render hash binds the template and layout to that content.
+The PDF hash identifies the resulting bytes. Final PDF review binds all three hashes.
 Show skill ordering, punctuation normalization, and duplicate-description omissions before content approval.
 Treat targeting preferences and source metadata as non-display fields. Declare other template omissions in the reviewed manifest.
 
@@ -162,7 +186,7 @@ Required methods:
 | Method | Contract |
 |---|---|
 | `create(request: RunRequest) -> RunView` | Persist a queued run and fixed inputs. |
-| `drive(run_id: str, action: ResumeAction | None) -> RunView` | Continue until a human/model pause or terminal state. |
+| `drive(run_id: str, action: ResumeAction \| None) -> RunView` | Continue until a human/model pause or terminal state. |
 | `get(run_id: str) -> RunView` | Return durable state and current pending action. |
 | `subscribe(run_id: str) -> AsyncIterator[Event]` | Stream current-process progress. Rebuild pending state after restart. |
 | `cancel(run_id: str) -> RunView` | Record explicit user cancellation and retain diagnostics. |
@@ -225,8 +249,11 @@ Retain existing run endpoints. Add fields without deleting existing response key
 | `POST /api/runs/{id}/recover` | Idempotent v1 recovery |
 | `GET /api/readiness` | Profile, provider, parser, compiler, and renderer readiness |
 | `POST /api/profile/imports` | Create an import draft |
+| `GET /api/profile/imports` | Discover saved imports without starting model work |
 | `GET /api/profile/imports/{id}` | Inspect the source, parsed draft, and coverage warnings |
 | `POST /api/profile/imports/{id}/accept` | Save a reviewed draft with the expected current profile revision |
+| `POST /api/profile/imports/{id}/continue` | Explicitly resume saved processing or an interrupted accepted action |
+| `POST /api/profile/imports/{id}/cancel` | Stop the operation; retain its source and any earlier accepted profile decision |
 | `POST /api/runs/{id}/artifact/relink` | Inspect and attach a user-selected historical PDF; retain legacy status |
 | `GET/POST /api/memory/proposals` | List or create explicit durable-change proposals |
 | `POST /api/memory/{id}/decision` | Accept, reject, or revoke a proposal with an action ID and expected profile revision |
@@ -290,6 +317,7 @@ If the proposed hash matches, finish the acceptance audit. If the old hash match
 Revoke preferences and writing rules directly. Reverse a fact change through a new reviewed proposal against the current profile.
 
 Apply active preferences and writing rules only to new evaluations and edit proposals.
+Freeze their values and canonical hash when the operation starts. Include that identity in replay, provenance and staleness checks.
 Do not change existing approved snapshots. Require explicit acceptance for every durable promotion.
 Reject targets outside the declared memory types. Do not accept settings, credential, or filesystem-path targets.
 
@@ -351,7 +379,9 @@ Retain a company while jobs or applications still reference it.
 
 Keep reports local and descriptive. Group by the stored evaluation band: `0–39`, `40–69`, and `70–100`.
 Use the lower-bound score recorded at submission. Do not rescore history automatically.
-Count a positive response when an explicit response, interview, or offer event exists.
+Require an explicit response category: acknowledgment, rejection, favorable or other.
+Count favorable responses and explicit screening, interview or offer progression as positive.
+Do not count acknowledgments or rejection replies as positive.
 Count a negative outcome after explicit rejection without a positive response, or user-confirmed closure without response.
 Keep pending and withdrawn-without-outcome records outside the denominator.
 Display every excluded count. Suppress rates below ten resolved records in a band.
@@ -407,7 +437,7 @@ Store model tasks by owner kind, owner ID, task name, input hash, and schema ver
 Keep pending model requests durable across restart. Require the current request ID and input hash when a response arrives.
 
 Provide one host-neutral skill contract. Add tested installation guides for Codex and Claude Code.
-Require the skill to show review requests and wait for explicit user decisions. Do not claim this proves user identity cryptographically.
+Require the skill to show review requests and wait for explicit user decisions.
 Describe configured-provider billing and host-agent billing separately. Do not promise a free allowance for every host.
 
 Prepare a wheel, source archive, bundled UI, install guide, short demonstration, and release notes.

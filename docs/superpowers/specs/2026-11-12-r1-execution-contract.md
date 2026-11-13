@@ -1,7 +1,7 @@
 # R1 execution contract
 
 This document resolves the R1 decisions raised by the EGM review. It supplements the existing design and plan.
-Later feature contracts remain pending until their release. Product implementation started on branch `codex/resume-agent-r1`.
+Later decisions are now defined in the [career-domain](2026-11-13-career-domain-execution-contract.md), [discovery](2026-11-13-discovery-provider-contract.md) and [external-model](2026-11-13-external-model-contract.md) supplements. Implementation is local on branch `codex/resume-agent-r1`. C4 remains open.
 
 ## Activation and alternatives
 

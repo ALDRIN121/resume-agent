@@ -2,7 +2,7 @@
 
 Updated 14 November 2026. Branch `codex/resume-agent-r1`. All commits are local. Nothing has been pushed, tagged or published.
 
-**T01–T21 are implemented. T22 local validation is complete. Final package preparation is recorded in R4. C4 remains OPEN because external evidence is missing.** The build remains a 3.3.0 candidate.
+**T01–T21 are implemented. T22 local validation and candidate artifacts are complete. External acceptance is still required. C4 remains OPEN because external evidence is missing.** The build remains a 3.3.0 candidate.
 
 | Work | Implemented result | Checkpoint |
 | --- | --- | --- |
@@ -28,6 +28,6 @@ Three external gates remain:
 2. Run and record Linux and native Windows certification against the exact candidate.
 3. Restore Claude authentication through the owner's host flow, then run its smoke check. Authentication was not changed during implementation.
 
-The [pilot record](../../validation/volunteer-pilots.md), [rollback procedure](../../candidate-rollback.md), [publication checklist](../../publication-checklist.md) and [complete decision record](../../validation/implementation-decisions-2026-11-14.md) are ready. Required external evidence must exist before C4 can pass. No hiring-outcome, adoption or universal reliability claim is made.
+The reconciled [plan/review disposition](../../validation/pending-plan-review-2026-11-14.md) lists every original EGM action. The [pilot record](../../validation/volunteer-pilots.md), [rollback procedure](../../candidate-rollback.md), [publication checklist](../../publication-checklist.md) and [complete decision record](../../validation/implementation-decisions-2026-11-14.md) are ready. Required external evidence must exist before C4 can pass. No hiring-outcome, adoption or universal reliability claim is made.
 
 Raw evidence remains under `.superpowers/sdd/2026-11-12-resume-agent-reliability-and-search/` while C4 is open. The existing `.egm/` directory and personal application state remain untouched.

@@ -1,0 +1,27 @@
+{
+  "version": "3.3.0",
+  "status": "unpublished candidate; C4 open",
+  "artifact_source_revision": "b6b7754675bff435b6eb88bc106d61fbbed73886",
+  "runtime_fix_revision": "aa19fea78c6bcc557c3d550f69a277a3ec26e05c",
+  "complete_matrix_test_revision": "b0098aa01490df784645a8ca6639f5e38400f4fc",
+  "artifacts": [
+    {
+      "filename": "resume_generator-3.3.0-py3-none-any.whl",
+      "bytes": 380566,
+      "sha256": "1ec5cb70704c7d56b40ea50eab4b1d982dab931f8abc782e9e72a778bf3c32d4"
+    },
+    {
+      "filename": "resume_generator-3.3.0.tar.gz",
+      "bytes": 1170576,
+      "sha256": "808a585984ff6dadf606cd0a94e11afe394e24adc891b6bba71650a504099074"
+    }
+  ],
+  "checks": [
+    "sdist UI present",
+    "skill/source parity and private-workspace/dependency-cache exclusions",
+    "retained wheel installed UI served outside checkout",
+    "retained wheel project skill export outside checkout",
+    "3.3.0 metadata",
+    "retained wheel frontend bytes match tracked dist"
+  ]
+}

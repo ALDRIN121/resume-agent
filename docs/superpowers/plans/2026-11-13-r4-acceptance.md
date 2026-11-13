@@ -17,12 +17,14 @@ The first candidate freeze was `b075271255b8ef02155aaa0f024c4a68eddc20b4`. The i
 | Frontend | 15 tests passed. Production build passed. Bundle: `index-D-KELynJ.js`, `index-D26JeVwS.css`. |
 | Recovery regressions | 100 focused backend tests passed. Both new actual API/browser restart journeys passed. |
 | Source lint and whitespace | Ruff passed for source and the new recovery tests. `git diff --check` passed. |
-| Package and interface parity | Installed-wheel UI, source archive, portable skill/export and JSON/shared-service parity are included in the full Python matrices. The final retained artifacts and their hashes are prepared from the documentation freeze after this matrix. |
+| Package and interface parity | Installed-wheel UI, source archive, portable skill/export and JSON/shared-service parity are included in the full Python matrices. Final retained artifacts were built from `b6b7754`. Five package tests and six checks on those exact artifacts passed. See the [artifact hashes](../../validation/candidate-artifacts-2026-11-14.json). |
 | Synthetic journeys | All **30 named journeys** passed in the final complete matrix, including six new recovery cases. See the [journey record](../../validation/synthetic-journeys-2026-11-13.md). |
 | Representative PDFs | Ten released fictional PDFs, eleven pages. Actual compiler, extraction, rendering, exact content guard and byte-hash checks passed. All eleven page images were inspected. See the [PDF review](../../validation/pdf-review-2026-11-13.md). |
 | Independent branch review | One fresh reviewer; three Important findings accepted and fixed with failing-then-passing regression tests. No Critical or separate Minor findings. No second review claim. |
 
 The initial stale fixture matched `/api/resume/upload` exactly and missed `?defer_processing=true`. It therefore did not inject its intended upload error. The corrected fixture accepts the query and asserts that the actual request contains it. No production behavior was weakened to make that test pass.
+
+Final archive inspection found local `Frontend/node_modules` in the source archive. A strengthened exclusion test failed before the fix. The build now excludes that folder explicitly; all five package tests pass. The source archive fell from 10,948,574 to 1,170,576 bytes. The wheel hash stayed unchanged. Runtime code did not change after the complete 935-test matrix. The final archive, installed UI, exported skill, metadata and tracked frontend bytes were checked again.
 
 ## Environment and inputs
 
@@ -72,3 +74,5 @@ The inspected template can show ambiguous equal social handles, retain duplicate
 Use the [complete state backup and rollback procedure](../../candidate-rollback.md). Database migrations are forward-only. Do not run older code against a newer live database or restore only one of the matching databases. No personal-state rollback was performed.
 
 All execution rulings and their costs are in the [decision record](../../validation/implementation-decisions-2026-11-14.md). Raw logs, JUnit files, source/PDF inventories and package hashes remain in the ignored execution workspace while external C4 is open. Existing `.egm/` files and personal application state were preserved.
+
+The original plan/specification status, file inventories, checkboxes and EGM wording findings have been reconciled. See the [A01–A23 disposition record](../../validation/pending-plan-review-2026-11-14.md). This is an implementation traceability update, not a repeat of the five-stage EGM review or dictionary-certified ASD-STE100 compliance.

@@ -14,9 +14,11 @@
 
 **Repository root:** `/Users/aldrinjoseph/Developer/Resume-agent/resume-agent`. Paths in task inventories are relative to this root.
 
-**Status:** Implementation started on 12 November 2026, on branch `codex/resume-agent-r1`. R1 is in progress; later releases remain pending.
+**Status:** Updated 14 November 2026. T01–T21 feature code is implemented on `codex/resume-agent-r1`. Local C1–C3 behavior gates passed. C4 remains open.
 
-**Current checkpoint:** [R1 implementation status](2026-11-13-r1-implementation-status.md). Private components are not a completed release. Client integration and C1 remain pending.
+**Current checkpoint:** [Implementation status](2026-11-13-r1-implementation-status.md) and [R4 acceptance](2026-11-13-r4-acceptance.md). Five pilots, remote platform certification and authenticated Claude validation remain open. All work is local and unpublished.
+
+**Final transitions:** [Runtime transition and dispatch inventory](../../validation/runtime-dispatch-2026-11-14.md).
 
 **R1 decisions:** [Execution contract](/Users/aldrinjoseph/Developer/Resume-agent/resume-agent/docs/superpowers/specs/2026-11-12-r1-execution-contract.md). This supplement resolves core review findings before activation.
 
@@ -26,7 +28,8 @@
 | Run | One saved resume-generation workflow |
 | Artifact | A file owned by one run |
 | Content snapshot | The fixed wording, display order, and omissions approved for a run |
-| Release | Final export of the approved PDF bytes |
+| Software release | A version of the application approved for distribution |
+| Reviewed PDF export | Final copy of the approved PDF bytes; code retains identifiers such as `release_records` |
 | Saved state | The LangGraph checkpoint used to resume work |
 | Gate | A pass/fail release checkpoint, named C1 through C4 |
 
@@ -73,7 +76,7 @@ Commit each accepted implementation task separately. Do not publish releases fro
 
 **Depends on:** none. **Owner:** core implementer. **Review:** independent reviewer.
 
-**Files:** existing `tests/`, `evals/`, and a new `tests/fixtures/reliability/` directory.
+**Files:** `src/resume_agent/config.py`, `tests/conftest.py`, `tests/test_state_isolation.py`, `tests/fixtures/reliability/profile.json`, `tests/fixtures/reliability/job.txt`, `tests/fixtures/reliability/legacy_history.jsonl`.
 
 **Produces:** synthetic source profiles, long inputs, overlapping-run markers, legacy checkpoints, and baseline verification records.
 
@@ -90,7 +93,7 @@ Do not commit an unexplained failing test suite. Add each failing regression in 
 
 **Depends on:** T01.
 
-**Files:** add `contracts.py`, `run_service.py`, `operation_service.py`, and `migrations.py`; update state, checkpoint, library, and dependency definitions.
+**Files:** `src/resume_agent/contracts.py`, `src/resume_agent/run_store.py`, `src/resume_agent/run_service.py`, `src/resume_agent/operation_service.py`, `src/resume_agent/checkpoint.py`, `src/resume_agent/migrations.py`, `tests/test_run_service.py`, `tests/test_operation_service.py`, `tests/test_migrations.py`.
 
 **Interfaces:** define `RunRequest`, `RunView`, `ResumeAction`, `PdfReview`, and the `RunService` methods in the spec.
 Store new typed checkpoint values as validated JSON dictionaries or explicitly registered schema types.
@@ -109,7 +112,7 @@ Creation must survive restart before the first model call.
 
 **Depends on:** T02.
 
-**Files:** add `artifacts.py`; update compiler, page-render, terminal-failure, output-saver, and filesystem helpers.
+**Files:** `src/resume_agent/artifacts.py`, `src/resume_agent/tools/fs.py`, `tests/test_artifact_isolation.py`, `tests/test_fs.py`.
 
 **Interfaces:** `RunArtifacts.create(artifact_id)`, `attempt(number)`, `hash_file(path)`, `prepare_export(pdf_hash, destination)`, and `commit_export(plan)`.
 All paths derive from a generated UUID and validated attempt number.
@@ -129,16 +132,16 @@ No node may read the old global `_working/resume.pdf` for a v2 run.
 
 **Depends on:** T02.
 
-**Files:** add `imports.py` and `profile_store.py`; update the base loader, JD extractor, resume routes, and upload UI.
+**Files:** `src/resume_agent/imports.py`, `src/resume_agent/profile_store.py`, `src/resume_agent/api/routers/resume.py`, `tests/test_import_coverage.py`, `tests/test_profile_store.py`.
 
 **Interfaces:** `ProfileStore.load_snapshot()` and `ProfileStore.save(expected_revision, profile, source_metadata)`.
 Use a profile lock and atomic YAML replacement. Persist import drafts separately from the accepted profile.
 
-- [ ] Add tests for a marker after character 12,000, a restriction after character 8,000, and complete stored JD text.
-- [ ] Add boundary tests for 48,000 versus 48,001 characters and 10 MiB versus an oversized upload.
-- [ ] Replace slicing with explicit input validation and full supported-text delivery.
-- [ ] Add per-page PDF extraction warnings and source-versus-draft review before profile save.
-- [ ] Verify stale-save conflicts and preservation of the old profile after invalid, incomplete, or failed imports.
+- [x] Add tests for a marker after character 12,000, a restriction after character 8,000, and complete stored JD text.
+- [x] Add boundary tests for 48,000 versus 48,001 characters and 10 MiB versus an oversized upload.
+- [x] Replace slicing with explicit input validation and full supported-text delivery.
+- [x] Add per-page PDF extraction warnings and source-versus-draft review before profile save.
+- [x] Verify stale-save conflicts and preservation of the old profile after invalid, incomplete, or failed imports.
 
 **Run:** `uv run pytest tests/test_import_coverage.py tests/test_resume_upload.py tests/test_resume_context.py -q`.
 
@@ -149,16 +152,16 @@ Source delivery must not be described as proof of complete factual extraction.
 
 **Depends on:** T02 and T04.
 
-**Files:** add `content_review.py`; update schemas, question handling, proposal generation, and suggestion application.
+**Files:** `src/resume_agent/content_review.py`, `src/resume_agent/agents/resume_generator.py`, `src/resume_agent/contracts.py`, `tests/test_content_review.py`, `tests/test_resume_fidelity.py`.
 
 **Interfaces:** `EditProposal`, `PatchResult`, `RenderManifest`, and `build_content_preview(snapshot, selected_ids)`.
 Consume a fixed profile revision and answer references. Produce an immutable approved-content hash.
 
-- [ ] Add tests for reject-all, duplicate bullets, stale hashes, unknown IDs, unsupported paths, and overlapping edits.
-- [ ] Add tests for ordered list appends and explicit display omissions.
-- [ ] Stop whole-profile rewriting during question enrichment. Generate final proposals after answers arrive.
-- [ ] Validate all selected edits against the fixed source before applying any change.
-- [ ] Add the content-preview endpoint and require explicit confirmation of its content hash.
+- [x] Add tests for reject-all, duplicate bullets, stale hashes, unknown IDs, unsupported paths, and overlapping edits.
+- [x] Add tests for ordered list appends and explicit display omissions.
+- [x] Stop whole-profile rewriting during question enrichment. Generate final proposals after answers arrive.
+- [x] Validate all selected edits against the fixed source before applying any change.
+- [x] Add the content-preview endpoint and require explicit confirmation of its content hash.
 
 **Run:** `uv run pytest tests/test_content_review.py tests/test_resume_fidelity.py -q`.
 
@@ -169,16 +172,16 @@ Display ordering and omissions must appear in the approved manifest.
 
 **Depends on:** T03 and T05.
 
-**Files:** update the resume generator, graph routes, lint stage, template, HR review, and vision review.
+**Files:** `src/resume_agent/approved_render.py`, `src/resume_agent/templates/approved.tex.jinja`, `src/resume_agent/tools/tectonic_compile.py`, `tests/test_approved_render.py`, `tests/test_template_render.py`.
 
 **Consumes:** approved `RenderManifest` and content snapshot.
 **Produces:** deterministic LaTeX and one of the two supported layout candidates.
 
-- [ ] Add tests that inject scope changes and reversed metrics into mocked writer or repair responses.
-- [ ] Remove free-text LaTeX polishing and free-text repair from the execution path.
-- [ ] Move normalization and display decisions before content approval.
-- [ ] Implement `standard` then `compact` layout selection under the page and overflow rules.
-- [ ] Force every retry path and verify that the approved content hash remains unchanged.
+- [x] Add tests that inject scope changes and reversed metrics into mocked writer or repair responses.
+- [x] Remove free-text LaTeX polishing and free-text repair from the execution path.
+- [x] Move normalization and display decisions before content approval.
+- [x] Implement `standard` then `compact` layout selection under the page and overflow rules.
+- [x] Force every retry path and verify that the approved content hash remains unchanged.
 
 **Run:** `uv run pytest tests/test_approved_render.py tests/test_template_render.py tests/test_graph_flow.py -q`.
 
@@ -189,16 +192,17 @@ A layout failure must request a new run or content revision instead of dropping 
 
 **Depends on:** T03 and T06.
 
-**Files:** add `pdf_content_check.py` and `release_service.py`; update events, streaming, run routes, and output saving.
+**Files:** `src/resume_agent/pdf_content_check.py`, `src/resume_agent/release_service.py`, `src/resume_agent/api/routers/runs.py`, `tests/test_pdf_content_check.py`, `tests/test_release_service.py`, `tests/test_final_recovery.py`.
 
 **Interfaces:** `verify_pdf_content(manifest, pdf_path)`, `PdfReview`, and the typed `review_pdf` action.
 Use `release_records` states and release ordering from the spec.
 
-- [ ] Add tests for missing words, changed signs or units, reversed values, stale review IDs, and replaced PDF bytes.
-- [ ] Add crash tests before copy, after rename, and after commit. Add cancellation after copy but before release.
-- [ ] Add expected-token verification, frozen preview delivery, and explicit PDF approval.
-- [ ] Commit release state and run completion only after verified export and a cancellation check.
-- [ ] Verify replay of the accepted action returns the same release without recompilation or duplicate export.
+- [x] Add tests for missing words, changed signs or units, reversed values, stale review IDs, and replaced PDF bytes.
+- [x] Add crash tests before copy, after rename and after commit.
+- [x] Add cancellation tests after copy but before export commit.
+- [x] Add expected-token verification, frozen preview delivery, and explicit PDF approval.
+- [x] Commit release state and run completion only after verified export and a cancellation check.
+- [x] Verify replay of the accepted action returns the same release without recompilation or duplicate export.
 
 **Run:** `uv run pytest tests/test_pdf_content_check.py tests/test_release_service.py -q`.
 
@@ -209,15 +213,15 @@ No existing token, numeric, or structural guard may be advertised as proof of fa
 
 **Depends on:** T02, T05, and T07.
 
-**Files:** update run service, checkpointer helpers, library history loading, recovery routes, and CLI resume behavior.
+**Files:** `src/resume_agent/recovery.py`, `src/resume_agent/library.py`, `src/resume_agent/run_service.py`, `tests/test_run_recovery.py`, `tests/test_library.py`, `tests/test_final_recovery.py`.
 
 **Interfaces:** `recover_legacy(run_id)` and startup reconciliation against checkpoints, release records, and cancellation commands.
 
-- [ ] Add restart tests at question, content-review, model-call, compile, and PDF-review boundaries.
-- [ ] Rebuild the current pending request from the latest checkpoint without automatic execution.
-- [ ] Implement idempotent v1-to-v2 recovery through a linked new run.
-- [ ] Add explicit missing-artifact state and reviewed historical relinking.
-- [ ] Verify release reconciliation, pending cancellation, CLI/web contention, and missing required legacy source data.
+- [x] Add restart tests at question, content-review, model-call, compile, and PDF-review boundaries.
+- [x] Rebuild the current pending request from the latest checkpoint without automatic execution.
+- [x] Implement idempotent v1-to-v2 recovery through a linked new run.
+- [x] Add explicit missing-artifact state and reviewed historical relinking.
+- [x] Verify release reconciliation, pending cancellation, CLI/web contention, and missing required legacy source data.
 
 **Run:** `uv run pytest tests/test_run_recovery.py tests/test_library.py tests/test_websocket.py -q`.
 
@@ -228,15 +232,15 @@ Original checkpoints and historical files must remain unchanged.
 
 **Depends on:** T04–T08.
 
-**Files:** update API client, main screens, live-run view, upload controls, and interactive CLI prompts.
+**Files:** `src/resume_agent/runtime.py`, `src/resume_agent/workflow.py`, `src/resume_agent/api/v2_manager.py`, `src/resume_agent/api/routers/readiness.py`, `src/resume_agent/api/streaming.py`, `src/resume_agent/cli.py`, `Frontend/src/app.jsx`, `Frontend/src/live-run.jsx`, `Frontend/src/resume-upload.jsx`, `Frontend/src/draft-store.js`, `Frontend/src/api/client.js`, `tests/test_v2_api.py`, `tests/test_ui_flow.py`, `tests/test_import_recovery_ui.py`.
 
 **Interfaces:** `GET /api/readiness`, current pending-action data, content preview, and final PDF review.
 
-- [ ] Add browser tests for missing profile, missing tools, missing provider setup, and import-draft acceptance.
-- [ ] Replace hardcoded readiness with server results. Explain the next required action.
-- [ ] Add before/after content review, default-unselected edits, declared omissions, and exact PDF review.
-- [ ] Preserve non-secret form drafts in IndexedDB, keyed by form, run, review ID, and profile revision.
-- [ ] Separate loading, empty, failed, interrupted, missing-artifact, and complete states in both interfaces.
+- [x] Add browser tests for missing profile, missing tools, missing provider setup, and import-draft acceptance.
+- [x] Replace hardcoded readiness with server results. Explain the next required action.
+- [x] Add before/after content review, default-unselected edits, declared omissions, and exact PDF review.
+- [x] Preserve non-secret form drafts in IndexedDB, keyed by form, run, review ID, and profile revision.
+- [x] Separate loading, empty, failed, interrupted, missing-artifact, and complete states in both interfaces.
 
 **Run:** `npm test`; then run `tests/test_ui_flow.py` against a started preview server.
 
@@ -247,15 +251,15 @@ Restored drafts with a stale review or profile revision must require reconciliat
 
 **Depends on:** T02 and T06.
 
-**Files:** update model adapter, graph retry configuration, readiness checks, and diagnostics.
+**Files:** `src/resume_agent/model_tasks.py`, `src/resume_agent/provider_errors.py`, `src/resume_agent/llm.py`, `tests/test_model_tasks.py`, `tests/test_provider_errors.py`.
 
 **Produces:** stable error codes for authentication, unavailable model, rate limit, transport, invalid output, and truncation.
 
-- [ ] Add fixture tests for tool output, JSON output, arbitrary skill categories, truncation, and malformed responses.
-- [ ] Set one retry owner per model task. Disable duplicate node-level retry handling.
-- [ ] Permit at most two model attempts for retryable failures. Respect bounded provider backoff.
-- [ ] Stop immediately on missing credentials or unavailable models. Keep input and prior approved content intact.
-- [ ] Record the failing stage, model, attempt count, and sanitized error code in durable run metadata.
+- [x] Add fixture tests for tool output, JSON output, arbitrary skill categories, truncation, and malformed responses.
+- [x] Set one retry owner per model task. Disable duplicate node-level retry handling.
+- [x] Permit at most two model attempts for retryable failures. Respect bounded provider backoff.
+- [x] Stop immediately on missing credentials or unavailable models. Keep input and prior approved content intact.
+- [x] Record the failing stage, model, attempt count, and sanitized error code in durable run metadata.
 
 **Run:** `uv run pytest tests/test_llm.py tests/test_resume_structured_output.py tests/test_provider_errors.py -q`.
 
@@ -265,13 +269,19 @@ Restored drafts with a stale review or profile revision must require reconciliat
 
 **Depends on:** T01–T10.
 
-**Files:** update CI, package checks, browser tests, regression fixtures, version metadata, and release documentation.
+**Files:** `.github/workflows/ci.yml`, `pyproject.toml`, `tests/test_packaged_ui.py`, `tests/test_platform_runtime.py`, `tests/test_reliability_journey.py`, `tests/reliability_server.py`, `docs/superpowers/plans/2026-11-13-r1-acceptance.md`.
 
-- [ ] Run Python lint and tests on Python 3.12 and 3.13.
-- [ ] Add frontend tests, frontend build, and a browser job with a started backend and preview server.
-- [ ] Add real Tectonic/Poppler checks and Windows lock/path coverage.
-- [ ] Build the wheel and source archive. Test the installed wheel with bundled UI assets.
-- [ ] Complete the C1 evidence table and prepare version 3.0.0 release notes.
+- [x] Run Python lint and tests on Python 3.12 and 3.13.
+- [x] Add frontend tests.
+- [x] Build the frontend.
+- [x] Add a browser job with a started backend and preview server.
+- [x] Add real Tectonic/Poppler checks.
+- [x] Configure native Windows lock/path coverage. Execution remains an external gate.
+- [x] Build the wheel.
+- [x] Build the source archive.
+- [x] Test the installed wheel with bundled UI assets.
+- [x] Complete the local C1 evidence table.
+- [x] Prepare version 3.0.0 release notes.
 
 **Checkpoint C1 — Pass only when all conditions hold:**
 
@@ -291,36 +301,38 @@ Stop R2 if C1 fails. Do not replace this gate with a total test count.
 
 **Depends on:** C1.
 
-**Files:** add `memory.py` and a memory router; extend migrations and existing profile/editor views.
+**Files:** `src/resume_agent/memory.py`, `src/resume_agent/api/routers/memory.py`, `Frontend/src/career-memory.jsx`, `tests/test_memory.py`, `tests/test_memory_api.py`, `tests/test_memory_ui.py`.
 
 **Interfaces:** `MemoryProposal`, `MemoryRecord`, and `decide_memory(id, decision, expected_revision, action_id)`.
 
-- [ ] Add tests for reject, accept-once, stale revision, revoke, supersede, and interrupted fact promotion.
-- [ ] Implement typed candidate-fact, target-preference, and writing-rule proposals.
-- [ ] Apply accepted facts through `ProfileStore`. Keep other accepted rules in the memory audit.
-- [ ] Reconcile interrupted promotions by comparing old, proposed, and current profile hashes.
-- [ ] Show active memory and its source. Apply it only to future runs and evaluations.
+- [x] Add tests for reject, accept-once, stale revision, revoke, supersede, and interrupted fact promotion.
+- [x] Implement typed candidate-fact, target-preference, and writing-rule proposals.
+- [x] Apply accepted facts through `ProfileStore`. Keep other accepted rules in the memory audit.
+- [x] Reconcile interrupted promotions by comparing old, proposed, and current profile hashes.
+- [x] Show active memory and its source. Apply it only to future runs and evaluations.
 
 **Run:** `uv run pytest tests/test_memory.py tests/test_profile_store.py -q`.
 
-**Done when:** a rejected correction has no durable effect, and a later run reuses an accepted rule without changing earlier artifacts.
+**Done when:** a rejected correction leaves active profile facts and rules unchanged. Its rejection remains in the audit, and a later run reuses an accepted rule without changing earlier artifacts.
 
 ### T13 — Add versioned job snapshots and auditable fit calculations
 
 **Depends on:** T12.
 
-**Files:** add `career_schemas.py`, `job_store.py`, and `role_evaluation.py`; extend migrations and `operation_service.py`.
+**Files:** `src/resume_agent/career_schemas.py`, `src/resume_agent/job_store.py`, `src/resume_agent/role_evaluation.py`, `src/resume_agent/migrations.py`, `tests/test_job_store.py`, `tests/test_role_evaluation.py`, `tests/test_evaluation_operations.py`.
 
 **Interfaces:** `CareerJob`, `RoleRequirement`, `RequirementFinding`, `RoleEvaluation`, and `score_fit(findings, rubric_version)`.
 Store profile/JD hashes and rubric `fit-v1` with every result.
 
-- [ ] Add exact arithmetic tests for supported, transferable, contradicted, unknown, and absent criteria.
-- [ ] Implement the six fixed weights and evidence interval from the spec.
-- [ ] Implement explicit eligibility checks without inferring authorization from personal identifiers.
-- [ ] Validate JD spans and candidate source references. Reject unsupported evidence references.
-- [ ] Mark evaluations stale after input changes. Return no score for zero usable criteria.
+- [x] Add exact arithmetic tests for supported, transferable, contradicted, unknown, and absent criteria.
+- [x] Implement the six fixed weights and evidence interval from the spec.
+- [x] Implement explicit eligibility checks without inferring authorization from personal identifiers.
+- [x] Validate JD spans and candidate source references. Reject unsupported evidence references.
+- [x] Mark evaluations stale after input changes.
+- [x] Return no score for zero usable criteria.
 
-- [ ] Extend `OperationService` for durable evaluations. Verify restart during model work and after result persistence.
+- [x] Extend `OperationService` for durable evaluations.
+- [x] Verify restart during model work and after result persistence.
 
 **Run:** `uv run pytest tests/test_role_evaluation.py tests/test_job_store.py -q`.
 
@@ -331,17 +343,17 @@ Supported plus transferable must yield `[75,75]` at 100% coverage.
 
 **Depends on:** T13.
 
-**Files:** add job/evaluation routes; update new-run, job-detail, and CLI flows.
+**Files:** `src/resume_agent/api/routers/jobs.py`, `src/resume_agent/cli.py`, `Frontend/src/career-jobs.jsx`, `tests/test_career_ui.py`, `docs/superpowers/plans/2026-11-13-r2-acceptance.md`.
 
 **Interfaces:** the job and evaluation endpoints in the spec. Preserve generation from pasted text, files, and URLs.
 
-- [ ] Add API/browser tests for prioritize, review, confirmed eligibility conflict, stale evaluation, and user override.
-- [ ] Show evidence coverage, unknowns, requirement sources, and the fixed recommendation rules.
-- [ ] Offer evaluation before generation. Permit generation after an explicit recommendation override.
-- [ ] Keep fit scores separate from writing/formatting checks and hiring probabilities.
-- [ ] Preserve the chosen JD snapshot and evaluation reference when generation starts.
+- [x] Add API/browser tests for prioritize, review, confirmed eligibility conflict, stale evaluation, and user override.
+- [x] Show evidence coverage, unknowns, requirement sources, and the fixed recommendation rules.
+- [x] Offer evaluation before generation. Permit generation after an explicit recommendation override.
+- [x] Keep fit scores separate from writing/formatting checks and hiring probabilities.
+- [x] Preserve the chosen JD snapshot and evaluation reference when generation starts.
 
-- [ ] Prepare version 3.1.0 metadata, release notes, and installed-candidate evidence before recording C2.
+- [x] Prepare version 3.1.0 metadata, release notes, and installed-candidate evidence before recording C2.
 
 **Checkpoint C2:** accepted memory persists, evidence references resolve, score arithmetic is exact, and unknown evidence remains visible.
 No score may silently exclude a candidate or imply an interview probability.
@@ -352,15 +364,15 @@ No score may silently exclude a candidate or imply an interview probability.
 
 **Depends on:** C2.
 
-**Files:** add `applications.py` and application routes; update migrations, company cleanup, and tracker views.
+**Files:** `src/resume_agent/applications.py`, `src/resume_agent/api/routers/applications.py`, `src/resume_agent/migrations.py`, `tests/test_applications.py`.
 
 **Interfaces:** `Application`, `ApplicationEvent`, and the application endpoints in the spec.
 
-- [ ] Add tests for explicit submission, direct forward changes, correction/reopen, idempotency, and unknown dates.
-- [ ] Implement the separate application stages and append-only event corrections.
-- [ ] Record the selected sent-artifact hash, or explicitly record an unknown artifact.
-- [ ] Prevent later generations or document deletion from changing application history.
-- [ ] Update company cleanup so retained jobs and applications are not deleted or orphaned.
+- [x] Add tests for explicit submission, direct forward changes, correction/reopen, idempotency, and unknown dates.
+- [x] Implement the separate application stages and append-only event corrections.
+- [x] Record the selected sent-artifact hash, or explicitly record an unknown artifact.
+- [x] Prevent later generations or document deletion from changing application history.
+- [x] Update company cleanup so retained jobs and applications are not deleted or orphaned.
 
 **Run:** `uv run pytest tests/test_applications.py tests/test_library.py -q`.
 
@@ -370,15 +382,15 @@ No score may silently exclude a candidate or imply an interview probability.
 
 **Depends on:** T15.
 
-**Files:** add `outcomes.py` and its route; update dashboard, Companies, and tracker reports.
+**Files:** `src/resume_agent/outcomes.py`, `src/resume_agent/api/routers/outcomes.py`, `Frontend/src/career-outcomes.jsx`, `tests/test_outcomes.py`, `tests/test_outcomes_ui.py`.
 
 **Interfaces:** `OutcomeBandReport` with positive, negative, pending, withdrawn, unknown-score, and excluded counts.
 
-- [ ] Add tests for score-at-submission snapshots, historical positive responses, pending exclusions, and small samples.
-- [ ] Implement the three score bands and resolved-outcome rules from the spec.
-- [ ] Suppress rates below ten resolved records per band. Show counts and exclusions.
-- [ ] Rename compilation success to generation health. Derive application counts only from explicit events.
-- [ ] Add local export of the report without automatic rubric changes or telemetry.
+- [x] Add tests for score-at-submission snapshots, historical positive responses, pending exclusions, and small samples.
+- [x] Implement the three score bands and resolved-outcome rules from the spec.
+- [x] Suppress rates below ten resolved records per band. Show counts and exclusions.
+- [x] Rename compilation success to generation health. Derive application counts only from explicit events.
+- [x] Add local export of the report without automatic rubric changes or telemetry.
 
 **Run:** `uv run pytest tests/test_outcomes.py tests/test_applications.py -q`.
 
@@ -388,15 +400,15 @@ No score may silently exclude a candidate or imply an interview probability.
 
 **Depends on:** T13. Start only after C2 passes.
 
-**Files:** add `discovery/` with provider adapters, configuration validation, storage, and a sync service.
+**Files:** `src/resume_agent/discovery/schemas.py`, `src/resume_agent/discovery/providers.py`, `src/resume_agent/discovery/http.py`, `src/resume_agent/discovery/journal.py`, `src/resume_agent/discovery/service.py`, `tests/test_discovery.py`, `tests/test_discovery_http.py`, `tests/test_discovery_service.py`.
 
 **Interfaces:** `DiscoverySource`, `DiscoverySyncResult`, and a provider protocol `fetch_board(source) -> BoardResult`.
 
-- [ ] Add provider fixtures for pagination, duplicate IDs, malformed records, limits, HTTP 429, and transient failure.
-- [ ] Implement public Greenhouse, Lever, and Ashby adapters from their official contracts.
-- [ ] Enforce the board, job, body-size, concurrency, timeout, redirect, and retry limits from the spec.
-- [ ] Store stable source keys and immutable JD snapshots. Preserve freshness and partial-result warnings.
-- [ ] Verify that only a complete successful refresh can mark a prior posting removed.
+- [x] Add provider fixtures for pagination, duplicate IDs, malformed records, limits, HTTP 429, and transient failure.
+- [x] Implement public Greenhouse, Lever, and Ashby adapters from their official contracts.
+- [x] Enforce the board, job, body-size, concurrency, timeout, redirect, and retry limits from the spec.
+- [x] Store stable source keys and immutable JD snapshots. Preserve freshness and partial-result warnings.
+- [x] Verify that only a complete successful refresh can mark a prior posting removed.
 
 **Run:** `uv run pytest tests/test_discovery.py tests/test_security.py -q`.
 
@@ -406,15 +418,15 @@ No score may silently exclude a candidate or imply an interview probability.
 
 **Depends on:** T14, T16, and T17.
 
-**Files:** add discovery routes and review views in the existing UI; add interactive CLI discovery commands.
+**Files:** `src/resume_agent/api/routers/discovery.py`, `src/resume_agent/cli.py`, `Frontend/src/career-discovery.jsx`, `Frontend/src/career-applications.jsx`, `tests/test_search_operations_ui.py`, `tests/test_search_operations_cli.py`, `docs/superpowers/plans/2026-11-13-r3-acceptance.md`.
 
-- [ ] Add browser tests for source setup, manual refresh, partial results, stale data, selection, and evaluation handoff.
-- [ ] Show source, freshness, posting state, and scan limits on each result set.
-- [ ] Let the user select jobs for evaluation. Do not evaluate all fetched jobs automatically.
-- [ ] Preserve the selected job identity through evaluation, generation, and application linking.
-- [ ] Verify empty, failed, partial, and complete scans remain distinct across restart.
+- [x] Add browser tests for source setup, manual refresh, partial results, stale data, selection, and evaluation handoff.
+- [x] Show source, freshness, posting state, and scan limits on each result set.
+- [x] Let the user select jobs for evaluation. Do not evaluate all fetched jobs automatically.
+- [x] Preserve the selected job identity through evaluation, generation, and application linking.
+- [x] Verify empty, failed, partial, and complete scans remain distinct across restart.
 
-- [ ] Prepare version 3.2.0 metadata, release notes, and installed-candidate evidence before recording C3.
+- [x] Prepare version 3.2.0 metadata, release notes, and installed-candidate evidence before recording C3.
 
 **Checkpoint C3:** completed PDFs, submitted applications, responses, and discovery results have separate state and accurate counts.
 No failed or partial sync may erase jobs or assert that they closed.
@@ -425,15 +437,15 @@ No failed or partial sync may erase jobs or assert that they closed.
 
 **Depends on:** C3.
 
-**Files:** add `agent_cli.py` and command-envelope schemas; reuse run, import, evaluation, memory, and application services.
+**Files:** `src/resume_agent/agent_cli.py`, `src/resume_agent/agent_schemas.py`, `tests/test_cli_json.py`, `tests/test_interface_parity.py`, `docs/agent-json.md`.
 
 **Interfaces:** commands, resource identifiers, envelope fields, and exit codes from the spec.
 
-- [ ] Add closed-stdin tests for start, inspect, respond, cancel, export, import, evaluate, discover, memory, and application.
-- [ ] Implement exactly one JSON response on stdout. Keep progress on stderr.
-- [ ] Await command execution until a durable pause or terminal result.
-- [ ] Validate action files through the same typed actions as the API.
-- [ ] Compare CLI/API state, approval defaults, and artifact hashes using interface-parity tests.
+- [x] Add closed-stdin tests for start, inspect, respond, cancel, export, import, evaluate, discover, memory, and application.
+- [x] Implement exactly one JSON response on stdout. Keep progress on stderr.
+- [x] Await command execution until a durable pause or terminal result.
+- [x] Validate action files through the same typed actions as the API.
+- [x] Compare CLI/API state, approval defaults, and artifact hashes using interface-parity tests.
 
 **Run:** `uv run pytest tests/test_cli_json.py tests/test_interface_parity.py -q`.
 
@@ -443,16 +455,18 @@ No failed or partial sync may erase jobs or assert that they closed.
 
 **Depends on:** T19.
 
-**Files:** add `model_tasks.py`; extend `operation_service.py` and the import, evaluation, proposal, and graph model-call seams.
+**Files:** `src/resume_agent/external_model.py`, `src/resume_agent/model_tasks.py`, `src/resume_agent/operation_service.py`, `src/resume_agent/api/routers/model_tasks.py`, `tests/test_external_agent.py`.
 
 **Interfaces:** `ModelTask`, `OperationService`, `configured_provider`, and `external_agent` execution modes.
 Use the unique owner/task/input-hash key from the spec to avoid duplicate requests on graph replay.
 
-- [ ] Add tests for external import, JD extraction, proposal generation, evaluation, restart, stale responses, and two-attempt limits.
-- [ ] Persist external model requests and return them as `next_action` without calling a backend model.
-- [ ] Validate host results through existing schemas and source-reference checks.
-- [ ] Keep model responses separate from content and PDF approvals. Disable optional external-mode HR/vision calls.
-- [ ] Patch the backend model factory to raise in external-mode tests. Complete a fixture journey without triggering it.
+- [x] Add tests for external import, JD extraction, proposal generation, evaluation, restart, stale responses, and two-attempt limits.
+- [x] Persist external model requests and return them as `next_action` without calling a backend model.
+- [x] Validate host results through existing schemas and source-reference checks.
+- [x] Keep model responses separate from content and PDF approvals.
+- [x] Disable optional external-mode HR/vision calls.
+- [x] Patch the backend model factory to raise in external-mode tests.
+- [x] Complete a fixture journey without triggering that factory.
 
 **Run:** `uv run pytest tests/test_external_agent.py tests/test_model_tasks.py tests/test_cli_json.py -q`.
 
@@ -462,13 +476,14 @@ Use the unique owner/task/input-hash key from the spec to avoid duplicate reques
 
 **Depends on:** T20.
 
-**Files:** add a shared skill package and Codex/Claude Code install guides; update packaging metadata, README, demo assets, and publishing workflow.
+**Files:** `src/resume_agent/skill_distribution.py`, `skills/resume-agent/SKILL.md`, `skills/resume-agent/references/protocol.md`, `skills/resume-agent/agents/openai.yaml`, `.github/workflows/publish-candidate.yml`, `tests/test_skill_distribution.py`, `docs/agent-hosts.md`, `docs/publication-checklist.md`.
 
-- [ ] Write the skill around the JSON contract and explicit user review pauses.
-- [ ] Add protocol tests for action-file use, shell metacharacters, stale reviews, and hostile instructions inside job text.
-- [ ] Validate installation and a synthetic journey separately in Codex and Claude Code.
-- [ ] Document host-model versus backend-provider billing and prerequisites without universal free-use claims.
-- [ ] Prepare the wheel, source archive, PyPI metadata, short demo, issue templates, and release notes.
+- [x] Write the skill around the JSON contract and explicit user review pauses.
+- [x] Add protocol tests for action-file use, shell metacharacters, stale reviews, and hostile instructions inside job text.
+- [x] Validate the installed skill and named handoff in Codex CLI 0.153.4.
+- [ ] Validate the installed skill and named handoff in authenticated Claude Code.
+- [x] Document host-model versus backend-provider billing and prerequisites without universal free-use claims.
+- [x] Prepare the wheel, source archive, PyPI metadata, short demo, issue templates, and release notes.
 
 **Done when:** each claimed host has a named tested version and a recorded journey.
 An unavailable host is unsupported in release notes until its required smoke check passes.
@@ -478,12 +493,19 @@ Prepared publication files do not authorize registry publication or GitHub setti
 
 **Depends on:** T01–T21.
 
+**Files:** `docs/superpowers/plans/2026-11-13-r4-acceptance.md`, `docs/validation/synthetic-journeys-2026-11-13.md`, `docs/validation/pdf-review-2026-11-13.md`, `docs/validation/volunteer-pilots.md`, `docs/validation/candidate-artifacts-2026-11-14.json`, `docs/candidate-rollback.md`.
+
 - [x] Run all local required Python, frontend, browser, compiler, migration, package, and interface-parity checks. Remote platform certification remains open.
 - [x] Run at least 20 synthetic journeys spanning success, rejection, interruption, provider failure, migration, and partial discovery. Final record: 30 journeys.
 - [x] Review ten representative PDFs for factual correspondence and visual defects.
-- [ ] Record five owner-arranged volunteer pilots. Measure setup, first reviewed PDF, interruptions, and factual-review results.
+- [ ] Record five owner-arranged volunteer pilots.
+- [ ] Measure pilot setup, first reviewed PDF, interruptions and factual-review results.
 - [x] Record revision, environment, models, input set, results, exclusions, known limits, and rollback procedure.
-- [ ] Prepare version 3.3.0 release artifacts and a concrete external publication checklist for separate approval.
+- [x] Prepare version 3.3.0 release artifacts and a concrete external publication checklist for separate approval.
+
+- [ ] Record the configured Linux and native Windows certification results.
+- [ ] Record the authenticated Claude smoke result before claiming support.
+- [ ] Close C4 only after its required evidence passes.
 
 **Checkpoint C4 — Pass only when all conditions hold:**
 
