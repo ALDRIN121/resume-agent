@@ -205,7 +205,7 @@ async def test_upload_parse_completion(browser_page):
     await prepare(page)
     async def upload(route):
         await route.fulfill(content_type='application/json', body=json.dumps({'job_id': 'parse-test'}))
-    await page.route('**/api/resume/upload', upload)
+    await page.route('**/api/resume/upload*', upload)
     parse_sockets = []
     async def parse_socket(ws):
         parse_sockets.append(ws)
@@ -226,7 +226,7 @@ async def test_resume_upload_can_be_minimized_reopened_and_replaced_again(browse
     hook_errors = []
     page.on('console', lambda msg: hook_errors.append(msg.text)
             if msg.type == 'error' and ('React' in msg.text or 'hook' in msg.text.lower()) else None)
-    await page.route('**/api/resume/upload', lambda route: route.fulfill(
+    await page.route('**/api/resume/upload*', lambda route: route.fulfill(
         content_type='application/json', body=json.dumps({'job_id': 'parse-lifecycle'})))
     sockets = []
     def parse_socket(ws):
@@ -265,13 +265,14 @@ async def test_minimized_resume_failure_is_visible_and_can_be_retried(browser_pa
     await prepare(page)
     finish_upload = asyncio.Event()
     async def upload(route):
+        assert route.request.url.endswith('/api/resume/upload?defer_processing=true')
         if failure == 'upload':
             await finish_upload.wait()
             await route.fulfill(status=400, content_type='application/json',
                                 body=json.dumps({'detail': 'Only .pdf and .tex resumes are supported.'}))
         else:
             await route.fulfill(content_type='application/json', body=json.dumps({'job_id': 'failed-parse'}))
-    await page.route('**/api/resume/upload', upload)
+    await page.route('**/api/resume/upload*', upload)
     sockets = []
     def parse_socket(ws):
         sockets.append(ws)
@@ -316,7 +317,7 @@ async def test_resume_flow_shows_current_step_and_fits_window(browser_page, widt
     await picker.focus()
     async with page.expect_file_chooser() as chooser:
         await page.keyboard.press('Enter')
-    await page.route('**/api/resume/upload', lambda route: route.fulfill(
+    await page.route('**/api/resume/upload*', lambda route: route.fulfill(
         content_type='application/json', body=json.dumps({'job_id': 'progress-ui'})))
     sockets = []
     def socket(ws):
@@ -372,7 +373,7 @@ async def test_first_resume_import_cannot_overlap_another_upload(browser_page):
     await prepare(page)
     await page.route('**/api/profile', lambda route: route.fulfill(
         status=404, content_type='application/json', body='{"detail":"No base resume"}'))
-    await page.route('**/api/resume/upload', lambda route: route.fulfill(
+    await page.route('**/api/resume/upload*', lambda route: route.fulfill(
         content_type='application/json', body='{"job_id":"first-import"}'))
     await page.route_web_socket('**/ws/resume-parse/*', lambda ws: ws.send(
         json.dumps({'stage_id': 'parse', 'status': 'running'})))
