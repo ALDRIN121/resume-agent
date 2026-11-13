@@ -2,6 +2,8 @@
 
 Updated 14 November 2026. Branch: `codex/resume-agent-r1`. **C4 remains OPEN.** The candidate has not been pushed, tagged or published. Local implementation is distinct from external release certification.
 
+**Latest live retest:** the updated key connects successfully, but role evaluation returns `truncated_output` and PDF export is blocked by kerning-induced extraction of `Tools` as `T ools`. These require local repair and a repeated live journey. The earlier controlled-response results remain historical evidence. See the [retest report](../../validation/live-provider-retest-2026-11-14.md).
+
 ## Scope and revisions
 
 T01–T21 are implemented locally. T22's author-owned checks, representative PDF inspection, final review and package preparation are recorded here. T22 cannot close until its external evidence exists.

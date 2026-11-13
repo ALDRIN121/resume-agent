@@ -2,7 +2,7 @@
 
 Updated 14 November 2026. Branch `codex/resume-agent-r1`. All commits are local. Nothing has been pushed, tagged or published.
 
-**T01–T21 are implemented. T22 local validation and candidate artifacts are complete. External acceptance is still required. C4 remains OPEN because external evidence is missing.** The build remains a 3.3.0 candidate.
+**Roadmap feature code and candidate artifacts exist. The live retest found two unresolved issues: incomplete role evaluation and a PDF extraction false mismatch. Local repairs and renewed live acceptance are required. C4 remains OPEN.** The build remains a 3.3.0 candidate. See the [live retest](../../validation/live-provider-retest-2026-11-14.md).
 
 | Work | Implemented result | Checkpoint |
 | --- | --- | --- |

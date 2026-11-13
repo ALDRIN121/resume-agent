@@ -2,6 +2,8 @@
 
 Date: 14 November 2026, Asia/Kolkata. App revision: `c1a5188`. This check followed the user's request to test the running interface with the configured LLM API.
 
+This is the initial result. The owner subsequently updated the key. The [live retest](live-provider-retest-2026-11-14.md) records a successful connection and two newly observed workflow failures.
+
 **Result: the live connection failed with an authentication/access error. A complete live resume journey was not run.**
 
 | Item | Observation |

@@ -1,6 +1,6 @@
 # Resume Agent: Reliable Resume and Job Search Design
 
-Date: 12 November 2026. Updated: 14 November 2026. Status: feature implementation and local C1–C3 behavior checks are complete. C4 remains open.
+Date: 12 November 2026. Updated: 14 November 2026. Status: feature implementation is present and controlled-response C1–C3 checks passed. Live validation found PDF/evaluation issues that need repair. C4 remains open.
 
 The [R1 execution contract](2026-11-12-r1-execution-contract.md) resolves the storage, recovery, identity, and activation decisions from the EGM review.
 The [career-domain contract](2026-11-13-career-domain-execution-contract.md) resolves memory, requirement groups, outcomes and application events.
