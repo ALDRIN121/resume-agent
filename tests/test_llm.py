@@ -228,25 +228,32 @@ def test_complete_fenced_json_remains_supported(sdk):
 
 def test_failed_cli_reimport_preserves_the_existing_resume(sdk, tmp_path, monkeypatch):
     from resume_agent import cli
-    from resume_agent.agents import base_resume_loader
+    from resume_agent import runtime as runtime_module
 
     sdk[1]["raw_content"] = '{"personal":{"full_name":"Test User","email":"test@example.com"},'
     settings = ResumeAgentSettings(_env_file=None, provider="openai", OPENAI_API_KEY="test-key",
                                    model={"default": "private-custom-model", "vision": ""})
     monkeypatch.setattr(ResumeAgentSettings, "load", lambda: settings)
     monkeypatch.setattr(ResumeAgentSettings, "is_configured", lambda self: True)
-    saved = tmp_path / "base_resume.yaml"
+    runtime = runtime_module.Runtime(root=tmp_path, settings=settings)
+    monkeypatch.setattr(runtime_module, "Runtime", lambda **kwargs: runtime)
+    saved = runtime.profiles.path
     previous = 'personal:\n  full_name: Previous Owner\n  email: previous@example.com\n'
     saved.write_text(previous)
-    for module in (cli, base_resume_loader):
-        monkeypatch.setattr(module, "BASE_RESUME_FILE", saved)
     source = tmp_path / "resume.tex"
     source.write_text("Test User test@example.com")
 
     result = CliRunner().invoke(cli.app, ["init", "--source", str(source)])
-    assert result.exit_code == 1
+    assert result.exit_code == 3  # Shared workflow execution failure, not invalid input.
     assert saved.exists()
     assert saved.read_text() == previous
+    with runtime.store.connection() as conn:
+        operation_id = conn.execute('SELECT id FROM operations').fetchone()['id']
+        assert conn.execute('SELECT COUNT(*) FROM actions').fetchone()[0] == 0
+    operation = runtime.imports.get(operation_id)
+    assert operation['status'] == 'failed'
+    assert operation['diagnostics'][0]['code'] == 'truncated_output'
+    assert len(sdk[0]) == 1
 
 
 @pytest.mark.parametrize("provider,model,key_name,endpoint", [

@@ -1,145 +1,103 @@
-"""Base resume REST endpoints."""
-
+"""Current profile and explicitly reviewed import HTTP adapters."""
 from __future__ import annotations
 
 import asyncio
-import uuid
 from pathlib import Path
-from typing import Any
 
-import yaml
-from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel
 
-from ...agents.base_resume_loader import parse_and_save_resume
-from ...config import BASE_RESUME_FILE, MAX_RESUME_UPLOAD_BYTES, SOURCE_DIR
+from ...config import MAX_RESUME_UPLOAD_BYTES
 from ...contracts import AcceptImport, RejectImport
 from ...imports import ImportInputError, ImportService
-from ...llm import describe_llm_error
 from ...profile_store import ProfileConflictError
 from ...run_store import Conflict
 from ...schemas import UserResume
-from ..events import ResumeParseEvent, dump_event
 from ..security import request_is_loopback
 
-router = APIRouter(prefix="/api/resume", tags=["resume"])
+router = APIRouter(prefix='/api/resume', tags=['resume'])
 ws_router = APIRouter()
 
-_parse_jobs: dict[str, asyncio.Queue[ResumeParseEvent | None]] = {}
-# Retain background parse tasks so they aren't garbage-collected mid-flight.
-_parse_tasks: set[asyncio.Task[None]] = set()
+
+@router.get('')
+async def get_resume(request: Request):
+    snapshot = request.app.state.services.profiles.load_snapshot()
+    if snapshot is None:
+        raise HTTPException(404, detail={'code': 'profile_not_found'})
+    return snapshot.profile.model_dump(mode='json')
 
 
-@router.get("")
-async def get_resume() -> dict[str, Any]:
-    if not BASE_RESUME_FILE.exists():
-        raise HTTPException(status_code=404, detail="No base resume has been parsed yet.")
-    data = yaml.safe_load(BASE_RESUME_FILE.read_text(encoding="utf-8")) or {}
-    return UserResume.model_validate(data).model_dump(mode="json")
+@router.get('/raw', response_class=PlainTextResponse)
+async def get_resume_raw(request: Request):
+    path = request.app.state.services.profiles.path
+    if not path.exists():
+        raise HTTPException(404, detail={'code': 'profile_not_found'})
+    return PlainTextResponse(path.read_text(encoding='utf-8'))
 
 
-@router.get("/raw", response_class=PlainTextResponse)
-async def get_resume_raw() -> PlainTextResponse:
-    if not BASE_RESUME_FILE.exists():
-        raise HTTPException(status_code=404, detail="No base resume has been parsed yet.")
-    return PlainTextResponse(BASE_RESUME_FILE.read_text(encoding="utf-8"))
+@router.put('')
+async def update_resume(request: Request, body: dict = Body(...)):
+    profiles = request.app.state.services.profiles
+    current = profiles.load_snapshot()
+    if 'profile' in body:
+        if set(body) - {'profile', 'expected_revision'}:
+            raise HTTPException(422, detail={'code': 'invalid_profile_update'})
+        expected = body.get('expected_revision')
+        profile = body['profile']
+    else:
+        header = request.headers.get('if-match')
+        expected = header.strip('"') if header else None
+        profile = body
+    if current is not None and expected is None:
+        raise HTTPException(409, detail={'code': 'expected_profile_revision_required'})
+    try:
+        saved = profiles.save(expected, UserResume.model_validate(profile), {'source': 'explicit_profile_edit'})
+    except ProfileConflictError:
+        raise HTTPException(409, detail={'code': 'profile_conflict'}) from None
+    return saved.profile.model_dump(mode='json')
 
 
-@router.put("")
-async def update_resume(resume: UserResume) -> dict[str, Any]:
-    BASE_RESUME_FILE.parent.mkdir(parents=True, exist_ok=True)
-    BASE_RESUME_FILE.write_text(
-        yaml.dump(resume.model_dump(), default_flow_style=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-    return resume.model_dump(mode="json")
-
-
-@router.post("/upload")
-async def upload_resume(file: UploadFile = File(...)) -> dict[str, str]:
-    suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in {".pdf", ".tex"}:
-        raise HTTPException(status_code=400, detail="Only .pdf and .tex resumes are supported.")
-
+@router.post('/upload')
+async def upload_resume(request: Request, file: UploadFile = File(...)):
     raw = await file.read(MAX_RESUME_UPLOAD_BYTES + 1)
     if len(raw) > MAX_RESUME_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Resume upload exceeds 10 MiB.")
-
-    job_id = str(uuid.uuid4())
-    queue: asyncio.Queue[ResumeParseEvent | None] = asyncio.Queue()
-    _parse_jobs[job_id] = queue
-
-    SOURCE_DIR.mkdir(parents=True, exist_ok=True)
-    dest = SOURCE_DIR / f"{job_id}{suffix}"
-    dest.write_bytes(raw)
-
-    task = asyncio.create_task(_parse_resume_job(job_id, dest, queue))
-    _parse_tasks.add(task)
-    task.add_done_callback(_parse_tasks.discard)
-    return {"job_id": job_id}
+        raise HTTPException(413, detail={'code': 'upload_too_large'})
+    service = request.app.state.services.imports
+    try:
+        created = service.create(raw, file.filename or '')
+        draft = await service.drive(created['id'])
+        return draft | {'job_id': draft['id'], 'operation_id': draft['id'], 'contract_version': 2}
+    except ImportInputError as exc:
+        raise HTTPException(400, detail={'code': exc.code}) from None
 
 
-@ws_router.websocket("/ws/resume-parse/{job_id}")
-async def resume_parse_events(websocket: WebSocket, job_id: str) -> None:
-    if not request_is_loopback(websocket.headers.get("host"), websocket.headers.get("origin")):
+@ws_router.websocket('/ws/resume-parse/{job_id}')
+async def resume_parse_events(websocket: WebSocket, job_id: str):
+    if not request_is_loopback(websocket.headers.get('host'), websocket.headers.get('origin')):
         await websocket.close(code=1008)
         return
     await websocket.accept()
-    queue = _parse_jobs.get(job_id)
-    if queue is None:
-        await websocket.close()
-        return
     try:
-        while True:
-            event = await queue.get()
-            if event is None:
+        service = websocket.app.state.services.imports
+        async for event in service.operations.subscribe(job_id):
+            state = service.get(job_id)
+            await websocket.send_json({'type': 'import_state', 'operation': state})
+            if state['status'] != 'running':
                 break
-            await websocket.send_json(dump_event(event))
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, KeyError):
         pass
     finally:
-        _parse_jobs.pop(job_id, None)
-
-
-async def _parse_resume_job(
-    job_id: str,
-    source: Path,
-    queue: asyncio.Queue[ResumeParseEvent | None],
-) -> None:
-    loop = asyncio.get_running_loop()
-    active_stage = "upload"
-    labels = {"upload": "Upload file", "extract": "Read document",
-              "parse": "Understand resume", "write_yaml": "Save base resume"}
-
-    def report(stage: str, status: str) -> None:
-        nonlocal active_stage
-        active_stage = stage
-        event = ResumeParseEvent(stage_id=stage, label=labels[stage], status=status)
-        loop.call_soon_threadsafe(queue.put_nowait, event)
-
-    try:
-        await queue.put(ResumeParseEvent(stage_id="upload", label=labels["upload"], status="done"))
-        resume = await asyncio.to_thread(parse_and_save_resume, source, on_progress=report)
-        await queue.put(
-            ResumeParseEvent(
-                stage_id="write_yaml",
-                label=labels["write_yaml"],
-                status="done",
-                detail=resume.personal.full_name,
-            )
-        )
-    except Exception as exc:
-        await queue.put(
-            ResumeParseEvent(
-                stage_id=active_stage,
-                label=labels[active_stage],
-                status="failed",
-                detail=describe_llm_error(exc),
-            )
-        )
-    finally:
-        await queue.put(None)
+        await websocket.close()
 
 
 class CurrentProfileReview(BaseModel):

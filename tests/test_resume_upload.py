@@ -2,7 +2,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
 from fastapi.testclient import TestClient
 
 from resume_agent.agents import base_resume_loader as loader
@@ -13,44 +12,28 @@ from resume_agent.schemas import UserResume
 
 
 @pytest.mark.parametrize("fails", [False, True])
-def test_upload_reports_the_real_parsing_phase(tmp_path, monkeypatch, fails):
-    saved_file = tmp_path / "base_resume.yaml"
+def test_upload_reports_durable_draft_or_safe_failure_without_saving(tmp_path, fails):
+    from resume_agent.runtime import Runtime
     old = UserResume(personal={"full_name": "Old Owner", "email": "old@example.com"})
     new = UserResume(personal={"full_name": "New Owner", "email": "new@example.com"})
-    saved_file.write_text(yaml.safe_dump(old.model_dump()))
-    monkeypatch.setattr(loader, "BASE_RESUME_FILE", saved_file)
-    monkeypatch.setattr(router, "BASE_RESUME_FILE", saved_file)
-    monkeypatch.setattr(router, "SOURCE_DIR", tmp_path / "source")
-    monkeypatch.setattr(ResumeAgentSettings, "load", lambda: ResumeAgentSettings(_env_file=None))
-    llm = MagicMock()
-    if fails:
-        llm.with_structured_output.return_value.invoke.side_effect = RuntimeError("Provider unavailable")
-    else:
-        llm.with_structured_output.return_value.invoke.return_value = new
-    monkeypatch.setattr(loader, "get_chat_model", lambda *a, **k: llm)
-
-    with TestClient(create_app(), base_url="http://localhost") as client:
-        response = client.post("/api/resume/upload", files={
-            "file": ("resume.tex", b"Resume text for New Owner", "text/plain"),
-        })
+    async def model(stage, schema, messages):
+        if fails:
+            raise RuntimeError('SECRET provider details')
+        return new
+    services = Runtime(root=tmp_path, settings=ResumeAgentSettings(provider='openai'), model=model)
+    services.profiles.save_reviewed(None, old, {})
+    with TestClient(create_app(services=services), base_url='http://localhost') as client:
+        response = client.post('/api/resume/upload', files={'file': ('resume.tex', b'Resume text for New Owner')})
         assert response.status_code == 200
-        events = []
-        with client.websocket_connect(f"/ws/resume-parse/{response.json()['job_id']}",
-                                      headers={"host": "localhost"}) as socket:
-            while True:
-                event = socket.receive_json()
-                events.append((event["stage_id"], event["status"]))
-                if event["status"] == "failed" or event["stage_id"] == "write_yaml" and event["status"] == "done":
-                    break
-        assert events == [
-            ("upload", "done"), ("extract", "running"), ("extract", "done"),
-            ("parse", "running"),
-        ] + ([("parse", "failed")] if fails else [
-            ("parse", "done"), ("write_yaml", "running"), ("write_yaml", "done"),
-        ])
-        assert client.get("/api/resume").json()["personal"]["full_name"] == (
-            "Old Owner" if fails else "New Owner"
-        )
+        draft = response.json()
+        assert draft['status'] == ('failed' if fails else 'pending_review')
+        assert 'SECRET' not in str(draft)
+        assert client.get('/api/profile/imports/' + draft['id']).json()['source']['text'] == 'Resume text for New Owner'
+        with client.websocket_connect('/ws/resume-parse/' + draft['job_id'], headers={'host': 'localhost'}) as socket:
+            event = socket.receive_json()
+            assert event['type'] == 'import_state'
+            assert event['operation']['status'] == draft['status']
+        assert client.get('/api/resume').json()['personal']['full_name'] == 'Old Owner'
 
 
 def test_cli_parser_still_works_without_progress_callback(tmp_path, monkeypatch):
@@ -133,17 +116,13 @@ def test_private_upload_limit_rejects_before_source_storage_or_parser(tmp_path):
     assert not service.profiles.path.exists()
 
 
-@pytest.mark.parametrize("size,status", [(10 * 1024 * 1024, 200), (10 * 1024 * 1024 + 1, 413)])
-def test_legacy_upload_size_checked_before_source_storage(tmp_path, monkeypatch, size, status):
-    source_dir = tmp_path / "source"
-    monkeypatch.setattr(router, "SOURCE_DIR", source_dir)
-    async def no_external_parse(*args):
-        pass
-    monkeypatch.setattr(router, "_parse_resume_job", no_external_parse)
-    with TestClient(create_app(), base_url="http://localhost") as client:
-        result = client.post("/api/resume/upload", files={"file": ("resume.tex", b"x" * size)})
+@pytest.mark.parametrize("size,status", [(10 * 1024 * 1024, 400), (10 * 1024 * 1024 + 1, 413)])
+def test_legacy_upload_size_checked_before_operation_storage(tmp_path, size, status):
+    from resume_agent.runtime import Runtime
+    services = Runtime(root=tmp_path, settings=ResumeAgentSettings(provider='openai'))
+    with TestClient(create_app(services=services), base_url='http://localhost') as client:
+        result = client.post('/api/resume/upload', files={'file': ('resume.tex', b'x' * size)})
     assert result.status_code == status
-    if status == 413:
-        assert not source_dir.exists()
-    else:
-        assert next(source_dir.iterdir()).stat().st_size == size
+    with services.store.connection() as conn:
+        assert conn.execute('SELECT count(*) FROM operations').fetchone()[0] == 0
+    assert not services.profiles.path.exists()

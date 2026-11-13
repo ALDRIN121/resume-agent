@@ -1,35 +1,45 @@
-"""Résumé library REST endpoints — companies + filed resumes for the web UI."""
-
+"""Library projections from durable runs and preserved legacy records."""
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from ... import library
 
-router = APIRouter(prefix="/api/library", tags=["library"])
+router = APIRouter(prefix='/api/library', tags=['library'])
 
 
-@router.get("/companies")
-async def list_companies() -> list[dict[str, Any]]:
-    return library.list_companies()
+@router.get('/companies')
+async def list_companies(request: Request):
+    companies = {}
+    for record in request.app.state.run_manager.list_runs():
+        name = record['company']
+        entry = companies.setdefault(name, {'name': name, 'total': 0, 'final': 0, 'needs': 0, 'failed': 0,
+                                            'last_updated': record.get('created_at')})
+        entry['total'] += 1
+        entry['final'] += record['status'] == 'complete'
+        entry['needs'] += record['status'] in ('awaiting-input', 'interrupted')
+        entry['failed'] += record['status'] == 'failed'
+    return list(companies.values())
 
 
-@router.get("/resumes")
-async def list_resumes(company: str | None = None) -> list[dict[str, Any]]:
-    return library.list_resumes(company)
+@router.get('/resumes')
+async def list_resumes(request: Request, company: str | None = None):
+    return [record for record in request.app.state.run_manager.list_runs()
+            if company is None or record['company'] == company]
 
 
-@router.get("/resumes/{thread_id}")
-async def get_resume(thread_id: str) -> dict[str, Any]:
-    record = library.get_resume(thread_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail=f"No résumé filed for {thread_id}.")
-    return record
+@router.get('/resumes/{run_id}')
+async def get_resume(run_id: str, request: Request):
+    try:
+        return request.app.state.run_manager.get_run(run_id)
+    except KeyError:
+        raise HTTPException(404, detail={'code': 'run_not_found'}) from None
 
 
-@router.delete("/resumes/{thread_id}", status_code=204)
-async def delete_resume(thread_id: str) -> None:
-    if not library.delete_resume(thread_id):
-        raise HTTPException(status_code=404, detail=f"No résumé filed for {thread_id}.")
+@router.delete('/resumes/{run_id}', status_code=204)
+async def delete_resume(run_id: str, request: Request):
+    store = request.app.state.services.store
+    if run_id in store.run_ids():
+        raise HTTPException(409, detail={'code': 'reviewed_run_history_retained'})
+    if not library.delete_resume(run_id, library_path=store.library_path):
+        raise HTTPException(404, detail={'code': 'run_not_found'})

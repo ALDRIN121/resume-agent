@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "resume-generator"
-version = "2.1.0"
+version = "3.0.0"
 description = "AI-powered multi-agent resume generator — LangGraph + LaTeX + Rich CLI"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -71,6 +71,7 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["slow: real PDF compilation and structural checks"]
 
 [dependency-groups]
 dev = [

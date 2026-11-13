@@ -6,22 +6,96 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  python:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - run: uv run ruff check src/
+      # PDF/browser tests are executed with mandatory tools in acceptance below.
+      - run: uv run pytest -q --ignore=tests/test_packaged_ui.py --ignore=tests/test_visual_regression.py
 
-      - name: Install dependencies
-        run: uv sync
+  windows-runtime:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - name: Real Windows process locks, optimistic profile writes and native export paths
+        run: uv run pytest -q tests/test_platform_runtime.py tests/test_profile_store.py tests/test_migrations.py
 
-      - name: Ruff lint
-        run: uv run ruff check src/
-
-      - name: Run tests
-        run: uv run pytest -q
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RESUME_REAL_BROWSER_TEST: '1'
+      RESUME_REQUIRE_PDF_TOOLS: '1'
+      RESUME_UI_TEST_URL: http://127.0.0.1:4173
+      RESUME_EVIDENCE_DIR: .acceptance-evidence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+      - run: uv sync --locked
+      - name: Install real PDF tools from official Tectonic release and Ubuntu Poppler
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils fontconfig
+          gh release download 'tectonic@0.15.0' --repo tectonic-typesetting/tectonic --pattern 'tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz' --dir "$RUNNER_TEMP/tectonic"
+          tar -xzf "$RUNNER_TEMP/tectonic/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz" -C "$RUNNER_TEMP/tectonic"
+          echo "$RUNNER_TEMP/tectonic" >> "$GITHUB_PATH"
+      - run: uv run playwright install --with-deps chromium
+      - name: Frontend tests and production build
+        working-directory: Frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Build distributions and test installed wheel with bundled UI
+        run: |
+          uv build
+          uv run pytest -q tests/test_packaged_ui.py
+      - name: Run required browser and real PDF checks with a preview server
+        run: |
+          npm --prefix Frontend run preview -- --port 4173 > "$RUNNER_TEMP/vite-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          uv run python -c "import time,httpx; client=httpx.Client(); exec('for attempt in range(100):\n try:\n  response=client.get(\"http://127.0.0.1:4173\"); response.raise_for_status(); break\n except httpx.TransportError:\n  time.sleep(0.1)\nelse:\n raise RuntimeError(\"Preview did not start\")')"
+          uv run pytest -q --junitxml=acceptance-results.xml tests/test_ui_flow.py tests/test_reliability_journey.py tests/test_visual_regression.py tests/test_platform_runtime.py
+          uv run python -c "import xml.etree.ElementTree as ET; root=ET.parse('acceptance-results.xml').getroot(); assert not root.findall('.//skipped'), 'A required acceptance check was skipped'"
+      - name: Preserve acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r1-acceptance-evidence
+          path: |
+            .acceptance-evidence/
+            acceptance-results.xml
+            dist/
+          include-hidden-files: true
+          if-no-files-found: error

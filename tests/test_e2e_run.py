@@ -66,9 +66,9 @@ def fake_pipeline(tmp_path, monkeypatch):
 
 
 def _initial_state():
-    from resume_agent.state import STATE_SCHEMA_VERSION
+    from resume_agent.state import LEGACY_STATE_SCHEMA_VERSION
     return {
-        "schema_version": STATE_SCHEMA_VERSION,
+        "schema_version": LEGACY_STATE_SCHEMA_VERSION,
         "input_type": "text",
         "raw_input": "Senior Software Engineer at TechCorp — Python, Kubernetes, distributed systems.",
         "latex_errors": [], "pdf_errors": [], "page_images": [], "suggestions": [],
@@ -108,75 +108,90 @@ def library_at(tmp_path, monkeypatch):
     return library
 
 
-def test_run_manager_files_completed_run_into_library(tmp_path, monkeypatch, library_at):
-    """run_manager._save_run must persist a finished run into the SQLite library."""
-    import resume_agent.api.run_manager as rmmod
-    monkeypatch.setattr(rmmod, "library", library_at, raising=True)
-    monkeypatch.setattr(rmmod, "_HISTORY_FILE", tmp_path / "history.jsonl", raising=True)
-
-    pdf = tmp_path / "aldrin_techcorp.pdf"
-    pdf.write_bytes(_MINIMAL_PDF)
-
-    session = rmmod.RunSession(thread_id="run-1", status="complete", company="TechCorp",
-                               role="Senior Software Engineer", pdf_path=str(pdf), stored_duration_s=42.0)
-    rmmod.run_manager._save_run(session)
-
-    filed = library_at.list_resumes()
-    assert [r["thread_id"] for r in filed] == ["run-1"]
-    assert filed[0]["company"] == "TechCorp"
-    assert filed[0]["pdf_url"] == "/api/runs/run-1/pdf"  # complete + pdf → downloadable
-    assert [c["name"] for c in library_at.list_companies()] == ["TechCorp"]
+async def test_run_manager_persists_queued_and_pending_before_release(tmp_path):
+    from resume_agent.api.run_manager import RunManager
+    from tests.test_v2_api import services
+    runtime, _ = services(tmp_path)
+    manager = RunManager(runtime)
+    queued = await manager.start_run({'jd_text': 'Full engineering posting'})
+    assert runtime.store.row('run', queued['id'])['status'] == 'queued'
+    await manager.wait(queued['id'])
+    reopened = RunManager(runtime).get_run(queued['id'])
+    assert reopened['status'] == 'awaiting-input'
+    assert reopened['pending']['kind'] == 'present_suggestions'
+    assert reopened['pdf_url'] is None
+    assert runtime.store.release(queued['id']) is None
 
 
-def test_library_api_serves_filed_resumes(library_at):
-    """The /api/library endpoints return what was filed (real FastAPI app)."""
-    library_at.upsert_resume(thread_id="run-2", company="Lattice Robotics",
-                             role="Staff Backend Engineer", status="complete", pdf_path="/o/x.pdf")
-
+def test_library_api_serves_existing_legacy_and_marks_missing_bytes(tmp_path, library_at):
     from resume_agent.api.app import create_app
-    client = TestClient(create_app())
+    from resume_agent.runtime import Runtime
+    library_at.upsert_resume(thread_id='run-2', company='Lattice Robotics', role='Staff Backend Engineer',
+                             status='complete', pdf_path='/o/x.pdf')
+    runtime = Runtime(root=tmp_path, settings=ResumeAgentSettings())
+    with TestClient(create_app(services=runtime), base_url='http://localhost') as client:
+        companies = client.get('/api/library/companies').json()
+        assert any(c['name'] == 'Lattice Robotics' for c in companies)
+        body = client.get('/api/library/resumes?company=Lattice Robotics').json()
+        assert len(body) == 1 and body[0]['thread_id'] == 'run-2'
+        assert body[0]['artifact_status'] == 'missing'
+        assert body[0]['pdf_url'] is None
+        assert body[0]['legacy'] is True
 
-    companies = client.get("/api/library/companies")
-    assert companies.status_code == 200
-    assert any(c["name"] == "Lattice Robotics" for c in companies.json())
 
-    resumes = client.get("/api/library/resumes?company=Lattice Robotics")
-    assert resumes.status_code == 200
-    body = resumes.json()
-    assert len(body) == 1 and body[0]["thread_id"] == "run-2"
-    assert body[0]["pdf_url"] == "/api/runs/run-2/pdf"
-
-
-def test_run_manager_drives_a_run_to_completion(tmp_path, monkeypatch, fake_pipeline, library_at):
-    """Drive the REAL server code path (run_manager._drive) to a filed, downloadable run."""
-    import asyncio
-    from pathlib import Path
-
-    import resume_agent.api.run_manager as rmmod
-    import resume_agent.checkpoint as ckpt
-
-    settings = ResumeAgentSettings(output=OutputConfig(base_dir=str(fake_pipeline)))
-    monkeypatch.setattr(rmmod.ResumeAgentSettings, "load", staticmethod(lambda: settings), raising=True)
-    monkeypatch.setattr(rmmod, "library", library_at, raising=True)
-    monkeypatch.setattr(rmmod, "_HISTORY_FILE", tmp_path / "history.jsonl", raising=True)
-    monkeypatch.setattr(ckpt, "STATE_DB", tmp_path / "state.sqlite", raising=True)
-    monkeypatch.setattr(ckpt, "CONFIG_DIR", tmp_path, raising=True)
-
-    async def go():
-        rm = rmmod.RunManager()
-        session = await rm.start_run({"jd_text": "Senior Software Engineer at TechCorp — Python, Kubernetes."})
-        await session.task
-        return session
-
-    session = asyncio.run(go())
-
-    assert session.status == "complete"
-    assert session.company == "TechCorp" and session.role == "Senior Software Engineer"
-    assert session.pdf_path and Path(session.pdf_path).exists()
-
-    filed = library_at.list_resumes()
-    assert session.thread_id in {r["thread_id"] for r in filed}
-    assert next(r for r in filed if r["thread_id"] == session.thread_id)["pdf_url"] == f"/api/runs/{session.thread_id}/pdf"
+def test_real_api_requires_both_reviews_then_serves_identical_released_bytes(tmp_path):
+    from resume_agent.api.app import create_app
+    from resume_agent.checkpoint import read_v2_checkpoint
+    from resume_agent.content_review import expected_display_text
+    from resume_agent.schemas import RenderManifest
+    from resume_agent.tools.tectonic_compile import CompileResult
+    from tests.test_approved_render import images
+    from tests.test_pdf_content_check import make_pdf
+    from tests.test_v2_api import services
+    runtime, calls = services(tmp_path)
+    runtime.workflow.output_dir = tmp_path / 'output'
+    def compiler(source, *, output_dir):
+        run_id = runtime.store.run_ids()[-1]
+        manifest = read_v2_checkpoint(runtime.store.checkpoint_path, 'run', run_id)['values']['manifest']
+        pdf = make_pdf(output_dir / 'resume.pdf', expected_display_text(RenderManifest.model_validate(manifest)))
+        return CompileResult(True, str(pdf), [], '')
+    runtime.workflow.compile_adapter, runtime.workflow.image_adapter = compiler, images
+    with TestClient(create_app(services=runtime), base_url='http://localhost') as client:
+        created = client.post('/api/runs', json={'jd_text': 'Complete JD'}).json()
+        run_id = created['id']
+        for _ in range(50):
+            paused = client.get('/api/runs/' + run_id).json()
+            if paused['pending']:
+                break
+        assert paused['pending']['kind'] == 'present_suggestions'
+        assert client.get(f'/api/runs/{run_id}/pdf').status_code == 409
+        pending = paused['pending']
+        preview = client.post(f'/api/runs/{run_id}/content-preview', json={
+            'review_id': pending['review_id'], 'source_revision': pending['source_revision'], 'approved_ids': []}).json()
+        action = {'kind': 'present_suggestions', 'action_id': 'content', 'review_id': pending['review_id'],
+                  'source_revision': pending['source_revision'], 'approved_ids': [], 'content_hash': preview['manifest']['content_hash']}
+        stale = client.post(f'/api/runs/{run_id}/resume', json=action | {'content_hash': '0' * 64})
+        assert stale.status_code == 409
+        pdf_pending = client.post(f'/api/runs/{run_id}/resume', json=action).json()
+        assert pdf_pending['pending']['kind'] == 'review_pdf'
+        draft = client.get(f'/api/runs/{run_id}/preview')
+        assert draft.status_code == 200 and draft.headers['content-type'] == 'application/pdf'
+        review = pdf_pending['pending']['review']
+        approved = client.post(f'/api/runs/{run_id}/resume', json={'kind': 'review_pdf', 'payload': {
+            'action_id': 'pdf', 'decision': 'approve', **{key: review[key] for key in
+                ('review_id', 'content_hash', 'render_hash', 'pdf_hash')}}})
+        assert approved.status_code == 200 and approved.json()['status'] == 'complete'
+        assert client.get(f'/api/runs/{run_id}/pdf').content == draft.content
+        assert client.get(f'/api/runs/{run_id}/preview').status_code == 409
+        assert client.get('/api/library/resumes').json()[0]['id'] == run_id
+        assert client.get('/api/library/companies').json()[0]['final'] == 1
+        assert client.delete('/api/library/resumes/' + run_id).status_code == 409
+        with client.websocket_connect('/ws/runs/' + run_id, headers={'host': 'localhost'}) as socket:
+            assert socket.receive_json()['type'] == 'run_state'
+            assert socket.receive_json()['type'] == 'run_state'
+            complete = socket.receive_json()
+            assert complete['type'] == 'complete' and complete['pdf_hash'] == review['pdf_hash']
+    assert calls == ['extract_jd', 'questions', 'proposals']
 
 
 async def test_real_graph_stream_emits_one_lifecycle_per_node(fake_pipeline):

@@ -1,5 +1,4 @@
 """Job context and candidate preferences survive extraction, editing and history."""
-import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -39,10 +38,9 @@ def test_resume_api_roundtrips_saved_work_preferences(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
     from resume_agent.api.app import create_app
-    from resume_agent.api.routers import resume as router
-
-    monkeypatch.setattr(router, "BASE_RESUME_FILE", tmp_path / "resume.yaml")
-    client = TestClient(create_app(), base_url="http://localhost")
+    from resume_agent.runtime import Runtime
+    services = Runtime(root=tmp_path, settings=ResumeAgentSettings())
+    client = TestClient(create_app(services=services), base_url="http://localhost")
     data = candidate().model_dump()
     assert client.put("/api/resume", json=data).status_code == 200
     assert client.get("/api/resume").json() == data
@@ -96,44 +94,34 @@ def test_review_answers_do_not_rewrite_current_location_or_preferences(monkeypat
     assert result.model_dump()["work_preferences"] == base.model_dump()["work_preferences"]
 
 
-def test_run_metadata_keeps_job_context_and_candidate_snapshot(tmp_path, monkeypatch):
-    import resume_agent.api.run_manager as module
-
-    monkeypatch.setattr(module, "CONFIG_DIR", tmp_path)
-    monkeypatch.setattr(module, "_HISTORY_FILE", tmp_path / "history.jsonl")
-    monkeypatch.setattr(module.library, "upsert_resume", lambda **kwargs: None)
-    manager = object.__new__(module.RunManager)
-    manager._sessions = {}
-    session = module.RunSession(thread_id="context", status="failed")
-    manager._refresh_meta(session, {"jd": JobDescription(company="Example", role_title="Engineer",
-        location="London, UK", work_mode="Hybrid", remote_policy="UK only; two office days"), "base_resume": candidate()})
-    manager._save_run(session)
-    manager._load_history()
-    data = module.run_detail(manager.get_run("context"))
-    assert data["location"] == "London, UK" and data["work_mode"] == "Hybrid"
-    assert data["remote_policy"] == "UK only; two office days"
-    assert data["work_preferences"] == {
-        "preferred_locations": ["Bengaluru, India", "London, UK"], "work_modes": ["Remote", "Hybrid"],
-    }
-    assert json.loads((tmp_path / "history.jsonl").read_text())["location"] == "London, UK"
+async def test_run_metadata_keeps_job_context_and_candidate_snapshot(tmp_path):
+    from resume_agent.api.v2_manager import V2RunManager
+    from resume_agent.runtime import Runtime
+    async def model(stage, schema, messages):
+        if stage == 'extract_jd':
+            return JobDescription(company='Example', role_title='Engineer', location='London, UK',
+                                  work_mode='Hybrid', remote_policy='UK only; two office days')
+        return {'questions': []} if stage == 'questions' else {'proposals': []}
+    runtime = Runtime(root=tmp_path, settings=ResumeAgentSettings(), model=model, tool_finder=lambda _: '/local')
+    runtime.profiles.save_reviewed(None, candidate(), {})
+    manager = V2RunManager(runtime)
+    created = await manager.start_run({'jd_text': 'Full posting'})
+    await manager.wait(created['id'])
+    data = V2RunManager(Runtime(root=tmp_path, settings=ResumeAgentSettings(), model=model)).get_run(created['id'])
+    assert data['location'] == 'London, UK' and data['work_mode'] == 'Hybrid'
+    assert data['remote_policy'] == 'UK only; two office days'
+    assert data['work_preferences'] == candidate().work_preferences.model_dump()
 
 
-async def test_start_run_passes_manual_job_context_to_graph(tmp_path, monkeypatch):
-    import resume_agent.api.run_manager as module
-    from resume_agent.api.routers.runs import CreateRunRequest
-
-    monkeypatch.setattr(module, "_HISTORY_FILE", tmp_path / "absent.jsonl")
-    manager = object.__new__(module.RunManager)
-    manager._sessions = {}
-    manager._jd_files = {}
-    import asyncio
-    manager._lock = asyncio.Lock()
-    captured = []
-    async def drive(session, state):
-        captured.append(state)
-    monkeypatch.setattr(manager, "_drive", drive)
-    request = CreateRunRequest(jd_text="Posting", job_location="Pune, India", work_mode="Remote")
-    session = await manager.start_run(request.model_dump())
-    await session.task
-    assert captured[0]["job_location"] == "Pune, India"
-    assert captured[0]["work_mode"] == "Remote"
+async def test_start_run_freezes_manual_job_context_before_background_work(tmp_path):
+    from resume_agent.api.v2_manager import V2RunManager
+    from tests.test_v2_api import services
+    runtime, calls = services(tmp_path)
+    manager = V2RunManager(runtime)
+    created = await manager.start_run({'jd_text': 'Posting', 'job_location': 'Pune, India', 'work_mode': 'Remote'})
+    fixed = runtime.store.input('run', created['id'])
+    assert fixed['request']['job_location'] == 'Pune, India'
+    assert fixed['request']['work_mode'] == 'Remote'
+    await manager.wait(created['id'])
+    final = manager.get_run(created['id'])
+    assert final['location'] == 'Pune, India' and final['work_mode'] == 'Remote'

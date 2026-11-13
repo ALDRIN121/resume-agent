@@ -419,3 +419,21 @@ async def test_recovered_pdf_rejection_cancels_before_driver_and_replays(tmp_pat
     assert read_v2_checkpoint(svc.store.checkpoint_path, "run", run.id)["values"] == before
     assert await service(tmp_path).drive(run.id, rejection) == result
     assert await service(tmp_path).drive(run.id, continuation) == result
+
+
+async def test_unchanged_reads_do_not_write_or_publish_subscription_feedback(tmp_path):
+    svc = service(tmp_path, pause)
+    run = create(svc)
+    await svc.drive(run.id)
+    stream = svc.subscribe(run.id)
+    first = await anext(stream)
+    assert first.view.status == 'awaiting-input'
+    before = svc.store.row('run', run.id)['updated_at']
+    with svc.store.connection() as conn:
+        conn.execute("CREATE TRIGGER unchanged_read_must_not_write BEFORE UPDATE ON runs BEGIN SELECT RAISE(ABORT, 'read wrote run'); END")
+    for _ in range(5):
+        assert svc.get(run.id).pending == first.view.pending
+    assert svc.store.row('run', run.id)['updated_at'] == before
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(anext(stream), timeout=0.05)
+    await stream.aclose()

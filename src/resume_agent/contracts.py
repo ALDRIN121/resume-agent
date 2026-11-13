@@ -51,6 +51,7 @@ class FixedRunInput(Contract):
     request: RunRequest
     profile_snapshot: dict[str, JsonValue]
     profile_revision: Hash
+    profile_provenance: dict[str, JsonValue] | None = None
     memory_snapshot: dict[str, JsonValue] = Field(default_factory=dict)
     memory_revision: Hash
     provider: str | None = None

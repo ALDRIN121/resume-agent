@@ -6,7 +6,7 @@ import { LiveRunView } from "./live-run.jsx";
 import { BaseResumeParseModal, ParsingBanner, ReplaceBaseResumeModal } from "./resume-upload.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PROVIDERS } from "./data.jsx";
-import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume, exchangeOpenRouter } from "./api/client.js";
+import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume, exchangeOpenRouter, getImport } from "./api/client.js";
 import { consumeOpenRouterCallback } from "./api/openrouter-oauth.js";
 import { subscribeResumeParse } from "./api/ws.js";
 
@@ -686,7 +686,9 @@ export const App = () => {
   const [cmdK, setCmdK] = useState(false);
   const [notifsOpen, setNotifsOpen] = useState(false);
   const [toast, setToast] = useState(null);
-  const [parsing, setParsing] = useState(null);
+  const [parsing, setParsing] = useState(() => {
+    try { const id = localStorage.getItem("rg.activeImport"); return id ? {operationId:id,file:"Saved import",statuses:{},startedAt:Date.now(),modalOpen:true} : null; } catch { return null; }
+  });
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [selectedRunTitle, setSelectedRunTitle] = useState(null);
@@ -782,6 +784,12 @@ export const App = () => {
       setParsing(p => p ? { ...p, failed: true, modalOpen: true, error: err.message || "Upload failed." } : null);
       return;
     }
+    if (job.contract_version === 2 || job.id || job.operation_id) {
+      const operationId = job.id || job.operation_id || job.job_id;
+      try { localStorage.setItem("rg.activeImport",operationId); } catch {}
+      setParsing(p => ({...p,operationId,operation:job,modalOpen:true}));
+      return;
+    }
     parseUnsubRef.current?.();
     parseUnsubRef.current = subscribeResumeParse(job.job_id, (ev) => {
       setParsing(p => {
@@ -805,9 +813,29 @@ export const App = () => {
     });
   };
 
+  useEffect(() => {
+    const id = parsing?.operationId;
+    if (!id || parsing?.completed || parsing?.failed) return;
+    let alive = true;
+    const refresh = () => getImport(id).then(operation => {
+      if (!alive) return;
+      const completed = operation.status === "complete";
+      const failed = operation.status === "failed";
+      setParsing(p => p?.operationId === id ? {...p,operation,completed,failed,error:failed ? "The import failed. Review diagnostics and choose another file." : null} : p);
+    }).catch(error => { if (alive) setParsing(p => p ? {...p,error:error.message} : p); });
+    refresh(); const timer = setInterval(refresh,2000);
+    window.addEventListener("focus",refresh);
+    return () => { alive=false;clearInterval(timer);window.removeEventListener("focus",refresh); };
+  }, [parsing?.operationId,parsing?.completed,parsing?.failed]);
+
   const endParse = () => {
     parseUnsubRef.current?.();
     parseUnsubRef.current = null;
+    if (parsing?.operationId && !parsing.completed && !parsing.failed && parsing.operation?.status !== "cancelled") {
+      setParsing(p => ({...p,modalOpen:false}));
+      return;
+    }
+    try { localStorage.removeItem("rg.activeImport"); } catch {}
     setParsing(null);
   };
 
@@ -951,6 +979,10 @@ export const App = () => {
       <ReplaceBaseResumeModal open={replaceOpen} onClose={() => setReplaceOpen(false)} onUpload={startParse}/>
       <BaseResumeParseModal
         parsing={parsing && parsing.modalOpen ? parsing : null}
+        onDecision={operation => {
+          setParsing(p => ({...p,operation,completed:operation.status === "complete",failed:false}));
+          if (["complete","cancelled"].includes(operation.status)) { try { localStorage.removeItem("rg.activeImport"); } catch {} }
+        }}
         onClose={endParse}
         onMinimize={() => setParsing(p => p ? { ...p, modalOpen: false } : null)}
         onRetry={() => { endParse(); setReplaceOpen(true); }}

@@ -13,10 +13,10 @@ Commands:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 import sys
-import time
 import uuid
 import warnings
 import webbrowser
@@ -36,21 +36,18 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from .checkpoint import get_checkpointer
 from .config import (
     BASE_RESUME_FILE,
     CONFIG_FILE,
     SOURCE_DIR,
     ResumeAgentSettings,
 )
-from .graph import HITL_MISSING_NODE, HITL_SUGGESTIONS_NODE, build_graph
-from .state import STATE_SCHEMA_VERSION, ResumeGenState
+from .graph import HITL_MISSING_NODE, HITL_SUGGESTIONS_NODE
 from .ui.banner import print_banner
 from .ui.console import console, err_console
 from .ui.panels import (
     print_error,
     print_error_panel,
-    print_final_summary,
     print_info,
     print_section,
     print_success,
@@ -90,6 +87,10 @@ def run_interactive() -> None:
       4. Loop: ask for JD → generate → ask to continue.
     """
 
+    if not sys.stdin.isatty():
+        print_error('Use init --source or generate with explicit job input; human review requires an interactive terminal.')
+        raise typer.Exit(2)
+
     settings = _load_settings_gracefully()
     print_banner(provider=settings.provider, model=settings.model.default)
 
@@ -103,7 +104,6 @@ def run_interactive() -> None:
         pass
 
     # ── Ensure LLM is configured and reachable ────────────────────────────────
-    settings = _ensure_llm_ready(settings)
 
     # ── Base resume (only if missing) ─────────────────────────────────────────
     if not BASE_RESUME_FILE.exists():
@@ -139,43 +139,11 @@ def run_interactive() -> None:
 
 
 def _interactive_init_resume(settings: ResumeAgentSettings) -> None:
-    """Ask for a resume file path and parse it."""
-    from .agents.base_resume_loader import parse_and_save_resume
+    """Import into the same explicitly reviewed durable draft as the API."""
+    source = _prompt_for_resume_file()
+    if source is not None:
+        _import_v2_source(source, settings)
 
-    SOURCE_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Auto-detect from the source folder first
-    candidates = sorted(SOURCE_DIR.glob("*.pdf")) + sorted(SOURCE_DIR.glob("*.tex"))
-    if candidates:
-        source = candidates[0]
-        if len(candidates) > 1:
-            names = ", ".join(c.name for c in candidates)
-            print_warning(f"Multiple files in source/: {names}. Using: {source.name}")
-        print_info(f"Found resume in source/: {source.name}")
-    else:
-        # No file in source/ — prompt with validation loop until a valid file is given
-        console.print()
-        console.print(
-            Panel(
-                f"[bold]No resume found.[/bold]\n\n"
-                f"  Option 1: Drop your PDF/TEX into  [bold]{SOURCE_DIR}/[/bold]\n"
-                f"            then press Enter to re-check.\n\n"
-                f"  Option 2: Enter the full path to your resume file below.",
-                border_style="yellow",
-                padding=(0, 2),
-            )
-        )
-        source = _prompt_for_resume_file()
-        if source is None:
-            return   # user aborted
-
-    try:
-        resume = parse_and_save_resume(source)
-    except (ValueError, RuntimeError) as exc:
-        print_error_panel("Parsing Failed", str(exc))
-        return
-
-    print_success(f"Base resume saved for: [bold]{resume.personal.full_name}[/bold]")
 
 
 def _prompt_for_resume_file() -> Path | None:
@@ -305,73 +273,12 @@ def _read_jd_input() -> str:
 
 
 def _interactive_generate(settings: ResumeAgentSettings) -> None:
-    """Ask for JD input and run the full generation pipeline."""
     print_section("Generate Resume")
-    console.print(
-        Panel(
-            "[bold]Paste a job URL or the full job description below.[/bold]\n\n"
-            "  [accent]URL[/accent]   — paste the link and press [bold]Enter[/bold]\n"
-            "  [accent]Text[/accent]  — paste the description, then press [bold]Enter[/bold] "
-            "three times on an empty line to finish  (or press [bold]Ctrl+D[/bold])",
-            border_style="blue",
-            padding=(0, 2),
-        )
-    )
-    console.print()
+    console.print("Paste a job URL or full description. Finish text with three empty lines.")
+    job = _read_jd_input()
+    if job.strip():
+        _generate_v2(job, 'url' if job.startswith(('https://', 'http://')) else 'text', settings)
 
-    jd_input = _read_jd_input()
-
-    if not jd_input:
-        print_warning("No input — skipping.")
-        return
-
-    is_url = jd_input.startswith(("http://", "https://"))
-    t_id = str(uuid.uuid4())
-
-    initial_state: ResumeGenState = {
-        "schema_version": STATE_SCHEMA_VERSION,
-        "input_type": "url" if is_url else "text",
-        "raw_input": jd_input,
-        "latex_errors": [],
-        "pdf_errors": [],
-        "page_images": [],
-        "suggestions": [],
-        "generator_retries": 0,
-        "validation_passed": False,
-        "messages": [],
-    }
-
-    cfg = _graph_config(t_id, settings)
-    console.print(f"\n[muted]Session: {t_id}[/muted]")
-    console.print(f"[muted](Resume if interrupted: resume-generator resume {t_id})[/muted]\n")
-
-    start_time = time.perf_counter()
-
-    with get_checkpointer() as checkpointer:
-        graph = build_graph(checkpointer=checkpointer, settings=settings)
-        final_state = _run_with_hitl(graph, initial_state, cfg)
-
-    elapsed = time.perf_counter() - start_time
-    final_pdf = final_state.get("final_pdf_path") if final_state else None
-
-    if final_pdf:
-        jd = final_state.get("jd")
-        final_pdf = _prompt_save_and_open(final_pdf)
-        print_final_summary(
-            company=jd.company if jd else "Unknown",
-            role=jd.role_title if jd else "Unknown",
-            pdf_path=final_pdf,
-            elapsed=elapsed,
-            retries=max(0, (final_state.get("generator_retries") or 1) - 1),
-        )
-    elif final_state and final_state.get("scrape_error"):
-        print_error_panel(
-            "Scraping Failed",
-            final_state["scrape_error"],
-            hint="Paste the job description text instead of a URL.",
-        )
-    else:
-        print_error("Generation failed. Check the output above for details.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -394,75 +301,23 @@ def setup() -> None:
 
 @app.command()
 def init(
-    source: Path | None = typer.Option(
-        None,
-        "--source",
-        "-s",
-        help=(
-            "Path to your resume (.tex or .pdf). "
-            "If omitted, auto-detects from ~/.resume_generator/source/"
-        ),
-    ),
+    source: Path | None = typer.Option(None, '--source', '-s', help='PDF/TEX resume source to review'),
 ) -> None:
-    """Parse your resume and save it as the base (source of truth).
-
-    Drop your PDF into ~/.resume_generator/source/ and run this command with no
-    arguments, or pass --source to specify a file explicitly.
-    Any previously parsed base resume is replaced automatically.
-    """
-    from .agents.base_resume_loader import parse_and_save_resume
-
-    settings = _load_settings_or_exit()
-    print_banner(provider=settings.provider, model=settings.model.default)
-    settings = _ensure_llm_ready(settings)
-
-    # ── Resolve source file ────────────────────────────────────────────────────
+    """Create a durable import draft and explicitly review it before saving."""
+    settings = _load_settings_gracefully()
     if source is None:
-        SOURCE_DIR.mkdir(parents=True, exist_ok=True)
-        candidates = sorted(SOURCE_DIR.glob("*.pdf")) + sorted(SOURCE_DIR.glob("*.tex"))
-        if not candidates:
-            console.print(
-                Panel(
-                    f"[bold]No resume found in source folder.[/bold]\n\n"
-                    f"  Option 1: Drop your PDF/TEX into  [bold]{SOURCE_DIR}/[/bold]\n"
-                    f"            then press Enter to re-check.\n\n"
-                    f"  Option 2: Enter the full path to your resume file below.",
-                    border_style="yellow",
-                    padding=(0, 2),
-                )
-            )
-            resolved = _prompt_for_resume_file()
-            if resolved is None:
-                raise typer.Exit(1)
-            source = resolved
-        else:
-            if len(candidates) > 1:
-                names = ", ".join(c.name for c in candidates)
-                print_warning(f"Multiple files in source/: {names}. Using: {candidates[0].name}")
+        candidates = sorted(SOURCE_DIR.glob('*.pdf')) + sorted(SOURCE_DIR.glob('*.tex'))
+        if candidates:
             source = candidates[0]
-    else:
-        source = Path(source).expanduser().resolve()
-        if source.suffix.lower() not in {".pdf", ".tex"}:
-            print_error(f"Unsupported format '{source.suffix}'. Only .pdf and .tex are accepted.")
-            raise typer.Exit(1)
-        if not source.exists():
-            print_error(f"File not found: {source}")
-            raise typer.Exit(1)
+        elif sys.stdin.isatty():
+            source = _prompt_for_resume_file()
+        else:
+            print_error('Provide --source to create a reviewable import draft.')
+            raise typer.Exit(2)
+    if source is None:
+        raise typer.Exit(2)
+    _import_v2_source(source, settings)
 
-    print_info(f"Source: {source}")
-
-    # Keep the cached resume until parse_and_save_resume successfully replaces it.
-
-    # ── Parse ──────────────────────────────────────────────────────────────────
-    try:
-        resume = parse_and_save_resume(source)
-    except (ValueError, RuntimeError) as e:
-        print_error_panel("Parsing Failed", str(e))
-        raise typer.Exit(1)
-
-    print_success(f"Base resume saved for: [bold]{resume.personal.full_name}[/bold]")
-    print_info(f"File: {BASE_RESUME_FILE}")
-    print_info("You can now run: [bold]resume-generator generate --jd-url <URL>[/bold]")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -471,97 +326,36 @@ def init(
 
 @app.command()
 def generate(
-    jd_text: str | None = typer.Option(
-        None, "--jd-text", help="Paste the full job description text"
-    ),
-    jd_url: str | None = typer.Option(
-        None, "--jd-url", help="URL of the job posting to scrape"
-    ),
-    jd_file: Path | None = typer.Option(
-        None, "--jd-file", help="Path to a text file containing the job description",
-        exists=True, file_okay=True, dir_okay=False, resolve_path=True,
-    ),
-    provider: str | None = typer.Option(
-        None, "--provider", "-p", help="LLM provider: anthropic | openai | ollama | gemini | nvidia"
-    ),
-    model_name: str | None = typer.Option(
-        None, "--model", "-m", help="Override model name"
-    ),
-    thread_id: str | None = typer.Option(
-        None, "--thread", help="Thread ID to resume an interrupted session"
-    ),
+    jd_text: str | None = typer.Option(None, '--jd-text', help='Complete job description'),
+    jd_url: str | None = typer.Option(None, '--jd-url', help='Public job posting URL'),
+    jd_file: Path | None = typer.Option(None, '--jd-file', exists=True, file_okay=True, dir_okay=False),
+    provider: str | None = typer.Option(None, '--provider', '-p'),
+    model_name: str | None = typer.Option(None, '--model', '-m'),
+    thread_id: str | None = typer.Option(None, '--thread'),
+    max_pages: int = typer.Option(2, '--max-pages', min=1, max=5),
 ) -> None:
-    """Generate a tailored resume PDF for a target job."""
+    """Generate through content review, exact PDF review, and approved release."""
+    if thread_id:
+        resume_session(thread_id)
+        return
+    if sum(bool(value) for value in (jd_text, jd_url, jd_file)) != 1:
+        print_error('Provide exactly one of --jd-text, --jd-file, --jd-url.')
+        raise typer.Exit(2)
     if jd_file:
-        jd_text = jd_file.read_text(encoding="utf-8").strip()
-
-    if not jd_text and not jd_url:
-        print_error(
-            "Provide --jd-text, --jd-file, or --jd-url.",
-            hint="Example: resume-generator generate --jd-file job.txt",
-        )
-        raise typer.Exit(1)
-
-    settings = _load_settings_or_exit()
-
+        from .config import MAX_RESUME_UPLOAD_BYTES
+        with jd_file.open('rb') as stream:
+            raw = stream.read(MAX_RESUME_UPLOAD_BYTES + 1)
+        if len(raw) > MAX_RESUME_UPLOAD_BYTES:
+            print_error('Job file exceeds 10 MiB.')
+            raise typer.Exit(2)
+        jd_text = raw.decode('utf-8')
+    settings = _load_settings_gracefully()
     if provider:
-        settings = settings.model_copy(update={"provider": provider})
+        settings = ResumeAgentSettings.model_validate(settings.model_dump() | {'provider': provider})
     if model_name:
-        model_cfg = settings.model.model_copy(update={"default": model_name})
-        settings = settings.model_copy(update={"model": model_cfg})
+        settings.model.default = model_name
+    _generate_v2(jd_url or jd_text or '', 'url' if jd_url else 'text', settings, max_pages=max_pages)
 
-    _check_base_resume_or_exit()
-    print_banner(provider=settings.provider, model=settings.model.default)
-    settings = _ensure_llm_ready(settings)
-
-    t_id = thread_id or str(uuid.uuid4())
-    initial_state: ResumeGenState = {
-        "schema_version": STATE_SCHEMA_VERSION,
-        "input_type": "url" if jd_url else "text",
-        "raw_input": (jd_url or jd_text or "").strip(),
-        "latex_errors": [],
-        "pdf_errors": [],
-        "page_images": [],
-        "suggestions": [],
-        "generator_retries": 0,
-        "validation_passed": False,
-        "messages": [],
-    }
-
-    config = _graph_config(t_id, settings)
-    console.print(f"[muted]Session thread ID: {t_id}[/muted]")
-    console.print(
-        f"[muted](To resume if interrupted: resume-generator resume {t_id})[/muted]\n"
-    )
-
-    start_time = time.perf_counter()
-
-    with get_checkpointer() as checkpointer:
-        graph = build_graph(checkpointer=checkpointer, settings=settings)
-        final_state = _run_with_hitl(graph, initial_state, config)
-
-    elapsed = time.perf_counter() - start_time
-    final_pdf = final_state.get("final_pdf_path") if final_state else None
-
-    if final_pdf:
-        jd = final_state.get("jd")
-        final_pdf = _prompt_save_and_open(final_pdf)
-        print_final_summary(
-            company=jd.company if jd else "Unknown",
-            role=jd.role_title if jd else "Unknown",
-            pdf_path=final_pdf,
-            elapsed=elapsed,
-            retries=max(0, (final_state.get("generator_retries") or 1) - 1),
-        )
-    elif final_state and final_state.get("scrape_error"):
-        print_error_panel(
-            "Scraping Failed",
-            final_state["scrape_error"],
-            hint="Try pasting the job description directly: --jd-text '...'",
-        )
-        raise typer.Exit(1)
-    else:
-        raise typer.Exit(3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -569,62 +363,31 @@ def generate(
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.command(name="resume")
-def resume_session(
-    thread_id: str = typer.Argument(..., help="Thread ID of the paused session"),
-) -> None:
-    """Resume a paused Human-in-the-Loop session."""
-    settings = _load_settings_or_exit()
-    print_banner(provider=settings.provider, model=settings.model.default)
-    settings = _ensure_llm_ready(settings)
+def resume_session(thread_id: str = typer.Argument(..., help='Durable run or import operation ID')) -> None:
+    """Resume the same saved reviewed workflow; legacy recovery creates a linked run."""
+    from .runtime import Runtime
+    runtime = Runtime(settings=_load_settings_gracefully())
+    try:
+        view = runtime.runs.get(thread_id)
+    except KeyError:
+        try:
+            runtime.imports.get(thread_id)
+        except KeyError:
+            if not sys.stdin.isatty() or Prompt.ask('Type recover to create a linked safe run', default='') != 'recover':
+                print_error('Legacy recovery requires explicit interactive confirmation.')
+                raise typer.Exit(2)
+            view = runtime.runs.recover_legacy(thread_id, provider=runtime.settings.provider, model=runtime.settings.model.default)
+            thread_id = view.id
+        else:
+            result = asyncio.run(_review_v2_import(runtime, thread_id))
+            raise typer.Exit(0 if result['status'] in ('complete', 'cancelled') else 2)
+    async def resume_work():
+        if view.status == 'queued':
+            await runtime.runs.drive(thread_id)
+        return await _review_v2_run(runtime, thread_id)
+    result = asyncio.run(resume_work())
+    raise typer.Exit(0 if result.status in ('complete', 'cancelled') else 2)
 
-    config = _graph_config(thread_id, settings)
-    console.print(f"[muted]Resuming session: {thread_id}[/muted]\n")
-
-    start_time = time.perf_counter()
-
-    with get_checkpointer() as checkpointer:
-        graph = build_graph(checkpointer=checkpointer, settings=settings)
-
-        state = graph.get_state(config)
-        if not state.values:
-            print_error(
-                f"No session found with thread ID: {thread_id}",
-                hint="Run 'resume-generator generate' to start a new session.",
-            )
-            raise typer.Exit(1)
-
-        stored_version = state.values.get("schema_version", 0)
-        if stored_version != STATE_SCHEMA_VERSION:
-            print_error(
-                f"Checkpoint schema mismatch (stored v{stored_version}, current v{STATE_SCHEMA_VERSION}).",
-                hint="Start a new session: resume-generator generate ...",
-            )
-            raise typer.Exit(1)
-
-        if not state.next:
-            print_info("This session has already completed.")
-            final_pdf = state.values.get("final_pdf_path")
-            if final_pdf:
-                print_success(f"Output: {final_pdf}")
-            raise typer.Exit(0)
-
-        final_state = _run_with_hitl(graph, None, config)
-
-    elapsed = time.perf_counter() - start_time
-    final_pdf = final_state.get("final_pdf_path") if final_state else None
-
-    if final_pdf:
-        jd = final_state.get("jd")
-        final_pdf = _prompt_save_and_open(final_pdf)
-        print_final_summary(
-            company=jd.company if jd else "Unknown",
-            role=jd.role_title if jd else "Unknown",
-            pdf_path=final_pdf,
-            elapsed=elapsed,
-            retries=max(0, (final_state.get("generator_retries") or 1) - 1),
-        )
-    else:
-        raise typer.Exit(3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1348,3 +1111,158 @@ def _ensure_llm_ready(settings: ResumeAgentSettings) -> ResumeAgentSettings:
         if confirm("Run setup to reconfigure?", default=True):
             return run_setup_wizard(settings)
         raise typer.Exit(1)
+
+
+async def _review_v2_run(runtime, run_id, *, interactive=None, ask=None):
+    """Review shared typed pauses; an empty answer never grants approval."""
+    from .contracts import AskMissing, Continue, PresentSuggestions, ReviewPdf
+    from .ui.prompts import display_content_preview
+    if interactive is None:
+        interactive = sys.stdin.isatty()
+    ask = ask or (lambda message: Prompt.ask(message, default=''))
+    view = runtime.runs.get(run_id)
+    while view.pending is not None or view.status == 'interrupted':
+        console.print(f'Run: {run_id}', markup=False)
+        if not interactive:
+            console.print('A human decision is pending. Resume this run interactively.', markup=False)
+            return view
+        action_id = str(uuid.uuid4())
+        if view.status == 'interrupted':
+            if ask('Type continue to resume the interrupted work') != 'continue':
+                return view
+            action = Continue(action_id=action_id)
+        else:
+            pending = view.pending
+            if pending.kind == 'ask_missing':
+                answers = {}
+                for question in pending.payload['questions']:
+                    console.print(question['why_asking'], markup=False)
+                    answers[question['id']] = ask(question['prompt'])
+                if ask('Type continue to submit these exact answers') != 'continue':
+                    return view
+                action = AskMissing(action_id=action_id, request_id=pending.request_id, answers=answers)
+            elif pending.kind == 'present_suggestions':
+                for proposal in pending.payload['proposals']:
+                    console.print_json(data=proposal)
+                selected_text = ask('Proposal IDs to select, separated by commas (default none)')
+                selected = [value.strip() for value in selected_text.split(',') if value.strip()]
+                preview = runtime.workflow.content_preview(run_id, pending.review_id, pending.source_revision, selected)
+                display_content_preview(preview)
+                if ask('Type approve to confirm this complete content and its hash') != 'approve':
+                    return view
+                action = PresentSuggestions(action_id=action_id, review_id=pending.review_id,
+                    source_revision=pending.source_revision, approved_ids=selected, content_hash=preview.manifest.content_hash)
+            elif pending.kind == 'review_pdf':
+                from .checkpoint import read_v2_checkpoint
+                values = read_v2_checkpoint(runtime.store.checkpoint_path, 'run', run_id)['values']
+                console.print('Draft PDF: ' + values['render_record']['pdf_path'], markup=False)
+                console.print('PDF hash: ' + pending.review.pdf_hash, markup=False)
+                console.print_json(data=pending.payload)
+                decision = 'approve' if ask('Inspect the exact PDF, then type approve (default reject)') == 'approve' else 'reject'
+                review = pending.review
+                action = ReviewPdf(action_id=action_id, decision=decision, review_id=review.review_id,
+                    content_hash=review.content_hash, render_hash=review.render_hash, pdf_hash=review.pdf_hash)
+            else:
+                console.print('This decision requires another supported client.', markup=False)
+                return view
+        view = await runtime.runs.drive(run_id, action)
+    if view.release:
+        console.print('Released PDF: ' + view.release.destination, markup=False)
+        console.print('PDF hash: ' + view.release.pdf_hash, markup=False)
+    elif view.diagnostics:
+        console.print_json(data=[item.model_dump() for item in view.diagnostics])
+    return view
+
+
+async def _review_v2_import(runtime, operation_id, *, interactive=None, ask=None):
+    from .contracts import AcceptImport, Continue, RejectImport
+    if interactive is None:
+        interactive = sys.stdin.isatty()
+    ask = ask or (lambda message: Prompt.ask(message, default=''))
+    draft = runtime.imports.get(operation_id)
+    console.print('Import operation: ' + operation_id, markup=False)
+    if draft['status'] == 'pending_model':
+        draft = await runtime.imports.drive(operation_id)
+    if draft['status'] == 'interrupted' and interactive:
+        if ask('Type continue to resume this interrupted import') == 'continue':
+            draft = await runtime.imports.drive(operation_id, Continue(action_id=str(uuid.uuid4())))
+    if not interactive or draft['pending'] is None:
+        if draft['pending']:
+            console.print('Review the source and draft interactively before acceptance.', markup=False)
+        return draft
+    pending = draft['pending']
+    console.print('Complete extracted source:', markup=False)
+    for page in draft['source']['pages']:
+        console.print(f"Page {page['page_number']}", markup=False)
+        console.print(page['text'], markup=False)
+        if page['warning']:
+            console.print(page['warning'], markup=False)
+    console.print('Parsed draft — compare every field with the source:', markup=False)
+    console.print_json(data=draft['draft'])
+    console.print(draft['coverage_note'], markup=False)
+    blanks = []
+    for number in pending['unreadable_pages']:
+        if ask(f'Type blank to confirm unreadable page {number} is intentionally blank') == 'blank':
+            blanks.append(number)
+    if (len(blanks) == len(pending['unreadable_pages'])
+            and ask('Type accept to save this exact reviewed draft (default reject)') == 'accept'):
+        action = AcceptImport(action_id=str(uuid.uuid4()), review_id=pending['review_id'],
+            draft_hash=pending['draft_hash'], expected_profile_revision=pending['expected_profile_revision'],
+            intentionally_blank_pages=blanks)
+    else:
+        action = RejectImport(action_id=str(uuid.uuid4()), review_id=pending['review_id'])
+    return await runtime.imports.drive(operation_id, action)
+
+
+def _import_v2_source(source, settings):
+    from .config import MAX_RESUME_UPLOAD_BYTES
+    from .runtime import Runtime
+    runtime = Runtime(settings=settings)
+    try:
+        with Path(source).expanduser().open('rb') as stream:
+            raw = stream.read(MAX_RESUME_UPLOAD_BYTES + 1)
+        operation = runtime.imports.create(raw, Path(source).name)
+    except (ValueError, OSError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(2) from None
+    async def import_work():
+        await runtime.imports.drive(operation['id'])
+        return await _review_v2_import(runtime, operation['id'])
+    result = asyncio.run(import_work())
+    if result['status'] == 'complete':
+        print_success('The reviewed profile was saved.')
+    elif result['status'] == 'cancelled':
+        print_info('Import rejected. The draft and source remain available.')
+    else:
+        if result['diagnostics']:
+            console.print_json(data=result['diagnostics'])
+        raise typer.Exit(3 if result['status'] == 'failed' else 2)
+
+
+def _generate_v2(job, input_type, settings, *, max_pages=2):
+    from .contracts import RunRequest
+    from .run_store import Conflict
+    from .runtime import Runtime
+    runtime = Runtime(settings=settings)
+    snapshot = runtime.profiles.load_snapshot()
+    if snapshot and snapshot.review_required:
+        console.print('Current profile requires explicit review before a new run.', markup=False)
+        if not sys.stdin.isatty():
+            raise typer.Exit(2)
+        console.print_json(data=snapshot.profile.model_dump(mode='json'))
+        if Prompt.ask('Type review to confirm this exact current profile', default='') != 'review':
+            raise typer.Exit(2)
+        runtime.profiles.review_current_profile(snapshot.revision)
+    try:
+        run = runtime.create_run(RunRequest(job_input=job, input_type=input_type, max_pages=max_pages))
+    except (ValueError, Conflict):
+        for step in runtime.readiness()['next_steps']:
+            console.print(step, markup=False)
+        raise typer.Exit(2) from None
+    console.print('Run: ' + run.id, markup=False)
+    async def generate_work():
+        await runtime.runs.drive(run.id)
+        return await _review_v2_run(runtime, run.id)
+    result = asyncio.run(generate_work())
+    if result.status not in ('complete', 'cancelled'):
+        raise typer.Exit(2 if result.pending or result.status == 'interrupted' else 3)

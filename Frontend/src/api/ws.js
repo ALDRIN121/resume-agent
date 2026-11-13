@@ -48,7 +48,7 @@ export function subscribeRun(threadId, onEvent, onStatus) {
         return; // ignore malformed frames instead of throwing in the handler
       }
       onEvent(payload);
-      if (payload.type === "complete" || payload.type === "failed") {
+      if (payload.type === "complete" || payload.type === "failed" || (payload.type === "run_state" && ["complete", "failed", "cancelled"].includes((payload.run || payload.view || payload).status))) {
         closed = true;
         socket.close();
         onStatus?.(payload.type);

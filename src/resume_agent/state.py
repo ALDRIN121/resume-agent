@@ -12,7 +12,8 @@ from .schemas import GapAnalysis, JobDescription, Suggestion, UserResume
 
 # Increment when ResumeGenState adds/removes required fields.
 # cli.py `resume` command rejects checkpoints with a different version.
-STATE_SCHEMA_VERSION = 1
+LEGACY_STATE_SCHEMA_VERSION = 1
+STATE_SCHEMA_VERSION = 2
 
 
 class ResumeGenState(TypedDict, total=False):

@@ -198,14 +198,25 @@ class _Lifecycle:
                 raise _DriverContractError("release_required")
             previous_output = json.loads(row["result_json"]) if row["result_json"] else {}
             diagnostics = index.get("diagnostics", previous_output.get("diagnostics", []))
-            self.store.update(self.kind, owner_id, status=status,
-                              pending=index.get("pending") if status not in TERMINAL else None,
-                              result={"result": index.get("result", previous_output.get("result")), "diagnostics": diagnostics},
-                              code=diagnostics[0]["code"] if diagnostics else None,
-                              stage=diagnostics[0]["stage"] if diagnostics else None, conn=conn)
+            pending = index.get("pending") if status not in TERMINAL else None
+            result = {"result": index.get("result", previous_output.get("result")), "diagnostics": diagnostics}
+            code = diagnostics[0]["code"] if diagnostics else None
+            stage = diagnostics[0]["stage"] if diagnostics else None
+            desired = {"status": status, "pending_json": canonical_json(pending) if pending is not None else None,
+                       "result_json": canonical_json(result)}
+            if self.kind == "run":
+                desired.update(error_code=code, error_stage=stage)
+            changed = any(row[key] != value for key, value in desired.items())
+            unfinished_ids = {action["action_id"] for action in self.store.unfinished(self.kind, owner_id, conn)}
+            finish_ids = [action_id for action_id in action_ids if action_id in unfinished_ids]
+            if changed:
+                self.store.update(self.kind, owner_id, status=status, pending=pending, result=result,
+                                  code=code, stage=stage, conn=conn)
             view = self._view(owner_id, conn)
-            self.store.finish_actions(self.kind, owner_id, action_ids, view.model_dump(mode="json"), conn)
-        self._publish(owner_id, view)
+            if finish_ids:
+                self.store.finish_actions(self.kind, owner_id, finish_ids, view.model_dump(mode="json"), conn)
+        if changed or finish_ids:
+            self._publish(owner_id, view)
         return view
 
     def _reconcile(self, owner_id: str) -> None:
@@ -259,9 +270,12 @@ class _Lifecycle:
         queue = asyncio.Queue()
         self._subscribers.setdefault(owner_id, set()).add(queue)
         try:
-            yield Event(view=self.get(owner_id))
+            event = Event(view=self.get(owner_id))
             while True:
-                yield await queue.get()
+                yield event
+                if event.view.status in TERMINAL:
+                    return
+                event = await queue.get()
         finally:
             self._subscribers[owner_id].discard(queue)
             if not self._subscribers[owner_id]:
@@ -365,12 +379,12 @@ class RunService:
         self._lifecycle = _Lifecycle(store, "run", driver, action_validator)
 
     def create(self, request: RunRequest, *, profile_snapshot: UserResume | dict[str, Any],
-               profile_revision: str | None = None, memory_snapshot: dict | None = None,
+               profile_revision: str | None = None, profile_provenance: dict | None = None, memory_snapshot: dict | None = None,
                memory_revision: str | None = None, provider: str | None = None, model: str | None = None,
                app_version: str | None = None, build_revision: str | None = None) -> RunView:
         request = RunRequest.model_validate(request.model_dump(mode="json"))
         profile = UserResume.model_validate(profile_snapshot).model_dump(mode="json")
-        fixed = FixedRunInput(request=request, profile_snapshot=profile,
+        fixed = FixedRunInput(request=request, profile_snapshot=profile, profile_provenance=profile_provenance,
                               profile_revision=content_hash(profile) if profile_revision is None else profile_revision,
                               memory_snapshot={} if memory_snapshot is None else memory_snapshot,
                               memory_revision=content_hash({}) if memory_revision is None else memory_revision, provider=provider, model=model,

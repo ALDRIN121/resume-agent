@@ -127,9 +127,13 @@ class ImportService:
         profiles: ProfileStore | None = None,
         *,
         parser: Callable[[str], UserResume | dict | Awaitable] | None = None,
+        context_parser: Callable[[DriverContext, str], Awaitable] | None = None,
+        model_selection: Callable[[], dict] | None = None,
     ):
         self.profiles = profiles if profiles is not None else ProfileStore()
         self.parser = parser
+        self.context_parser = context_parser
+        self.model_selection = model_selection
         self.operations = OperationService(
             store, driver=self._driver, action_validator=self._validate_action
         )
@@ -143,6 +147,7 @@ class ImportService:
             OperationRequest(
                 kind="profile_import",
                 input={
+                    **(self.model_selection() if self.model_selection else {}),
                     "source": source_data,
                     "source_base64": base64.b64encode(raw).decode("ascii"),
                     "expected_profile_revision": current.revision if current else None,
@@ -265,11 +270,15 @@ class ImportService:
         source = fixed["source"]
         context.control.checkpoint({"parse_attempts": values.get("parse_attempts", 0) + 1})
         parser = self.parser
-        if parser is None:
+        if self.context_parser is not None:
+            parsed = await self.context_parser(context, source["text"])
+        elif parser is None:
             from .agents.base_resume_loader import parse_resume_text
 
             parser = parse_resume_text
-        if inspect.iscoroutinefunction(parser):
+        if self.context_parser is not None:
+            pass
+        elif inspect.iscoroutinefunction(parser):
             parsed = await parser(source["text"])
         else:
             parsed = await asyncio.to_thread(parser, source["text"])

@@ -1,9 +1,10 @@
 import React from "react";
+import { ReadinessPanel, useFormDraft, DraftNotice } from "./review-flow.jsx";
 import { Icon } from "./icons.jsx";
 import { ResumeImportProgress } from "./resume-upload.jsx";
 import { JobContextFields, JobContextLine, WorkPreferencesFields } from "./work-context.jsx";
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
-import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders } from "./api/client.js";
+import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders, getProfile } from "./api/client.js";
 import { startOpenRouterSignIn } from "./api/openrouter-oauth.js";
 import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS } from "./data.jsx";
 
@@ -954,6 +955,8 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   const [expanded, setExpanded] = React.useState({});
   const [resume, setResume] = React.useState(null);
   const [base, setBase] = React.useState({});
+  const [profileRevision, setProfileRevision] = React.useState(null);
+  const [saveError, setSaveError] = React.useState(null);
   const [rawYaml, setRawYaml] = React.useState(null);
   const [dirty, setDirty] = React.useState(false);
   const [saveState, setSaveState] = React.useState("idle"); // idle | saving | saved | error
@@ -961,8 +964,10 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   const parsingActive = !!parsing && !parsing.completed && !parsing.failed;
 
   const load = React.useCallback(() => {
-    getResume()
-      .then(data => {
+    getProfile()
+      .then(snapshot => {
+        const data = snapshot.profile;
+        setProfileRevision(snapshot.revision);
         const ui = resumeForUi(data);
         if (!ui) { setResume(false); return; }
         setBase(data);
@@ -1011,12 +1016,16 @@ const ResumeEditor = ({ onReplace, parsing }) => {
     if (!resume) return;
     setSaveState("saving");
     try {
-      const saved = await updateResume(uiToResume(resume, base));
-      setBase(saved);
+      const saved = await updateResume(uiToResume(resume, base), profileRevision);
+      const snapshot = await getProfile();
+      setProfileRevision(snapshot.revision);
+      setBase(snapshot.profile || saved);
+      setSaveError(null);
       setRawYaml(null);
       setDirty(false);
       setSaveState("saved");
-    } catch {
+    } catch (error) {
+      setSaveError(error.status === 409 ? "The base resume changed elsewhere. Your edits are still here. Copy your changes, then reload the current profile before saving again." : error.message);
       setSaveState("error");
     }
   };
@@ -1036,6 +1045,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
 
   return (
     <div className="editor-layout" style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 1fr)", height: "100%", minHeight: 0 }}>
+      {saveError && <div role="alert" className="editor-conflict">{saveError}<Button onClick={() => navigator.clipboard?.writeText(JSON.stringify(uiToResume(resume,base),null,2))}>Copy my edits</Button><Button onClick={() => { setSaveError(null);load(); }}>Reload current profile</Button></div>}
       {/* Left nav */}
       <div style={{
         borderRight: "1px solid var(--border)", background: "var(--surface)",
@@ -1300,11 +1310,17 @@ const ResumeEditor = ({ onReplace, parsing }) => {
 
 // ============== NEW RUN ==============
 const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) => {
-  const [tab, setTab] = React.useState("text");
-  const [text, setText] = React.useState("");
-  const [url, setUrl] = React.useState("");
-  const [jobLocation, setJobLocation] = React.useState("");
-  const [workMode, setWorkMode] = React.useState("");
+  const [revision,setRevision] = React.useState("");
+  const [ready,setReady] = React.useState(false);
+  React.useEffect(() => { getProfile().then(p => setRevision(p.revision || "")).catch(() => {}); }, []);
+  const formDraft = useFormDraft({form:"new-run",run:"new",review:"job",revision}, {tab:"text",text:"",url:"",jobLocation:"",workMode:"",maxPages:2});
+  const {tab="text",text="",url="",jobLocation="",workMode="",maxPages=2} = formDraft.value;
+  const setField = (field,value) => formDraft.edit(current => ({...current,[field]:value}));
+  const setTab = value => setField("tab",value);
+  const setText = value => setField("text",value);
+  const setUrl = value => setField("url",value);
+  const setJobLocation = value => setField("jobLocation",value);
+  const setWorkMode = value => setField("workMode",value);
   const [jdFileId, setJdFileId] = React.useState(null);
   const [jdFileName, setJdFileName] = React.useState(null);
   const [uploadingFile, setUploadingFile] = React.useState(false);
@@ -1324,7 +1340,10 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
       setUploadingFile(true);
       setError(null);
       try {
-        const { file_id } = await uploadJdFile(file);
+        const { file_id, text: extractedText } = await uploadJdFile(file);
+        if (!extractedText) throw new Error("No readable job description text was returned. Upload the file again.");
+        setText(extractedText);
+        setTab("text");
         setJdFileId(file_id);
         setJdFileName(file.name);
       } catch (err) {
@@ -1337,7 +1356,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
     setError("Only .txt and .pdf files are supported.");
   };
   const charCount = text.length;
-  const tone = charCount > 8000 ? "danger" : charCount > 7000 ? "warning" : "neutral";
+  const tone = charCount > 48000 ? "danger" : charCount > 45000 ? "warning" : "neutral";
   const startRun = async () => {
     setSubmitting(true);
     setError(null);
@@ -1348,8 +1367,10 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
         jdFileId: tab === "file" ? jdFileId : undefined,
         jobLocation: jobLocation.trim() || undefined,
         workMode: workMode || undefined,
+        maxPages,
       });
-      onRunStarted?.(result.thread_id);
+      await formDraft.clear();
+      onRunStarted?.(result.thread_id || result.id);
     } catch (err) {
       setError(err.message || "Could not start run.");
     } finally {
@@ -1411,6 +1432,9 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
       <div className="serif" style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1.1, lineHeight: 1.05 }}>Tailor a resume to a job</div>
       <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginTop: 8, maxWidth: 620 }}>Paste the posting or drop a URL — the agents read it against your base résumé, ask only what they can't infer, and file the finished PDF under the company.</div>
 
+      <ReadinessPanel onReady={setReady} goto={goto}/>
+      <DraftNotice draft={formDraft} reconcile={value => formDraft.edit({...formDraft.value,...value})}/>
+      <label className="work-field"><span>Maximum PDF pages</span><select aria-label="Maximum PDF pages" value={maxPages} onChange={e => setField("maxPages",Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
       <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)", gap: 32, alignItems: "start", marginTop: 24 }}>
         {/* input card */}
         <Card padding={22}>
@@ -1436,7 +1460,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: detected ? "var(--success)" : "var(--text-faint)" }}>
                     <Icon name={detected ? "check-circle" : "info"} size={14}/>{detected ? "Ready to analyze the company and role" : "Paste the full job description above"}
                   </span>
-                  <span className="mono" style={{ fontSize: 11.5, color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-faint)" }}>{charCount.toLocaleString()} / 8,000</span>
+                  <span className="mono" style={{ fontSize: 11.5, color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-faint)" }}>{charCount.toLocaleString()} / 48,000</span>
                 </div>
               </>
             ) : tab === "url" ? (

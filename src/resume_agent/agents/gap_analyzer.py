@@ -142,15 +142,8 @@ def gap_analyzer_node(
     }
 
 
-def generate_proposals_v2(
-    snapshot: ContentSnapshot, jd: JobDescription | dict, model: Callable[[str], object],
-) -> ContentSnapshot:
-    """Call an injected boundary once with full fixed inputs, then validate output.
-
-    ``model(prompt: str)`` returns a list of EditProposal dictionaries/models or
-    exactly ``{'proposals': [...]}``. This helper owns no retries or settings.
-    """
-    from ..content_review import validate_proposals
+def build_proposal_prompt(snapshot: ContentSnapshot, jd: JobDescription | dict) -> str:
+    """Build the complete deterministic proposal input without invoking a model."""
     from ..contracts import canonical_json, content_hash
     from ..schemas import EditProposal
 
@@ -169,7 +162,7 @@ def generate_proposals_v2(
                 index_values(child, f'{path}/{i}')
 
     index_values(snapshot.profile)
-    prompt = (
+    return (
         'Propose explicit resume edits AFTER considering the complete fixed profile, JD, '
         'and user evidence below. Return only EditProposal objects; never return a rewritten '
         'profile. Use source-index JSON pointers and exact before_hash values. Only summary, '
@@ -189,7 +182,13 @@ def generate_proposals_v2(
             'user_text_hashes': {key: content_hash(value) for key, value in snapshot.user_text.items()},
         })
     )
-    raw = model(prompt)
+
+
+def apply_proposal_output(snapshot: ContentSnapshot, raw: object) -> ContentSnapshot:
+    """Validate every proposal against the exact source before presenting any."""
+    from ..content_review import validate_proposals
+    from ..schemas import EditProposal
+
     if isinstance(raw, dict):
         if set(raw) != {'proposals'}:
             raise ValueError('model response must contain only proposals')
@@ -200,3 +199,10 @@ def generate_proposals_v2(
     result = ContentSnapshot.model_validate({**snapshot.model_dump(), 'proposals': proposals})
     validate_proposals(result)
     return result.model_copy(deep=True)
+
+
+def generate_proposals_v2(
+    snapshot: ContentSnapshot, jd: JobDescription | dict, model: Callable[[str], object],
+) -> ContentSnapshot:
+    """Compatibility synchronous wrapper over the same pure prompt/output helpers."""
+    return apply_proposal_output(snapshot, model(build_proposal_prompt(snapshot, jd)))
