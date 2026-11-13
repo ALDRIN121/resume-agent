@@ -8,11 +8,13 @@ from . import library
 from .config import CONFIG_DIR, ResumeAgentSettings
 from .contracts import content_hash
 from .imports import ImportService
+from .job_store import JobStore
 from .memory import MemoryService
 from .model_tasks import ModelTaskRunner
 from .profile_store import ProfileStore
 from .provider_errors import ModelTaskError
 from .release_service import ReleaseService
+from .role_evaluation import EvaluationService
 from .run_service import DriverFailureError, RunService
 from .run_store import Conflict, RunStore
 from .schemas import UserResume
@@ -30,6 +32,9 @@ class Runtime:
         self.store = RunStore(self.root / 'library.sqlite', self.root / 'state.sqlite')
         self.profiles = ProfileStore(self.root / 'base_resume.yaml')
         self.memory = MemoryService(self.store, self.profiles)
+        self.jobs = JobStore(self.store)
+        self.evaluations = EvaluationService(self.store, self.jobs, self.profiles, self.memory,
+                                            settings=lambda: self.settings, model=model)
         if compile_adapter is None:
             compile_adapter = self._compile
         self.workflow = Workflow(self.store, artifacts_root=self.root / 'runs',

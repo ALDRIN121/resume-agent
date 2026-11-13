@@ -95,7 +95,16 @@ def _memory(conn: sqlite3.Connection) -> None:
                  'recorded_at TEXT NOT NULL, PRIMARY KEY(record_id,action_id))')
 
 
-MIGRATIONS = (_core, _memory)
+def _career(conn: sqlite3.Connection) -> None:
+    conn.execute('CREATE TABLE career_jobs (id TEXT PRIMARY KEY, logical_id TEXT NOT NULL, document TEXT NOT NULL)')
+    conn.execute('CREATE TABLE job_heads (logical_id TEXT PRIMARY KEY, source_kind TEXT NOT NULL, '
+                 'source_key TEXT NOT NULL, snapshot_id TEXT NOT NULL REFERENCES career_jobs(id), '
+                 'UNIQUE(source_kind,source_key))')
+    conn.execute('CREATE TABLE career_evaluations (operation_id TEXT PRIMARY KEY REFERENCES operations(id), '
+                 'job_id TEXT NOT NULL REFERENCES career_jobs(id), result_json TEXT NOT NULL)')
+
+
+MIGRATIONS = (_core, _memory, _career)
 
 
 def migrate(path: Path, *, migrations: Sequence[Callable[[sqlite3.Connection], None]] = MIGRATIONS) -> None:
