@@ -1,6 +1,7 @@
 """Evidence fit uses exact rational arithmetic, never model-generated scores."""
 from __future__ import annotations
 
+import re
 import unicodedata
 from fractions import Fraction
 
@@ -115,6 +116,15 @@ def _citation(citation, text):
         raise ValueError('invalid_jd_citation')
 
 
+def job_citation_catalog(text):
+    """Supply exact Unicode spans so model work is evidence interpretation, not counting."""
+    result = []
+    for match in re.finditer(r'\S.*?(?:[.!?](?=\s|$)|(?=[\r\n])|$)', text, re.DOTALL):
+        quote = match.group().rstrip()
+        result.append({'start': match.start(), 'end': match.start() + len(quote), 'quote': quote})
+    return result
+
+
 def _source(source, fixed, *, dimension=None, eligibility_category=None):
     origins = {'profile': ('profile_snapshot', 'profile_revision'), 'memory': ('memory_snapshot', 'memory_revision'),
                'answer': ('answers', None), 'user_text': ('user_text', None), 'eligibility': ('eligibility_facts', None)}
@@ -180,10 +190,11 @@ def validate_analysis(analysis, fixed):
 
 
 _SYSTEM = '''Analyze the full immutable job and candidate inputs below. Return requirements, findings and eligibility only; never generate a score.
+job_citations supplies exact precomputed JD spans. Copy each citation's start, end and quote verbatim from this catalog; do not count character offsets. Reuse a catalog citation for all criteria it supports. Do not shorten its quote or calculate a different span. The original complete job text remains authoritative.
 Each requirement has an id, one of the six dimensions, explicit single/all/any operator, members with unique IDs, exact JD citations (Unicode code-point start/end offsets and quote), and needs_review if the operator is unclear. Preserve C/C++/C#, versions, signs and units.
 Every member has exactly one finding: supported, justified transferable, contradicted or unknown. Missing profile evidence is unknown, never contradiction. Known findings require exact resolving source references with kind, input_hash, target_path JSON pointer, quote, and rationale. Include all source restrictions and unknowns. Never infer authorization, clearance or required presence from personal identity, home address or general location preferences.
 Eligibility sources must be explicitly typed eligibility_facts or memory target-preference hard_constraints. Use category authorization, clearance, presence or user_hard_constraint, status pass/fail/unknown, exact JD citation, sources and rationale. Unknown restrictions require no invented facts. Ordinary confirmed answers/user_text can support fit findings but cannot establish eligibility. Writing rules are not candidate evidence. Preferences can support only candidate_preferences. Do not treat these product-default dimensions as hiring probabilities.
-Input hashes: profile uses profile_revision; memory uses memory_revision; answer/user_text/eligibility use their declared hashes. Use the exact full supplied values, with no invented evidence.'''
+Input hashes: profile uses profile_revision; memory uses memory_revision; answer/user_text/eligibility use their declared hashes. Use the exact full supplied values, with no invented evidence. Keep rationales concise. Return the structured result without explanatory narration.'''
 
 
 class EvaluationService:
@@ -272,7 +283,8 @@ class EvaluationService:
                     return await self.model('role_evaluation', RoleAnalysis, messages)
             try:
                 raw = await ModelTaskRunner(context).run('role_evaluation', RoleAnalysis,
-                    [{'role': 'system', 'content': _SYSTEM}, {'role': 'user', 'content': canonical_json(fixed)}],
+                    [{'role': 'system', 'content': _SYSTEM}, {'role': 'user', 'content': canonical_json(
+                        {**fixed, 'job_citations': job_citation_catalog(fixed['job']['text'])})}],
                     invoke, settings=self.settings(), credentials_available=True if invoke else None)
             except ModelTaskError as exc:
                 raise DriverFailureError(exc.code, exc.stage) from None

@@ -53,6 +53,33 @@ async def test_evaluation_freezes_inputs_and_staleness_never_rewrites_result(tmp
     assert len(calls)==1
 
 
+async def test_evaluation_supplies_exact_job_spans_without_changing_fixed_inputs(tmp_path):
+    runtime, job, calls = setup_evaluation(tmp_path)
+    operation = runtime.evaluations.create(job.id)
+    before = runtime.store.input('operation', operation['id'])
+    result = await runtime.evaluations.drive(operation['id'])
+    assert result['status'] == 'complete'
+    assert calls[0]['job_citations'] == [{'start': 0, 'end': 6, 'quote': 'Python'}]
+    assert calls[0]['job']['text'] == before['job']['text']
+    assert runtime.store.input('operation', operation['id']) == before
+
+
+@pytest.mark.parametrize('text', [
+    'Python required. Docker preferred.\nHybrid in Bengaluru.',
+    '  C++ and .NET 8.0 required.\nCafé résumé review.  ',
+    'Python required. Python required.',
+    'One line without sentence punctuation',
+])
+def test_job_citation_catalog_uses_exact_unicode_offsets_and_keeps_every_word(text):
+    from resume_agent.role_evaluation import job_citation_catalog
+
+    citations = job_citation_catalog(text)
+    assert citations
+    assert all(text[c['start']:c['end']] == c['quote'] for c in citations)
+    assert ''.join(''.join(c['quote'].split()) for c in citations) == ''.join(text.split())
+    assert all(a['end'] <= b['start'] for a, b in zip(citations, citations[1:]))
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('boundary',['after_model','after_result_checkpoint','after_result_index'])
 async def test_evaluation_restart_reuses_model_and_result(tmp_path,boundary):
