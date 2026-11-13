@@ -41,7 +41,7 @@ def test_distribution_contains_skill_and_excludes_private_workspaces(distributio
         paths=archive.getnames()
         assert any(p.endswith('/skills/resume-agent/SKILL.md') for p in paths)
     for name in [*names,*paths]:
-        assert not set(Path(name).parts)&{'.egm','.superpowers','.env','.claude','.codex','library.sqlite','state.sqlite','base_resume.yaml'}
+        assert not set(Path(name).parts)&{'.egm','.superpowers','.env','.claude','.codex','node_modules','library.sqlite','state.sqlite','base_resume.yaml'}
 
 
 def test_installed_wheel_exports_the_skill_outside_the_checkout(distributions,tmp_path):

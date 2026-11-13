@@ -61,7 +61,7 @@ packages = ["src/resume_agent"]
 "skills/resume-agent" = "resume_agent/_skills/resume-agent"
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/.egm", "/.superpowers", "/.agents", "/.codex", "/.claude", "/.venv", "/.env", "/output", "/dist", "/build"]
+exclude = ["/.egm", "/.superpowers", "/.agents", "/.codex", "/.claude", "/.venv", "/.env", "/output", "/dist", "/build", "/Frontend/node_modules"]
 
 [tool.hatch.build.targets.sdist.force-include]
 "Frontend/dist" = "Frontend/dist"

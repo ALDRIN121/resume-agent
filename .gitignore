@@ -20,6 +20,9 @@ env/
 # uv lockfile — keep; .uv cache — skip
 .uv/
 
+# Frontend dependencies stay local; ship only the production bundle.
+Frontend/node_modules/
+
 # Environment / secrets — NEVER commit
 .env
 *.env
