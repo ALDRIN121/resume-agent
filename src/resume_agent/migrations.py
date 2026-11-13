@@ -135,7 +135,12 @@ def _discovery(conn: sqlite3.Connection) -> None:
         conn.execute(statement)
 
 
-MIGRATIONS = (_core, _memory, _career, _applications, _discovery)
+def _external_model_requests(conn):
+    conn.execute("CREATE TABLE external_model_requests (request_id TEXT PRIMARY KEY, owner_kind TEXT NOT NULL CHECK(owner_kind IN ('run','operation')), "
+                 'owner_id TEXT NOT NULL, task_key TEXT NOT NULL, input_hash TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(owner_kind,owner_id,task_key))')
+
+
+MIGRATIONS = (_core, _memory, _career, _applications, _discovery, _external_model_requests)
 
 
 def migrate(path: Path, *, migrations: Sequence[Callable[[sqlite3.Connection], None]] = MIGRATIONS) -> None:

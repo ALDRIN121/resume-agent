@@ -35,6 +35,7 @@ from .contracts import (
     canonical_json,
     content_hash,
 )
+from .external_model import ExternalModelPauseError
 from .run_store import TERMINAL, Conflict, RunStore
 from .schemas import UserResume
 
@@ -76,6 +77,10 @@ class DriverControl:
     def check_cancelled(self) -> None:
         if self._lifecycle.store.cancellation(self._lifecycle.kind, self._owner_id):
             raise _CancelledError()
+
+    @property
+    def store(self):
+        return self._lifecycle.store
 
     def checkpoint(self, values: dict[str, JsonValue]) -> None:
         """Merge JSON values before a pause/call; attempts and applied IDs survive restart."""
@@ -337,7 +342,10 @@ class _Lifecycle:
                 ):
                     self.store.cancel(self.kind, owner_id)
                     raise _CancelledError()
-                outcome = await self.driver(context)
+                try:
+                    outcome = await self.driver(context)
+                except ExternalModelPauseError as pause:
+                    outcome = DriverResult(status='awaiting-input' if self.kind == 'run' else 'pending_model', pending=pause.request)
                 control.check_cancelled()
                 if not isinstance(outcome, DriverResult):
                     raise _DriverContractError("invalid_driver_result")

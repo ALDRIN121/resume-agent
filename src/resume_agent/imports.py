@@ -138,7 +138,11 @@ class ImportService:
             store, driver=self._driver, action_validator=self._validate_action
         )
 
-    def create(self, raw: bytes, filename: str) -> dict:
+    def create(self, raw: bytes, filename: str, *, execution_mode='app') -> dict:
+        if execution_mode not in ('app', 'host'):
+            raise ValueError('invalid_execution_mode')
+        if execution_mode == 'host' and self.context_parser is None:
+            raise ValueError('host_parser_not_configured')
         # Validate the complete source before durable storage or any external work.
         source = extract_source(raw, filename)
         current = self.profiles.load_snapshot()
@@ -147,7 +151,8 @@ class ImportService:
             OperationRequest(
                 kind="profile_import",
                 input={
-                    **(self.model_selection() if self.model_selection else {}),
+                    **({'provider': 'external_agent', 'model': 'host_agent', 'request': {'execution_mode': 'host'}}
+                       if execution_mode == 'host' else (self.model_selection() if self.model_selection else {})),
                     "source": source_data,
                     "source_base64": base64.b64encode(raw).decode("ascii"),
                     "expected_profile_revision": current.revision if current else None,

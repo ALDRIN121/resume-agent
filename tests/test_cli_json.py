@@ -113,7 +113,6 @@ def test_discovery_json_is_manual_and_preserves_partial_state(tmp_path,monkeypat
     ('unknown',None,None,1),('start',{'job_input':'x','input_type':'text','api_key':'secret'},None,1),
     ('inspect',None,'nonsense:id',1),('inspect',None,None,1),('inspect',None,'run:missing',1),
     ('respond',{'kind':'review_pdf'},'run:missing',1),
-    ('start',{'job_input':'x','input_type':'text','execution_mode':'external_agent'},None,2),
     ('application',{'op':'list','payload':{'extra':'no'}},None,1),
 ])
 def test_invalid_input_has_one_json_error_and_stable_exit(tmp_path,monkeypatch,command,body,resource,code):

@@ -191,7 +191,7 @@ async def test_cancellation_discards_response_and_stops_retries(tmp_path, during
     assert "result" not in record
 
 
-@pytest.mark.parametrize("mode,credentials,code", [("host", True, "unsupported_mode"), ("app", False, "authentication")])
+@pytest.mark.parametrize("mode,credentials,code", [("app", False, "authentication")])
 async def test_readiness_stops_before_external_call_with_attempt_zero(tmp_path, mode, credentials, code):
     from resume_agent.model_tasks import ModelTaskRunner
     async def external(messages):

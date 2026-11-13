@@ -77,7 +77,9 @@ class Runtime:
         except ModelTaskError as exc:
             raise DriverFailureError(exc.code, exc.stage) from None
 
-    def readiness(self):
+    def readiness(self, *, execution_mode='app'):
+        if execution_mode not in ('app', 'host'):
+            raise ValueError('invalid_execution_mode')
         try:
             snapshot = self.profiles.load_snapshot()
             profile_status = ('missing' if snapshot is None else 'review_required' if snapshot.review_required else 'ready')
@@ -93,17 +95,19 @@ class Runtime:
             'compiler': {'status': 'ready' if self.tool_finder(self.settings.latex.tectonic_path) else 'missing'},
             'renderer': {'status': 'ready' if all(self.tool_finder(t) for t in ('pdftoppm', 'pdfinfo')) else 'missing'},
         }
+        if execution_mode == 'host':
+            checks['provider'] = {'status': 'host_agent', 'provider': 'external_agent', 'model': 'host_agent', 'authentication_verified': False}
         steps = []
         if profile_status != 'ready':
             steps.append('Import a resume and review its draft.' if profile_status == 'missing' else 'Review the current profile before generation.')
-        if not configured:
+        if not configured and execution_mode == 'app':
             steps.append('Configure the selected provider credentials.')
         if checks['compiler']['status'] != 'ready':
             steps.append('Install Tectonic to compile the PDF.')
         if checks['renderer']['status'] != 'ready':
             steps.append('Install Poppler (pdftoppm and pdfinfo) to preview every PDF page.')
         return {'contract_version': 2, **checks, 'generation_ready': not steps, 'next_steps': steps,
-                'execution_modes': ['app']}
+                'execution_modes': ['app', 'host'], 'agent_execution_modes': ['configured_provider', 'external_agent']}
 
     def create_run(self, request):
         if request.evaluation_id and not request.job_id:
@@ -120,7 +124,7 @@ class Runtime:
                     raise Conflict('completed_evaluation_required')
                 if (evaluation['stale'] or evaluation['result']['fit']['recommendation'] != 'prioritize') and not request.evaluation_override:
                     raise Conflict('explicit_evaluation_override_required')
-        readiness = self.readiness()
+        readiness = self.readiness(execution_mode=request.execution_mode)
         if not readiness['generation_ready']:
             raise Conflict('generation_not_ready')
         snapshot = self.profiles.load_snapshot()
@@ -134,4 +138,15 @@ class Runtime:
         return self.runs.create(request, profile_snapshot=snapshot.profile, profile_revision=snapshot.revision,
                                 profile_provenance=provenance,
                                 memory_snapshot=memory, memory_revision=content_hash(memory),
-                                provider=self.settings.provider, model=self.settings.model.default)
+                                provider='external_agent' if request.execution_mode == 'host' else self.settings.provider,
+                                model='host_agent' if request.execution_mode == 'host' else self.settings.model.default)
+
+    async def respond_model_request(self, action):
+        from .external_model import request_owner
+        kind, identifier = request_owner(self.store, action.request_id)
+        if kind == 'run':
+            return (await self.runs.drive(identifier, action)).model_dump(mode='json')
+        row = self.store.row('operation', identifier)
+        if row['kind'] == 'profile_import':
+            return await self.imports.drive(identifier, action)
+        return await self.evaluations.drive(identifier, action)

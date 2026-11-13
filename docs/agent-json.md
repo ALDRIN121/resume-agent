@@ -59,4 +59,14 @@ A saved queued operation can report `next_action.kind = execute`. Invoke `respon
 
 Model results and human decisions are different action kinds. A model result cannot approve content, accept an import or approve a PDF. Inspect saved work after an execution error; its resource and current pause remain available when storage can be read.
 
-The default execution mode is `configured_provider`. It uses the configured backend provider and its billing. `external_agent` is unavailable until the durable host-model boundary is implemented. This protocol does not establish cryptographic proof of human identity.
+The default execution mode is `configured_provider`. It uses the configured backend provider and its billing. Use `external_agent` to request structured results from the calling agent instead. This mode needs no backend API key. The host agent can have its own subscription or usage charges.
+
+External mode returns `next_action.kind = model_request`. Its `payload` contains `task`, `schema_name`, `schema_version`, the complete `input_payload`, `output_schema`, and response-attempt counts. Supply a typed `model_request` response with `action_id`, the exact `request_id`, `input_hash`, and structured `result`. The hash binds the task, schema, complete messages and captured execution identity.
+
+The first schema-invalid result leaves one response attempt. A second invalid result fails the task. Stale requests consume no attempt. Saved validated results survive restart. Source-reference checks still apply after schema validation. These can reject an invalid claim immediately.
+
+Host import and evaluation use the same boundary. A model-produced import draft still requires human acceptance. Host generation still requires content and exact PDF review. Optional HR and vision model calls are disabled in external mode. Provider and model labels are `external_agent` and `host_agent`; they do not identify the actual host model.
+
+The optional API route `POST /api/model-tasks/REQUEST_ID/respond` accepts the same typed model response. It finds the saved owner and checks the current request before processing. The registry is a lookup index; the owner checkpoint holds the response budget and result.
+
+This protocol does not establish cryptographic proof of human identity. Host installation and version smoke checks are separate release evidence.

@@ -22,7 +22,7 @@ _GUIDANCE = {
     "context_limit": "The input exceeds this model's context limit. Choose a model with a larger context window.",
     "truncated_output": "The model response was truncated. Increase the output budget or choose another model.",
     "task_budget_exhausted": "This task has used its two model attempts. Start a new run to try again.",
-    "unsupported_mode": "Host mode is not supported in this release. Choose app mode to continue.",
+    "unsupported_mode": "This execution mode is not supported. Choose a supported mode to continue.",
     "provider_unknown": "The model request failed (provider_unknown). Check the provider settings and retry.",
 }
 

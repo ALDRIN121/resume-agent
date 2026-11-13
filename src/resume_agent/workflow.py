@@ -128,7 +128,7 @@ class Workflow:
             values.update(changes)
 
         # Check mode before fetching a URL, constructing a provider, or rendering.
-        if fixed['request']['execution_mode'] != 'app':
+        if fixed['request']['execution_mode'] not in ('app', 'host'):
             raise DriverFailureError('unsupported_mode', 'preflight')
         artifact_id = self.store.row('run', context.owner_id)['artifact_id']
         artifacts = RunArtifacts.create(artifact_id, self.artifacts_root)
@@ -250,7 +250,7 @@ class Workflow:
         if advisories is None:
             hr = {'source': 'hr', 'status': 'disabled', 'diagnostics': []}
             settings = self.settings() if callable(self.settings) else self.settings
-            if settings is not None and settings.features.enable_hr_review:
+            if fixed['request']['execution_mode'] == 'app' and settings is not None and settings.features.enable_hr_review:
                 save(stage='hr_advisory')
                 try:
                     advisory = await self._model(context, 'hr_advisory', HrAdvisory, [{'role': 'user', 'content':

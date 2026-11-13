@@ -28,7 +28,7 @@ from .api.routers.memory import MemoryDecision
 from .api.routers.runs import ContentPreviewRequest, ReexportRequest
 from .api.v2_manager import V2RunManager, typed_action
 from .applications import ApplicationEventRequest
-from .contracts import ACTION_ADAPTER, Continue, RunRequest
+from .contracts import ACTION_ADAPTER, Continue, ModelResponse, RunRequest
 from .memory import MemoryProposal
 from .run_store import Conflict
 
@@ -90,9 +90,7 @@ def require(resource, kind=None):
 
 
 def configured_mode(value):
-    if value != 'configured_provider':
-        raise MissingPrerequisiteError('external_agent_not_available')
-    return 'app'
+    return {'configured_provider': 'app', 'external_agent': 'host'}[value]
 
 
 def inspect(runtime, resource):
@@ -136,7 +134,10 @@ async def respond(runtime, resource, body):
         await runtime.imports.drive(identifier, ACTION_ADAPTER.validate_python(body) if body else None)
     elif resource.kind == 'role_evaluation':
         # Evaluation has no import/content/PDF review action.
-        await runtime.evaluations.drive(identifier, Continue.model_validate(body) if body else None)
+        action = ACTION_ADAPTER.validate_python(body) if body else None
+        if action is not None and not isinstance(action, (Continue, ModelResponse)):
+            raise ValueError('evaluation_action_not_allowed')
+        await runtime.evaluations.drive(identifier, action)
     elif resource.kind == 'discovery_sync':
         await runtime.discovery.drive(identifier, continue_action_id=Continue.model_validate(body).action_id)
     else:
@@ -212,7 +213,7 @@ async def execute(runtime, command, body, resource, publish):
             raise ValueError('start_has_no_existing_resource')
         value = StartInput.model_validate(body)
         mode = configured_mode(value.execution_mode)
-        if not runtime.readiness()['generation_ready']:
+        if not runtime.readiness(execution_mode=mode)['generation_ready']:
             raise MissingPrerequisiteError('generation_not_ready')
         run = runtime.create_run(RunRequest.model_validate(value.model_dump() | {'execution_mode': mode}))
         resource = Resource(kind='run', id=run.id)
@@ -261,9 +262,9 @@ async def execute(runtime, command, body, resource, publish):
         if resource is not None:
             raise ValueError('import_has_no_existing_resource')
         value = ImportInput.model_validate(body)
-        configured_mode(value.execution_mode)
+        mode = configured_mode(value.execution_mode)
         source = Path(value.source_path)
-        created = runtime.imports.create(read_file(source), source.name)
+        created = runtime.imports.create(read_file(source), source.name, execution_mode=mode)
         resource = Resource(kind='profile_import', id=created['id'])
         publish(resource)
         await runtime.imports.drive(created['id'])

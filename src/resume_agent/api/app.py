@@ -38,6 +38,7 @@ def create_app(*, services=None) -> FastAPI:
     from .routers.jobs import evaluation_router
     from .routers.jobs import router as jobs_router
     from .routers.memory import router as memory_router
+    from .routers.model_tasks import router as model_tasks_router
     from .routers.outcomes import router as outcomes_router
     from .routers.readiness import router as readiness_router
     from .routers.resume import create_profile_router
@@ -50,6 +51,7 @@ def create_app(*, services=None) -> FastAPI:
     app.include_router(create_profile_router(services.imports))
     app.include_router(readiness_router)
     app.include_router(memory_router)
+    app.include_router(model_tasks_router)
     app.include_router(jobs_router)
     app.include_router(evaluation_router)
     app.include_router(applications_router)

@@ -212,7 +212,8 @@ class EvaluationService:
         current = self.settings()
         fixed = {'job': job.model_dump(mode='json'), 'profile_snapshot': profile.profile.model_dump(mode='json'),
                  'profile_revision': profile.revision, 'memory_snapshot': memory, 'memory_revision': content_hash(memory),
-                 'rubric_version': 'fit-v1', 'provider': current.provider, 'model': current.model.default,
+                 'rubric_version': 'fit-v1', 'provider': 'external_agent' if execution_mode == 'host' else current.provider,
+                 'model': 'host_agent' if execution_mode == 'host' else current.model.default,
                  'request': {'execution_mode': execution_mode}, 'answers': answers or {}, 'user_text': user_text or {},
                  'eligibility_facts': eligibility_facts or {}}
         fixed.update({name + '_hash': content_hash(fixed[name]) for name in ('answers', 'user_text', 'eligibility_facts')})

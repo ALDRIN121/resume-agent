@@ -14,9 +14,10 @@ from copy import deepcopy
 from typing import TYPE_CHECKING
 from weakref import WeakKeyDictionary
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from .contracts import content_hash
+from .contracts import ModelRequest, ModelResponse, content_hash
+from .external_model import ExternalModelPauseError, register_request
 from .provider_errors import ModelTaskError, ProviderFailure, classify_provider_error
 
 if TYPE_CHECKING:
@@ -76,8 +77,6 @@ class ModelTaskRunner:
         win over current selection. Injected adapters must use those captured
         selections, disable internal retries and attest credentials if necessary.
         """
-        from .llm import get_chat_model, parse_structured_response
-
         if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", stage):
             raise ValueError("invalid task stage")
         self.context.control.check_cancelled()
@@ -88,8 +87,11 @@ class ModelTaskRunner:
         key = content_hash(identity)
         record = deepcopy(self.context.checkpoint.get("model_tasks", {}).get(key, {"stage": stage, "model": self.model,
                           "attempts": 0, "status": "ready"}))
+        if self.mode == 'host':
+            return self._host_run(key, record, schema, identity)
         if self.mode != "app":
             self._stop(key, record, ProviderFailure("unsupported_mode"))
+        from .llm import get_chat_model, parse_structured_response
         if record["status"] == "complete":
             # The stored value was validated under this schema/input hash already.
             result = schema.model_validate(deepcopy(record["result"]))
@@ -152,6 +154,53 @@ class ModelTaskRunner:
             self.context.control.check_cancelled()
             record.pop("retry_at")
         raise AssertionError("unreachable model attempt budget")
+
+    def _host_run(self, key, record, schema, identity):
+        """Checkpoint accepted responses before validation; never construct a provider."""
+        self.context.control.check_cancelled()
+        if record['status'] == 'complete':
+            result = schema.model_validate(deepcopy(record['result']))
+            self._save(key, record)
+            return result
+        if record['status'] == 'failed':
+            raise ModelTaskError(record['code'], record['stage'], self.model, record['attempts'])
+        request_id = register_request(self.context, key, record.get('request_id'))
+        record.update(request_id=request_id, input_hash=key, status='pending')
+        action = self.context.action
+        if isinstance(action, ModelResponse) and action.request_id == request_id:
+            if action.input_hash != key:
+                from .run_store import Conflict
+                raise Conflict('stale_model_input')
+            saved_response = record.get('response')
+            if not saved_response or saved_response['action_id'] != action.action_id:
+                if record['attempts'] >= 2:
+                    self._stop(key, record, ProviderFailure('task_budget_exhausted'))
+                record.update(attempts=record['attempts'] + 1, response={
+                    'action_id': action.action_id, 'result': deepcopy(action.result), 'status': 'validating'})
+                self._save(key, record)
+            saved_response = record['response']
+            if saved_response['status'] == 'validating':
+                self.context.control.check_cancelled()
+                try:
+                    result = schema.model_validate(deepcopy(saved_response['result']))
+                except (ValueError, ValidationError, TypeError):
+                    saved_response['status'] = 'invalid'
+                    record['validation_error'] = 'invalid_structured_response'
+                    if record['attempts'] >= 2:
+                        self._stop(key, record, ProviderFailure('invalid_output'))
+                    self._save(key, record)
+                else:
+                    record.update(status='complete', result=result.model_dump(mode='json'))
+                    saved_response['status'] = 'complete'
+                    record.pop('validation_error', None)
+                    self._save(key, record)
+                    return result
+        self._save(key, record)
+        raise ExternalModelPauseError(ModelRequest(request_id=request_id, input_hash=key, payload={
+            'task': record['stage'], 'schema_name': schema.__name__, 'schema_version': 1,
+            'input_payload': deepcopy(identity['input']), 'output_schema': deepcopy(identity['schema']),
+            'attempts_used': record['attempts'], 'attempts_remaining': 2 - record['attempts'],
+            'validation_error': record.get('validation_error')}))
 
 
 def invoke_bounded[T: BaseModel](invoke: Callable[[object], object], messages: object, schema: type[T],
