@@ -1571,3 +1571,23 @@ def application_event_cli(application_id: str, source: Path = typer.Option(..., 
         return runtime.applications.append(application_id, body.event.model_dump(mode='json'),
             action_id=body.action_id, expected_revision=body.expected_revision)
     _career_call(work)
+
+
+class _AgentJsonCommand(typer.core.TyperCommand):
+    def parse_args(self, ctx, args):
+        from click import UsageError
+        command = args[0] if args and not args[0].startswith('-') else ''
+        try:
+            return super().parse_args(ctx, args)
+        except UsageError:
+            from .agent_cli import run_command
+            run_command(command, None, None, lambda: None, extra_args=('invalid_arguments',))
+            raise typer.Exit(1) from None
+
+
+@app.command('agent', cls=_AgentJsonCommand, context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
+def agent_json(ctx: typer.Context, command: str | None = typer.Argument(None),
+               input_file: Path | None = typer.Option(None, '--input'), resource: str | None = typer.Option(None, '--resource')):
+    """Run one non-interactive JSON command. Human reviews remain explicit."""
+    from .agent_cli import run_command
+    raise typer.Exit(run_command(command, input_file, resource, _career_runtime, ctx.args))
