@@ -9,6 +9,7 @@ from fastapi import (
     Body,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     WebSocket,
@@ -18,7 +19,7 @@ from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel
 
 from ...config import MAX_RESUME_UPLOAD_BYTES
-from ...contracts import AcceptImport, RejectImport
+from ...contracts import AcceptImport, Continue, RejectImport
 from ...imports import ImportInputError, ImportService
 from ...profile_store import ProfileConflictError
 from ...run_store import Conflict
@@ -68,14 +69,14 @@ async def update_resume(request: Request, body: dict = Body(...)):
 
 
 @router.post('/upload')
-async def upload_resume(request: Request, file: UploadFile = File(...)):
+async def upload_resume(request: Request, file: UploadFile = File(...), defer_processing: bool = False):
     raw = await file.read(MAX_RESUME_UPLOAD_BYTES + 1)
     if len(raw) > MAX_RESUME_UPLOAD_BYTES:
         raise HTTPException(413, detail={'code': 'upload_too_large'})
     service = request.app.state.services.imports
     try:
         created = service.create(raw, file.filename or '')
-        draft = await service.drive(created['id'])
+        draft = created if defer_processing else await service.drive(created['id'])
         return draft | {'job_id': draft['id'], 'operation_id': draft['id'], 'contract_version': 2}
     except ImportInputError as exc:
         raise HTTPException(400, detail={'code': exc.code}) from None
@@ -107,7 +108,7 @@ class CurrentProfileReview(BaseModel):
 def create_profile_router(service: ImportService) -> APIRouter:
     """Build private v2 adapters; T09 explicitly mounts this and switches clients.
 
-    POST imports awaits create + drive and returns the durable review. GET includes
+    POST imports can return a durable ID before parsing. GET includes
     complete extracted source, per-page warnings and draft; GET source downloads the
     original bytes. Accept/reject bodies use shared typed import action contracts.
     """
@@ -144,21 +145,45 @@ def create_profile_router(service: ImportService) -> APIRouter:
             raise http_error(exc) from None
 
     @profile_router.post("/imports", status_code=201)
-    async def create_import(file: UploadFile = File(...)) -> dict:
+    async def create_import(file: UploadFile = File(...), defer_processing: bool = False) -> dict:
         raw = await file.read(MAX_RESUME_UPLOAD_BYTES + 1)
         if len(raw) > MAX_RESUME_UPLOAD_BYTES:
             raise HTTPException(413, detail={"code": "upload_too_large", "message": "Upload exceeds 10 MiB"})
         try:
             created = await asyncio.to_thread(service.create, raw, file.filename or "")
-            return await service.drive(created["id"])
+            return created if defer_processing else await service.drive(created["id"])
         except (ImportInputError, ProfileConflictError, Conflict, KeyError) as exc:
             raise http_error(exc) from None
+
+    @profile_router.get("/imports")
+    async def list_imports(active_only: bool = True, limit: int = Query(default=50, ge=1, le=200),
+                           offset: int = Query(default=0, ge=0)) -> dict:
+        return await asyncio.to_thread(service.list, active_only=active_only, limit=limit, offset=offset)
 
     @profile_router.get("/imports/{operation_id}")
     async def get_import(operation_id: str) -> dict:
         try:
             return await asyncio.to_thread(service.get, operation_id)
         except KeyError as exc:
+            raise http_error(exc) from None
+
+    @profile_router.post("/imports/{operation_id}/continue")
+    async def continue_import(operation_id: str, action: Continue | None = Body(default=None)) -> dict:
+        try:
+            view = service.get(operation_id)
+            if view['status'] == 'interrupted' and action is None:
+                raise Conflict('explicit_continue_required')
+            return await service.drive(operation_id, action)
+        except (KeyError, Conflict, ProfileConflictError) as exc:
+            raise http_error(exc) from None
+
+    @profile_router.post("/imports/{operation_id}/cancel")
+    async def cancel_import(operation_id: str) -> dict:
+        try:
+            service.get(operation_id)  # Validate the operation kind before cancellation.
+            service.operations.cancel(operation_id)
+            return service.get(operation_id)
+        except (KeyError, Conflict) as exc:
             raise http_error(exc) from None
 
     @profile_router.get("/imports/{operation_id}/source")

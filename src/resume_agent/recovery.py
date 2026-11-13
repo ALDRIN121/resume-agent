@@ -104,6 +104,29 @@ def _reconcile_frozen_review(service, release_service, run_id: str) -> None:
         lifecycle._commit_index(run_id, index, completed_ids)
 
 
+def _startup_diagnostic(service, run_id, code=None):
+    """Keep an artifact conflict local to its owner; never hide database failures."""
+    lifecycle = service._lifecycle
+    try:
+        with service.store.ownership('run', run_id):
+            saved = lifecycle._latest(run_id)
+            with service.store.connection() as conn:
+                view = lifecycle._view(run_id, conn)
+            diagnostics = [d.model_dump() for d in view.diagnostics if d.stage != 'release_recovery']
+            if code:
+                diagnostics.append({'code': code, 'stage': 'release_recovery'})
+            if diagnostics == [d.model_dump() for d in view.diagnostics]:
+                return
+            index = {'status': 'cancelled' if view.cancellation_requested else view.status,
+                     'pending': view.pending.model_dump(mode='json') if view.pending else None,
+                     'diagnostics': diagnostics}
+            lifecycle._checkpoint(run_id, {**saved, 'index': index})
+            lifecycle._commit_index(run_id, index, [])
+    except Conflict as exc:
+        if str(exc) != 'owner_busy':
+            raise
+
+
 def reconcile_startup(service) -> list:
     """Rebuild durable indexes and finish already-commanded cancellation cleanup."""
     from .release_service import ReleaseService
@@ -117,12 +140,16 @@ def reconcile_startup(service) -> list:
                 release_service.recover_unfinished(run_id, cancel=True)
             except Conflict as exc:
                 if str(exc) != 'owner_busy':
-                    raise
+                    _startup_diagnostic(service, run_id, str(exc))
+            else:
+                _startup_diagnostic(service, run_id)
         elif binding:
             try:
                 _reconcile_frozen_review(service, release_service, run_id)
             except Conflict as exc:
                 if str(exc) != 'owner_busy':
-                    raise
+                    _startup_diagnostic(service, run_id, str(exc))
+            else:
+                _startup_diagnostic(service, run_id)
         views.append(service.get(run_id))
     return views

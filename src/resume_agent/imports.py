@@ -164,6 +164,24 @@ class ImportService:
     def get(self, operation_id: str) -> dict:
         return self._view(self.operations.get(operation_id))
 
+    def list(self, *, active_only=True, limit=50, offset=0):
+        if type(limit) is not int or not 1 <= limit <= 200 or type(offset) is not int or offset < 0:
+            raise ValueError('invalid_import_page')
+        where = "kind='profile_import'" + (" AND status NOT IN ('complete','failed','cancelled')" if active_only else '')
+        with self.operations.store.connection() as conn:
+            rows = conn.execute('SELECT id,created_at,updated_at FROM operations WHERE ' + where + ' ORDER BY rowid DESC LIMIT ? OFFSET ?', (limit, offset)).fetchall()
+        items = []
+        for row in rows:
+            view = self.get(row['id'])
+            if active_only and view['status'] in ('complete', 'failed', 'cancelled'):
+                continue
+            items.append({'id': row['id'], 'status': view['status'], 'filename': view['source']['filename'],
+                          'created_at': row['created_at'], 'updated_at': row['updated_at'],
+                          'pending_kind': view['pending']['kind'] if view['pending'] else None})
+        with self.operations.store.connection() as conn:
+            total = conn.execute('SELECT count(*) FROM operations WHERE ' + where).fetchone()[0]
+        return {'items': items, 'total': total, 'limit': limit, 'offset': offset, 'has_more': offset + len(rows) < total}
+
     async def drive(self, operation_id: str, action: OperationAction | None = None) -> dict:
         self._inputs(operation_id)  # reject other operation kinds before running anything
         operation = await self.operations.drive(operation_id, action)

@@ -11,7 +11,7 @@ import { CareerApplications } from "./career-applications.jsx";
 import { BaseResumeParseModal, ParsingBanner, ReplaceBaseResumeModal } from "./resume-upload.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PROVIDERS } from "./data.jsx";
-import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume, exchangeOpenRouter, getImport } from "./api/client.js";
+import { getSettings, updateSettings, listRuns, uploadResume, runDoctor, getResume, exchangeOpenRouter, getImport,listImports,continueImport } from "./api/client.js";
 import { consumeOpenRouterCallback } from "./api/openrouter-oauth.js";
 import { subscribeResumeParse } from "./api/ws.js";
 
@@ -700,6 +700,7 @@ export const App = () => {
     try { const id = localStorage.getItem("rg.activeImport"); return id ? {operationId:id,file:"Saved import",statuses:{},startedAt:Date.now(),modalOpen:true} : null; } catch { return null; }
   });
   const [replaceOpen, setReplaceOpen] = useState(false);
+  const [savedImports,setSavedImports]=useState({items:[],total:0,has_more:false});
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [selectedRunTitle, setSelectedRunTitle] = useState(null);
   const [lastRun, setLastRun] = useState(null);
@@ -783,6 +784,24 @@ export const App = () => {
   const notifications = runsToNotifications(runs).map(n => ({ ...n, unread: !readNotifIds.has(n.id) }));
 
   // ----- Real base-resume upload + parse (POST /api/resume/upload → WS) -----
+  const openSavedImport=async(id)=>{
+    const operation=await getImport(id);
+    try{localStorage.setItem('rg.activeImport',id);}catch{}
+    setParsing({operationId:id,operation,file:operation.source?.filename||'Saved import',statuses:{},startedAt:Date.now(),modalOpen:true,
+      completed:operation.status==='complete',failed:operation.status==='failed'});
+  };
+  const refreshSavedImports=async(restore=false)=>{
+    const page=await listImports();if(!Array.isArray(page?.items))return;
+    setSavedImports(page);
+    let known;try{known=localStorage.getItem('rg.activeImport');}catch{}
+    if(restore&&!known&&page.items.length)await openSavedImport(page.items[0].id);
+  };
+  useEffect(()=>{refreshSavedImports(true).catch(()=>{});},[]);
+  const importUpdated=operation=>{
+    setParsing(p=>({...p,operation,completed:operation.status==='complete',failed:operation.status==='failed'}));
+    if(['complete','cancelled','failed'].includes(operation.status)){try{localStorage.removeItem('rg.activeImport');}catch{}}
+    refreshSavedImports().catch(()=>{});
+  };
   const startParse = async (file) => {
     if (!(file instanceof File)) return;
     setReplaceOpen(false);
@@ -792,12 +811,18 @@ export const App = () => {
       job = await uploadResume(file);
     } catch (err) {
       setParsing(p => p ? { ...p, failed: true, modalOpen: true, error: err.message || "Upload failed." } : null);
+      refreshSavedImports(true).catch(()=>{});
       return;
     }
     if (job.contract_version === 2 || job.id || job.operation_id) {
       const operationId = job.id || job.operation_id || job.job_id;
       try { localStorage.setItem("rg.activeImport",operationId); } catch {}
       setParsing(p => ({...p,operationId,operation:job,modalOpen:true}));
+      if(job.status==='pending_model'&&!job.pending){
+        try{importUpdated(await continueImport(operationId));}
+        catch(error){setParsing(p=>p?{...p,error:error.message}:p);}
+      }
+      refreshSavedImports().catch(()=>{});
       return;
     }
     parseUnsubRef.current?.();
@@ -832,7 +857,10 @@ export const App = () => {
       const completed = operation.status === "complete";
       const failed = operation.status === "failed";
       setParsing(p => p?.operationId === id ? {...p,operation,completed,failed,error:failed ? "The import failed. Review diagnostics and choose another file." : null} : p);
-    }).catch(error => { if (alive) setParsing(p => p ? {...p,error:error.message} : p); });
+    }).catch(error => { if (alive) {
+      if(error.status===404){try{localStorage.removeItem('rg.activeImport');}catch{};setParsing(p=>p?{...p,failed:true,error:'The saved import is unavailable.'}:p);refreshSavedImports(true).catch(()=>{});}
+      else setParsing(p => p ? {...p,error:error.message} : p);
+    }});
     refresh(); const timer = setInterval(refresh,2000);
     window.addEventListener("focus",refresh);
     return () => { alive=false;clearInterval(timer);window.removeEventListener("focus",refresh); };
@@ -849,7 +877,7 @@ export const App = () => {
     setParsing(null);
   };
 
-  const isLocked = !!parsing && !parsing.completed && !parsing.failed;
+  const isLocked = !!parsing && !parsing.completed && !parsing.failed && !['interrupted','cancelled'].includes(parsing.operation?.status);
 
   // Tweaks
   const [tweaks, setTweak] = useTweaks({ ...TWEAK_DEFAULTS, ...(bootTweaks || {}) });
@@ -974,6 +1002,9 @@ export const App = () => {
           settings={appSettings}
           initials={ownerInitials}/>
         <ParsingBanner parsing={parsing} onOpen={() => setParsing(p => p ? { ...p, modalOpen: true } : null)}/>
+        {savedImports.items.length>1&&<div className="review-notice" style={{margin:12}}><label>Saved import<select aria-label="Saved import" value={parsing?.operationId||''} onChange={e=>openSavedImport(e.target.value).catch(()=>{})}><option value="">Choose saved work</option>{savedImports.items.map(item=><option key={item.id} value={item.id}>{item.filename} · {item.status}</option>)}</select></label>
+          {savedImports.has_more&&<Button onClick={()=>listImports(savedImports.items.length).then(page=>setSavedImports(current=>({...page,items:[...current.items,...page.items]})))}>More saved imports</Button>}
+        </div>}
         {(doctorHasIssue || tweaks.doctorBanner) && !doctorDismissed && <DoctorBanner doctor={doctor} goto={goto} onDismiss={() => setDoctorDismissed(true)}/>}
         <div className="app-content" ref={contentRef} style={{ flex: 1, overflow: "auto", minHeight: 0, position: "relative" }}>
           <div key={route} className="route-in workspace-view" style={{ minHeight: "100%" }}>
@@ -995,10 +1026,7 @@ export const App = () => {
       <ReplaceBaseResumeModal open={replaceOpen} onClose={() => setReplaceOpen(false)} onUpload={startParse}/>
       <BaseResumeParseModal
         parsing={parsing && parsing.modalOpen ? parsing : null}
-        onDecision={operation => {
-          setParsing(p => ({...p,operation,completed:operation.status === "complete",failed:false}));
-          if (["complete","cancelled"].includes(operation.status)) { try { localStorage.removeItem("rg.activeImport"); } catch {} }
-        }}
+        onDecision={importUpdated}
         onClose={endParse}
         onMinimize={() => setParsing(p => p ? { ...p, modalOpen: false } : null)}
         onRetry={() => { endParse(); setReplaceOpen(true); }}

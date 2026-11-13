@@ -2,7 +2,7 @@ import React from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, UploadDropzone } from "./components.jsx";
 import { actionForRetry } from "./draft-store.js";
-import { decideImport, importSourceUrl } from "./api/client.js";
+import { decideImport, importSourceUrl,continueImport,cancelImport } from "./api/client.js";
 import { PARSE_STAGES } from "./data.jsx";
 import { FieldValue } from "./profile-facts.jsx";
 
@@ -17,7 +17,7 @@ const formatElapsed = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms 
 function useElapsed(parsing) {
   const [elapsed, setElapsed] = React.useState(0);
   const startedAt = parsing?.startedAt;
-  const finished = parsing?.completed || parsing?.failed;
+  const finished = parsing?.completed || parsing?.failed || ['interrupted','cancelled','pending_review'].includes(parsing?.operation?.status);
   React.useEffect(() => {
     if (startedAt == null) return;
     setElapsed(Date.now() - startedAt);
@@ -127,7 +127,8 @@ export function BaseResumeParseModal({ parsing, onClose, onMinimize, onRetry, on
   if (!parsing) return null;
   const { completed, failed } = parsing;
   if (parsing.operation?.pending?.kind === "import_review") return <ImportReviewModal key={parsing.operation.pending.review_id} operation={parsing.operation} onMinimize={onMinimize} onDecision={onDecision}/>;
-  if (parsing.operation?.status === "cancelled") return <ResumeDialog title="Import rejected" subtitle="Your previous base resume is unchanged." icon="file-text" tone="is-success" onDismiss={onClose}><div className="resume-dialog-body"><p>The source and review remain in your import history.</p><Button onClick={onClose}>Close</Button></div></ResumeDialog>;
+  if (parsing.operation?.status === "cancelled") return <ResumeDialog title="Import stopped" subtitle="The saved source and audit remain available." icon="file-text" tone="is-success" onDismiss={onClose}><div className="resume-dialog-body"><p>Any profile decision already saved is retained. Stopping an import does not reverse an earlier acceptance.</p><Button onClick={onClose}>Close</Button></div></ResumeDialog>;
+  if (['interrupted','pending_model'].includes(parsing.operation?.status)) return <ImportRecoveryModal key={parsing.operation.id} operation={parsing.operation} onMinimize={onMinimize} onDecision={onDecision}/>;
   const title = failed ? "Resume parsing failed" : completed ? "Base resume parsed" : "Parsing your base resume";
   return <ResumeDialog title={title}
     subtitle={completed ? "Your new base resume is ready to review." : failed ? "Review the issue below, then try again." : "We’ll turn your document into an editable base resume."}
@@ -148,13 +149,33 @@ export function BaseResumeParseModal({ parsing, onClose, onMinimize, onRetry, on
   </ResumeDialog>;
 }
 
+function ImportRecoveryModal({operation,onMinimize,onDecision}) {
+  const [busy,setBusy]=React.useState(false),[error,setError]=React.useState(null);
+  const action=React.useRef(actionForRetry());
+  const interrupted=operation.status==='interrupted',waitingModel=operation.pending?.kind==='model_request';
+  const perform=async work=>{setBusy(true);setError(null);try{onDecision(await work());}catch(e){setError(e.message);}finally{setBusy(false);}};
+  return <ResumeDialog title={interrupted?'Import interrupted':waitingModel?'Waiting for agent result':'Import ready to process'}
+    subtitle="The saved work is available. Choose how to continue." icon="file-text" onDismiss={onMinimize}>
+    <div className="resume-dialog-body review-flow">{error&&<p role="alert">{error}</p>}
+      <p>Source: {operation.source?.filename}</p><a href={importSourceUrl(operation.id)} target="_blank" rel="noreferrer">Open original source</a>
+      <p>{waitingModel?'This import needs a structured response from its agent. Continue it through the agent interface.':'Continuation resumes the saved operation. An earlier profile decision may already have been saved.'}</p>
+      {operation.draft&&<details><summary>Saved parsed draft</summary><FieldValue value={operation.draft}/></details>}
+      {operation.diagnostics?.map((d,i)=><p key={i}>{d.code}</p>)}
+    </div><footer className="resume-dialog-footer"><p>Use the saved operation instead of uploading the same file again.</p><div className="resume-dialog-actions">
+      <Button variant="secondary" disabled={busy} onClick={()=>perform(()=>cancelImport(operation.id))}>Cancel import</Button>
+      {!waitingModel&&<Button disabled={busy} onClick={()=>perform(()=>continueImport(operation.id,interrupted?action.current({kind:'continue'}):null))}>Continue saved import</Button>}
+      <Button variant="ghost" onClick={onMinimize}>Minimize</Button>
+    </div></footer>
+  </ResumeDialog>;
+}
+
 export function ParsingBanner({ parsing, onOpen }) {
   const elapsed = useElapsed(parsing);
   if (!parsing || parsing.completed || parsing.failed || parsing.modalOpen) return null;
   const stage = currentStage(parsing);
   return <button className="resume-parsing-banner" onClick={onOpen}>
     <Icon className="resume-step-spinner" name="loader" size={16}/>
-    <span className="resume-banner-copy"><strong>Parsing your base resume</strong><span>{stage.label}</span></span>
+    <span className="resume-banner-copy"><strong>{parsing.operation?.status==='interrupted'?'Import interrupted':'Parsing your base resume'}</strong><span>{parsing.operation?.source?.filename||stage.label}</span></span>
     <span className="resume-banner-time">{elapsed}</span>
     <span className="resume-banner-action">View progress <Icon name="arrow-right" size={14}/></span>
   </button>;

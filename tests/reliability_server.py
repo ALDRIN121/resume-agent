@@ -90,6 +90,7 @@ def build_app(root: Path, profile_mode: str):
     services = Runtime(root=root, settings=settings, model=model)
     # Only the external board boundary is replaced; all HTTP/API/storage stay real.
     import httpx
+
     from resume_agent.discovery.http import BoundedHttpClient
     async def board_feed(request):
         import asyncio
@@ -108,6 +109,15 @@ def build_app(root: Path, profile_mode: str):
             original = profile.model_copy(deep=True, update={'personal': profile.personal.model_copy(
                 update={'full_name': 'Previous Candidate'})})
         services.profiles.save_reviewed(None, original, {'source': 'fictional browser fixture'})
+    original_save = services.profiles.save_reviewed
+    def save_with_fixture_crash(expected_revision, resume, provenance):
+        result = original_save(expected_revision, resume, provenance)
+        marker = root / 'crash-import-after-save'
+        if marker.exists() and provenance.get('import_id'):
+            marker.unlink()
+            os._exit(91)  # Synthetic hard death after the reviewed YAML replacement.
+        return result
+    services.profiles.save_reviewed = save_with_fixture_crash
     return create_app(services=services)
 
 

@@ -218,7 +218,10 @@ class ReleaseService:
                 action = self.store.action('run', run_id, released['action_id'], conn)
             if (action and action['result_json'] is not None
                     and json.loads(action['result_json'])['status'] == 'cancelled'):
-                return ReleaseInspection('cancelled', review, released, None)
+                plan = ExportPlan.from_dict(binding['plan'])
+                if not any(path.exists() for path in (plan.ownership_path, plan.destination, plan.temporary_path)):
+                    return ReleaseInspection('cancelled', review, released, None)
+                return ReleaseInspection('cancelled', review, released, self._plan(released), cleanup_pending=True)
             return ReleaseInspection('interrupted', review, released, self._plan(released))
         orphans = self._orphans(run_id, binding)
         status = 'cancelled' if self.store.cancellation('run', run_id) else 'interrupted' if orphans else 'review'
@@ -242,7 +245,8 @@ class ReleaseService:
         return view
 
     def release(self, run_id: str, action: ReviewPdf | dict, *, base_dir: Path,
-                company_name: str, user_full_name: str, worker_owned: bool = False) -> RunView:
+                company_name: str, user_full_name: str, worker_owned: bool = False,
+                recover_reservation: bool = False) -> RunView:
         action = ReviewPdf.model_validate(action.model_dump() if isinstance(action, ReviewPdf) else action)
         with nullcontext() if worker_owned else self.store.ownership('run', run_id):
             with self.store.connection() as conn:
@@ -267,13 +271,18 @@ class ReleaseService:
                 raise ReleaseConflict('run_cancelled')
             # A persisted intent makes even the reservation-before-row window
             # discoverable by this artifact's UUID. No approval is inferred there.
+            orphans = self._orphans(run_id, binding)
+            if orphans and not recover_reservation:
+                raise ReleaseConflict('orphan_reservation_requires_recovery')
+            if len(orphans) > 1:
+                raise ReleaseConflict('export_ownership_conflict')
+            if recover_reservation and binding.get('intent'):
+                base_dir = Path(binding['intent']['base_dir'])
             binding['intent'] = {'base_dir': str(Path(base_dir).resolve())}
             self._save(run_id, binding)
-            if self._orphans(run_id, binding):
-                raise ReleaseConflict('orphan_reservation_requires_recovery')
             record = RenderRecord.from_dict(binding['record'])
-            plan = prepare_export(record.artifact_id, record.pdf_path, record.pdf_hash,
-                                  base_dir, company_name, user_full_name)
+            plan = orphans[0] if orphans else prepare_export(record.artifact_id, record.pdf_path, record.pdf_hash,
+                                                           base_dir, company_name, user_full_name)
             try:
                 binding['plan'] = plan.to_dict()
                 self._save(run_id, binding)

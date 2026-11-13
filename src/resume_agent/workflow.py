@@ -154,7 +154,7 @@ class Workflow:
                 else:
                     self.release.release(context.owner_id, action, base_dir=self.output_dir() if callable(self.output_dir) else self.output_dir,
                         company_name=values['jd']['company'], user_full_name=fixed['profile_snapshot']['personal']['full_name'],
-                        worker_owned=True)
+                        worker_owned=True, recover_reservation=context.recovering)
                 save(applied_action_ids=[*applied, action.action_id], stage='complete')
                 return DriverResult(status='complete')
         if 'jd_text' not in values:

@@ -43,7 +43,7 @@ export const cancelRun = (threadId) => request(`/api/runs/${threadId}/cancel`, {
 export const uploadResume = (file) => {
   const body = new FormData();
   body.append("file", file);
-  return request("/api/resume/upload", { method: "POST", body });
+  return request("/api/resume/upload?defer_processing=true", { method: "POST", body });
 };
 
 export const getResume = () => request("/api/resume");
@@ -93,6 +93,9 @@ export const getReadiness = () => request("/api/readiness");
 export const getProfile = () => request("/api/profile");
 export const reviewProfile = expected_revision => request("/api/profile/review", {method:"POST",body:JSON.stringify({expected_revision})});
 export const getImport = id => request(`/api/profile/imports/${encodeURIComponent(id)}`);
+export const listImports = (offset=0) => request(`/api/profile/imports?limit=50&offset=${offset}`);
+export const continueImport = (id,body=null) => request(`/api/profile/imports/${encodeURIComponent(id)}/continue`,{method:'POST',body:JSON.stringify(body)});
+export const cancelImport = id => request(`/api/profile/imports/${encodeURIComponent(id)}/cancel`,{method:'POST'});
 export const importSourceUrl = id => `${API_BASE}/api/profile/imports/${encodeURIComponent(id)}/source`;
 export const decideImport = (id, decision, action) => request(`/api/profile/imports/${encodeURIComponent(id)}/${decision}`, {method:"POST",body:JSON.stringify(action)});
 export const contentPreview = (id, body) => request(`/api/runs/${id}/content-preview`, {method:"POST",body:JSON.stringify(body)});
