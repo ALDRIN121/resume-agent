@@ -79,7 +79,7 @@ jobs:
       - name: Build distributions and test installed wheel with bundled UI
         run: |
           uv build
-          uv run pytest -q tests/test_packaged_ui.py
+          uv run pytest -q tests/test_packaged_ui.py tests/test_skill_distribution.py
       - name: Run required browser and real PDF checks with a preview server
         run: |
           npm --prefix Frontend run preview -- --port 4173 > "$RUNNER_TEMP/vite-preview.log" 2>&1 &

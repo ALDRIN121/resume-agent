@@ -1,0 +1,20 @@
+name: Workflow improvement
+description: Describe an observed job-search or resume workflow gap.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: User need
+      description: Describe a concrete task and what blocks it today.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected result
+      description: Explain how a user would know the improvement worked. Use fictional examples.
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Include local-data, review, interface or provider requirements.

@@ -1,0 +1,27 @@
+name: Reliability problem
+description: Report a reproducible local workflow failure without sharing private data.
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the trigger, expected result and actual result. Use fictional inputs.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Version and environment
+      description: Include app version, Python version, operating system and interface. For a host, include its version.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction and saved state
+      description: Include commands, resource status and sanitized diagnostic codes. Exclude credentials, personal resumes and database files.
+  - type: textarea
+    id: identity
+    attributes:
+      label: Review or artifact mismatch
+      description: If relevant, compare expected and actual hashes. Do not upload an unredacted resume.

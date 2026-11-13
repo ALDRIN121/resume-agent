@@ -1,0 +1,3 @@
+interface:
+  display_name: "Resume Agent"
+  short_description: "Reviewed resumes and local job-search records"

@@ -1591,3 +1591,16 @@ def agent_json(ctx: typer.Context, command: str | None = typer.Argument(None),
     """Run one non-interactive JSON command. Human reviews remain explicit."""
     from .agent_cli import run_command
     raise typer.Exit(run_command(command, input_file, resource, _career_runtime, ctx.args))
+
+
+skill_app = typer.Typer(help='Export the portable agent skill into a chosen project directory.')
+app.add_typer(skill_app, name='skill')
+
+
+@skill_app.command('export')
+def skill_export_cli(destination: Path = typer.Option(...)):
+    from .skill_distribution import export_skill
+    try:
+        console.print('Skill exported: ' + str(export_skill(destination)), markup=False)
+    except (OSError, ValueError) as exc:
+        _career_error(exc)
