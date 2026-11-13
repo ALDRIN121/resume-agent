@@ -1,24 +1,33 @@
 # Upgrade implementation status
 
-Updated 13 November 2026. Branch `codex/resume-agent-r1`. All commits are local; nothing has been pushed or published.
+Updated 14 November 2026. Branch `codex/resume-agent-r1`. All commits are local. Nothing has been pushed, tagged or published.
 
-The reliable generation workflow now serves the web app, API and CLI. It saves complete source inputs, collects evidence, offers unselected wording changes, confirms the complete content, checks the rendered PDF and requires approval of the exact PDF bytes before export. Import parsing creates a reviewable draft and never replaces the base resume on its own.
+**T01–T21 are implemented. T22 local validation is complete. Final package preparation is recorded in R4. C4 remains OPEN because external evidence is missing.** The build remains a 3.3.0 candidate.
 
-| Work | Status |
-| --- | --- |
-| T01–T05: isolated state, durable lifecycle, separate artifacts, full imports, exact content | Implemented and independently reviewed |
-| T06–T08: deterministic PDF, exact release, startup/legacy recovery and reexport | Implemented; recovery fixes independently approved |
-| T09: shared app/API/CLI, saved form drafts, readiness and review screens | Integrated; controller verification passed locally |
-| T10: durable model retry owner | Implemented; independent review and regression fixes approved |
-| T11/C1: acceptance, package and platform checks | Python 3.12 and 3.13: **710 passed, 46 skipped** each. Required browser/PDF/native-path suite: **54 passed, zero skips** before final recovery regressions. The two new navigation fixtures were corrected; all three real journeys then passed. All 55 distinct required checks pass across the combined and focused runs. Local C1 behavior gate passes. |
-| T12–T14/C2: reviewed memory, immutable jobs and evidence-based role decisions | T12–T14 implemented. Local C2 passes: Python 3.12/3.13 each 772 passed; required browser/PDF suite 63 passed with zero skips; frontend 14 tests and build pass. See the R2 acceptance matrix. |
-| T15–T18/C3: applications, outcomes and bounded discovery | Application events, outcome reports, bounded durable discovery, tracker and discovery UI/CLI are implemented. Python 3.12/3.13 each 834 passed. New real browser journeys pass through discovery, exact PDF release, explicit submission, correction, cancellation and restart. Local C3 passes: all 67 required browser/PDF/native checks passed with zero skips. Frontend 15 passed; final build/package checks passed. |
-| T19–T22/C4: structured CLI, host execution and distribution | T19–T21 implemented. Full suite 869 passed. Portable skill ships in wheel/sdist and installed export passes. Codex CLI 0.153.4 review-handoff smoke passes; Claude 2.1.285 is unverified because its OAuth session expired. Final matrix, representative PDF review, pilots and remote platform certification remain pending. |
+| Work | Implemented result | Checkpoint |
+| --- | --- | --- |
+| T01–T05 | Isolated state, durable lifecycle, separate artifacts, complete imports and exact selected content | Producer reviews and regression checks passed. |
+| T06–T10 | Deterministic PDF rendering, exact-byte release, startup/legacy recovery, shared app/API/CLI and bounded model retries | Local C1 behavior accepted. Later final-review recovery fixes have explicit regressions. |
+| T11 | Browser, compiler, package and platform test preparation | Local macOS checks pass. Linux/native Windows CI is configured but has not run. |
+| T12–T14 | Reviewed memory, immutable jobs, evidence-based evaluation, explicit generation overrides and UI/CLI controls | Local C2 passed. See the [R2 acceptance record](2026-11-13-r2-acceptance.md). |
+| T15–T18 | Explicit application events, audited corrections, descriptive outcomes, bounded discovery and tracker/search controls | Local C3 passed. See the [R3 acceptance record](2026-11-13-r3-acceptance.md). |
+| T19–T21 | Non-interactive JSON commands, durable external-agent model requests, portable skill, package export and distribution preparation | Codex's named handoff smoke passed. Claude remains unsupported until authenticated validation passes. |
+| T22 | Complete local matrix, ten-PDF inspection, synthetic journeys, final independent review, fixes and candidate artifacts | See the [R4 acceptance record](2026-11-13-r4-acceptance.md) for exact results and remaining gates. |
 
-The 46 full-suite skips are browser journeys disabled in the ordinary unit command. These run separately with required servers and real PDF tools. Seven upstream warnings remain visible. An initial ordinary run could not open a local socket; the approved local-socket rerun passed on both Python versions.
+The web app, API and CLI share the reviewed workflow. Full source inputs remain saved. Wording proposals start unselected. Content confirmation and exact PDF-byte approval are separate. An import creates a draft and replaces the profile only after an explicit reviewed decision.
 
-Source lint passes. All **15 frontend tests** pass and the production bundle builds. Real generation uses the actual API, WebSocket, SQLite, Tectonic and Poppler with only model responses substituted. Installed-wheel and source-archive checks pass. The acceptance matrix records each C1 requirement.
+The final independent review found three Important recovery defects and no Critical defects. All three were accepted and fixed in one test-first pass: Continue now reuses an owned export reservation; a cleanup ownership conflict stays attached to its run; saved imports are discoverable and have explicit Continue/Cancel controls. See the [review report](../../validation/final-branch-review-2026-11-14.md).
 
-Linux CI and native Windows jobs are configured but **have not run here**. Their results remain required before claiming platform support or publishing. The same lock and Unicode/space path tests pass locally on macOS. Later private development may proceed after local C1 behavior acceptance; this does not certify untested platforms.
+The final Python 3.12 matrix passed **935 tests with zero failures and zero skips**. Python 3.13 passed **873 tests**, with 62 browser/PDF checks explicitly disabled and covered by the flagged 3.12 run. All 15 frontend tests and the production build passed. Seven upstream warnings remain visible.
 
-Detailed evidence and the ledger are under `.superpowers/sdd/2026-11-12-resume-agent-reliability-and-search/`. The existing `.egm/` directory and personal application state remain untouched.
+The final local evidence uses fictional data, isolated state, actual API/browser/checkpoint infrastructure and real PDF tools. Model and feed boundaries use controlled responses where documented. The separate actual Codex probe covers a named review handoff, not every host, model or setup journey.
+
+Three external gates remain:
+
+1. Record five owner-arranged volunteer pilots. Four must reach a reviewed PDF without developer help. No session may have an artifact identity mismatch.
+2. Run and record Linux and native Windows certification against the exact candidate.
+3. Restore Claude authentication through the owner's host flow, then run its smoke check. Authentication was not changed during implementation.
+
+The [pilot record](../../validation/volunteer-pilots.md), [rollback procedure](../../candidate-rollback.md), [publication checklist](../../publication-checklist.md) and [complete decision record](../../validation/implementation-decisions-2026-11-14.md) are ready. Required external evidence must exist before C4 can pass. No hiring-outcome, adoption or universal reliability claim is made.
+
+Raw evidence remains under `.superpowers/sdd/2026-11-12-resume-agent-reliability-and-search/` while C4 is open. The existing `.egm/` directory and personal application state remain untouched.

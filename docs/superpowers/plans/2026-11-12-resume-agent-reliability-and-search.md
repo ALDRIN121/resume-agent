@@ -478,11 +478,11 @@ Prepared publication files do not authorize registry publication or GitHub setti
 
 **Depends on:** T01–T21.
 
-- [ ] Run all required Python, frontend, browser, compiler, migration, package, and interface-parity checks.
-- [ ] Run at least 20 synthetic journeys spanning success, rejection, interruption, provider failure, migration, and partial discovery.
-- [ ] Review ten representative PDFs for factual correspondence and visual defects.
+- [x] Run all local required Python, frontend, browser, compiler, migration, package, and interface-parity checks. Remote platform certification remains open.
+- [x] Run at least 20 synthetic journeys spanning success, rejection, interruption, provider failure, migration, and partial discovery. Final record: 30 journeys.
+- [x] Review ten representative PDFs for factual correspondence and visual defects.
 - [ ] Record five owner-arranged volunteer pilots. Measure setup, first reviewed PDF, interruptions, and factual-review results.
-- [ ] Record revision, environment, models, input set, results, exclusions, known limits, and rollback procedure.
+- [x] Record revision, environment, models, input set, results, exclusions, known limits, and rollback procedure.
 - [ ] Prepare version 3.3.0 release artifacts and a concrete external publication checklist for separate approval.
 
 **Checkpoint C4 — Pass only when all conditions hold:**
@@ -499,6 +499,8 @@ Prepared publication files do not authorize registry publication or GitHub setti
 - Required checks contain zero unexplained failures or skips.
 
 If C4 fails, keep the build as a candidate. Do not describe it as released or production-verified.
+
+Local closure and the remaining external gates are recorded in the [R4 acceptance record](2026-11-13-r4-acceptance.md), updated 14 November 2026. T22 and C4 remain open until the pilot, platform and authenticated-host evidence exists.
 
 ## 6. Implementation Control and Evidence
 
