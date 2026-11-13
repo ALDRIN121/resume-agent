@@ -11,7 +11,6 @@ Checked 14 November 2026 against the original consolidated EGM report, implement
 | Validate Claude Code for T21 | Owner restores host authentication; then run its recorded smoke | Named host version completes the required reviewed handoff. Keep Claude unsupported until then. |
 | Run Linux and native Windows certification | Remote jobs against the exact candidate | Save successful platform results. Do not infer them from macOS tests. |
 | Run five volunteer pilots for T22 | Owner arranges voluntary sessions | Four of five reach a reviewed PDF without developer help. No artifact identity mismatch. Record timing, factual review and recovery. |
-
 | Close C4 | All required evidence above | Record actual results and exclusions. Keep 3.3.0 a candidate while required evidence is absent. |
 | Push, tag and publish | Separate owner authorization after acceptance | Review the exact candidate, artifact hashes and publication checklist first. These external actions have not occurred. |
 
