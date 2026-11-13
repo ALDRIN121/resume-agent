@@ -34,6 +34,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app(*, services=None) -> FastAPI:
     from ..runtime import Runtime
     from .routers.applications import router as applications_router
+    from .routers.discovery import router as discovery_router
     from .routers.jobs import evaluation_router
     from .routers.jobs import router as jobs_router
     from .routers.memory import router as memory_router
@@ -52,6 +53,7 @@ def create_app(*, services=None) -> FastAPI:
     app.include_router(jobs_router)
     app.include_router(evaluation_router)
     app.include_router(applications_router)
+    app.include_router(discovery_router)
     app.include_router(outcomes_router)
     app.add_middleware(
         CORSMiddleware,

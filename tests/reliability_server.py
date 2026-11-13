@@ -88,6 +88,20 @@ def build_app(root: Path, profile_mode: str):
     settings.save()
     # Actual deterministic template, compiler, page rendering, guard and export.
     services = Runtime(root=root, settings=settings, model=model)
+    # Only the external board boundary is replaced; all HTTP/API/storage stay real.
+    import httpx
+    from resume_agent.discovery.http import BoundedHttpClient
+    async def board_feed(request):
+        import asyncio
+        path = root / 'discovery-feed.json'
+        fixture = json.loads(path.read_text()) if path.exists() else {'payload': {'jobs': [], 'meta': {'total': 0}}}
+        await asyncio.sleep(fixture.get('delay', 0))
+        return httpx.Response(fixture.get('status', 200), headers={'content-type': 'application/json'},
+                              stream=httpx.ByteStream(json.dumps(fixture.get('payload', {})).encode()))
+    async def no_retry_wait(delay):
+        pass
+    services.discovery.http_factory = lambda: BoundedHttpClient(transport=httpx.MockTransport(board_feed), validator=lambda _: None)
+    services.discovery.sleep = no_retry_wait
     if profile_mode != 'missing' and services.profiles.load_snapshot() is None:
         original = profile
         if profile_mode == 'old':

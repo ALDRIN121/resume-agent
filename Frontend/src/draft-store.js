@@ -1,15 +1,20 @@
-// Only form answers belong here. Provider configuration never enters this store.
+// Only allowed form fields enter this store. Provider credentials never enter it.
 const FIELDS = {
   'new-run': ['tab', 'text', 'url', 'jobLocation', 'workMode', 'maxPages'],
   questions: ['answers'], content: ['selected'],
   'job-capture': ['text','company','role','source_url','source_key'],
   eligibility: ['authorization','clearance','presence','user_hard_constraint'],
   'memory-proposal': ['kind','instruction','source','locations','modes','path','after','constraints'],
+  'discovery-sources': ['sources'],
+  'application-event': ['kind','date','artifact','evaluation','stage','category','reason','target','replacement','closure'],
 };
 export const draftKey = identity => JSON.stringify(['v2', identity.form, identity.run || '', identity.review || '', identity.revision || '']);
 export function safeFormValue(form, value) {
   if (!FIELDS[form]) throw new Error('Unsupported draft form');
-  return Object.fromEntries(FIELDS[form].filter(key => key in value).map(key => [key, value[key]]));
+  const safe=Object.fromEntries(FIELDS[form].filter(key => key in value).map(key => [key, value[key]]));
+  if(form==='discovery-sources'&&Array.isArray(safe.sources))safe.sources=safe.sources.map(source=>Object.fromEntries(
+    ['id','provider','board','region','company','enabled'].filter(key=>key in source).map(key=>[key,source[key]])));
+  return safe;
 }
 export function matchingDrafts(records, identity) {
   const relevant = records.filter(row => row.identity.form === identity.form && row.identity.run === identity.run);

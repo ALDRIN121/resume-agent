@@ -1479,3 +1479,95 @@ def decide_memory_cli(record_id: str, decision: str = typer.Option(...), revisio
         console.print('Memory decision: ' + result['status'], markup=False)
     except (ValueError, KeyError, Conflict) as exc:
         _career_error(exc)
+
+
+discover_app = typer.Typer(help='Configure public boards and run explicit bounded scans.')
+applications_app = typer.Typer(help='Record local application events; never submit to employers.')
+app.add_typer(discover_app, name='discover')
+app.add_typer(applications_app, name='applications')
+
+
+def _career_call(work):
+    from .run_store import Conflict
+    try:
+        result = work(_career_runtime())
+        _career_value(result)
+        if isinstance(result, dict) and result.get('status') == 'failed':
+            raise typer.Exit(3)
+    except (ValueError, KeyError, OSError, Conflict) as exc:
+        _career_error(exc)
+
+
+def _career_file(path, schema):
+    if path.stat().st_size > 10 * 1024 * 1024:
+        raise ValueError('Action file exceeds 10 MiB.')
+    return schema.model_validate_json(path.read_text(encoding='utf-8'))
+
+
+@discover_app.command('sources')
+def discovery_sources_cli():
+    _career_call(lambda runtime: runtime.discovery.sources())
+
+
+@discover_app.command('configure')
+def discovery_configure_cli(source: Path = typer.Option(..., '--file', exists=True, dir_okay=False)):
+    from .api.routers.discovery import ConfigureSources
+    def work(runtime):
+        body = _career_file(source, ConfigureSources)
+        return runtime.discovery.replace_sources([s.model_dump(mode='json', exclude_none=True) for s in body.sources],
+            expected_revision=body.expected_revision, action_id=body.action_id)
+    _career_call(work)
+
+
+@discover_app.command('refresh')
+def discovery_refresh_cli(revision: str = typer.Option(...), action_id: str = typer.Option(...)):
+    def work(runtime):
+        created = runtime.discovery.create_sync(expected_sources_revision=revision, action_id=action_id)
+        return asyncio.run(runtime.discovery.drive(created['id']))
+    _career_call(work)
+
+
+@discover_app.command('inspect')
+def discovery_inspect_cli(sync_id: str):
+    _career_call(lambda runtime: runtime.discovery.get_sync(sync_id))
+
+
+@discover_app.command('continue')
+def discovery_continue_cli(sync_id: str, action_id: str = typer.Option(...)):
+    _career_call(lambda runtime: asyncio.run(runtime.discovery.drive(sync_id, continue_action_id=action_id)))
+
+
+@discover_app.command('cancel')
+def discovery_cancel_cli(sync_id: str, action_id: str = typer.Option(...)):
+    _career_call(lambda runtime: runtime.discovery.cancel(sync_id, action_id=action_id))
+
+
+@discover_app.command('postings')
+def discovery_postings_cli(source: str | None = typer.Option(None), state: str | None = typer.Option(None),
+                          limit: int = typer.Option(50, min=1, max=1000), offset: int = typer.Option(0, min=0)):
+    _career_call(lambda runtime: runtime.discovery.postings_page(source_id=source, state=state, limit=limit, offset=offset))
+
+
+@applications_app.command('list')
+def applications_list_cli():
+    _career_call(lambda runtime: runtime.applications.list())
+
+
+@applications_app.command('create')
+def application_create_cli(job_id: str, action_id: str = typer.Option(...), company: str | None = typer.Option(None)):
+    _career_call(lambda runtime: runtime.applications.create(job_id, action_id=action_id, company=company))
+
+
+@applications_app.command('inspect')
+def application_inspect_cli(application_id: str):
+    _career_call(lambda runtime: runtime.applications.get(application_id))
+
+
+@applications_app.command('event')
+def application_event_cli(application_id: str, source: Path = typer.Option(..., '--file', exists=True, dir_okay=False)):
+    from .applications import ApplicationEventRequest
+    def work(runtime):
+        body = _career_file(source, ApplicationEventRequest)
+        return runtime.applications.append(application_id, body.event.model_dump(mode='json'),
+            action_id=body.action_id, expected_revision=body.expected_revision)
+    _career_call(work)

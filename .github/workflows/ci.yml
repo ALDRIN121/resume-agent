@@ -86,7 +86,7 @@ jobs:
           preview_pid=$!
           trap 'kill "$preview_pid"' EXIT
           uv run python -c "import time,httpx; client=httpx.Client(); exec('for attempt in range(100):\n try:\n  response=client.get(\"http://127.0.0.1:4173\"); response.raise_for_status(); break\n except httpx.TransportError:\n  time.sleep(0.1)\nelse:\n raise RuntimeError(\"Preview did not start\")')"
-          uv run pytest -q --junitxml=acceptance-results.xml tests/test_ui_flow.py tests/test_reliability_journey.py tests/test_memory_ui.py tests/test_career_ui.py tests/test_outcomes_ui.py tests/test_visual_regression.py tests/test_platform_runtime.py
+          uv run pytest -q --junitxml=acceptance-results.xml tests/test_ui_flow.py tests/test_reliability_journey.py tests/test_memory_ui.py tests/test_career_ui.py tests/test_outcomes_ui.py tests/test_search_operations_ui.py tests/test_visual_regression.py tests/test_platform_runtime.py
           uv run python -c "import xml.etree.ElementTree as ET; root=ET.parse('acceptance-results.xml').getroot(); assert not root.findall('.//skipped'), 'A required acceptance check was skipped'"
       - name: Preserve acceptance evidence
         if: always()

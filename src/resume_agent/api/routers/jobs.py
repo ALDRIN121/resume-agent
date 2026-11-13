@@ -48,6 +48,14 @@ def get_job(job_id: str, request: Request):
         raise failure(exc) from None
 
 
+@router.get('/{job_id}/origin')
+def job_origin(job_id: str, request: Request):
+    try:
+        return request.app.state.services.discovery.job_origin(job_id)
+    except (KeyError, ValueError, Conflict) as exc:
+        raise failure(exc) from None
+
+
 @router.post('/{job_id}/evaluations')
 def create_evaluation(job_id: str, body: EvaluateJob, request: Request):
     try:

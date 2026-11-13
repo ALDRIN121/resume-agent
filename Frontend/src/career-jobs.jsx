@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button,Input,Textarea } from './components.jsx';
 import { ReadinessPanel,useFormDraft,DraftNotice } from './review-flow.jsx';
-import { listJobs,captureJob,getJob,jobEvaluations,createEvaluation,continueEvaluation,getEvaluation,cancelEvaluation,createRun,getProfile } from './api/client.js';
+import { listJobs,captureJob,getJob,jobEvaluations,createEvaluation,continueEvaluation,getEvaluation,cancelEvaluation,createRun,getProfile,getJobOrigin } from './api/client.js';
 import { actionForRetry } from './draft-store.js';
 import { CareerEvaluation } from './career-evaluation.jsx';
 
@@ -18,6 +18,7 @@ function EligibilityInputs({job,revision,onChange}) {
 }
 
 export function CareerJobs({initialJobId,onRunStarted,goto}) {
+  const [origins,setOrigins]=React.useState([]),[originError,setOriginError]=React.useState(null);
   const [jobs,setJobs]=React.useState([]),[job,setJob]=React.useState(null),[evaluations,setEvaluations]=React.useState([]),[evaluation,setEvaluation]=React.useState(null);
   const [profileRevision,setProfileRevision]=React.useState(''),[facts,setFacts]=React.useState(null),[busy,setBusy]=React.useState(false),[error,setError]=React.useState(null),[generationReady,setGenerationReady]=React.useState(false);
   const nextAction=React.useRef(actionForRetry());
@@ -38,6 +39,7 @@ export function CareerJobs({initialJobId,onRunStarted,goto}) {
       if(id) {try{await select(rows.find(r=>r.id===id)||await getJob(id));}catch(e){if(e.status!==404)throw e;}}
     });
   },[initialJobId]);
+  React.useEffect(()=>{let alive=true;setOrigins([]);setOriginError(null);if(job)getJobOrigin(job.id).then(rows=>{if(alive)setOrigins(rows);}).catch(e=>{if(alive)setOriginError(e.message);});return ()=>{alive=false;};},[job?.id]);
   const save=()=>perform(async()=>{
     const body={text:draft.value.text};for(const key of ['company','role','source_key','source_url'])if(draft.value[key]?.trim())body[key]=draft.value[key];
     const created=await captureJob(body);setJobs(await listJobs());await select(created);await draft.clear();draft.edit(EMPTY);
@@ -67,6 +69,8 @@ export function CareerJobs({initialJobId,onRunStarted,goto}) {
     </section>
     <section><h2>Saved jobs</h2>{jobs.map(item=><Button key={item.id} variant={job?.id===item.id?'primary':'ghost'} disabled={busy} onClick={()=>perform(()=>select(item))}>{item.company||'Company not supplied'} · {item.role||'Role not supplied'}</Button>)}</section>
     {job&&<section><h2>Saved role</h2><h3>{job.company||'Company not supplied'} · {job.role||'Role not supplied'}</h3>
+      {originError&&<p role="alert">Source inspection unavailable: {originError}</p>}
+      {origins.length>0&&<section data-testid="job-origin"><h3>Public source evidence</h3>{origins.map((origin,i)=><div key={i}><p>{origin.source.provider} / {origin.source.board} · Observed {origin.observed_at}</p><p>Latest source scan: {origin.source_state.latest_authority_status||'Unknown'} · Last complete: {origin.source_state.last_complete_at||'None'}</p>{!origin.selected_snapshot_is_current&&<p>A newer job snapshot exists. This review keeps the exact selected description.</p>}{origin.posting_state==='removed'&&<p>Absent from a complete scan. Employer closure is unconfirmed.</p>}<details><summary>Original provider record for this snapshot</summary><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(origin.raw,null,2)}</pre></details></div>)}</section>}
       <details><summary>Full saved job description</summary><p style={{whiteSpace:'pre-wrap'}}>{job.text}</p></details>
       {job.source_url&&<a href={job.source_url} target="_blank" rel="noreferrer">Original posting</a>}
       <EligibilityInputs key={job.id} job={job} revision={profileRevision} onChange={setFacts}/>

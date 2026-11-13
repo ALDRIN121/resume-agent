@@ -20,3 +20,8 @@ test('career draft forms preserve user input and exclude provider secrets',()=>{
  assert.deepEqual(safeFormValue('eligibility',{authorization:'Needs sponsorship',provider:'secret'}),{authorization:'Needs sponsorship'});
  assert.deepEqual(safeFormValue('memory-proposal',{kind:'writing_rule',instruction:'Keep metrics',source:'My preference',apiKey:'secret'}),{kind:'writing_rule',instruction:'Keep metrics',source:'My preference'});
 });
+test('public-board drafts retain only public source fields at both levels',()=>{
+ assert.deepEqual(safeFormValue('discovery-sources',{sources:[{provider:'lever',board:'example',region:'eu',enabled:true,company:'Example',api_key:'secret',url:'http://localhost'}],apiKey:'secret'}),
+   {sources:[{provider:'lever',board:'example',region:'eu',enabled:true,company:'Example'}]});
+ assert.deepEqual(safeFormValue('application-event',{kind:'submit',artifact:'unknown',date:'2026-11-13',api_key:'secret'}),{kind:'submit',date:'2026-11-13',artifact:'unknown'});
+});

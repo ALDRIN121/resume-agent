@@ -6,6 +6,8 @@ import { LiveRunView } from "./live-run.jsx";
 import { CareerMemory } from "./career-memory.jsx";
 import { CareerJobs } from "./career-jobs.jsx";
 import { CareerOutcomes } from "./career-outcomes.jsx";
+import { CareerDiscovery } from "./career-discovery.jsx";
+import { CareerApplications } from "./career-applications.jsx";
 import { BaseResumeParseModal, ParsingBanner, ReplaceBaseResumeModal } from "./resume-upload.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PROVIDERS } from "./data.jsx";
@@ -246,6 +248,8 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
     { id: "resume", icon: "file-text", label: "Base resume" },
     { id: "memory", icon: "check-circle", label: "Memory" },
     { id: "jobs", icon: "building", label: "Jobs" },
+    { id: "discover", icon: "search", label: "Discover" },
+    { id: "applications", icon: "check-circle", label: "Applications" },
   ];
   const secondary = [
     { id: "settings", icon: "settings", label: "Settings" },
@@ -945,6 +949,8 @@ export const App = () => {
       case "memory":    return <CareerMemory/>;
       case "jobs":      return <CareerJobs initialJobId={careerJobId} goto={goto} onRunStarted={run=>openRun(run.id,run.status,run)}/>;
       case "outcomes":  return <CareerOutcomes/>;
+      case "discover": return <CareerDiscovery goto={goto}/>;
+      case "applications": return <CareerApplications goto={goto}/>;
       case "history":   return <HistoryView goto={goto} openRun={openRun}/>;
       case "settings":  return <SettingsView tweaks={tweaks} setTweak={setTweak} onSettingsSaved={handleSettingsSaved}/>;
       case "setup":     return <SetupWizard goto={goto} startParse={startParse} parsing={parsing} onSettingsSaved={handleSettingsSaved}/>;

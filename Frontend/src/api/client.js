@@ -118,3 +118,16 @@ export const cancelEvaluation = id => request(`/api/evaluations/${id}/cancel`,{m
 export const getMetrics = () => request('/api/metrics');
 export const getOutcomes = () => request('/api/outcomes');
 export const outcomesExportUrl = () => `${API_BASE}/api/outcomes/export`;
+export const getDiscoverySources = () => request('/api/discovery/sources');
+export const saveDiscoverySources = body => request('/api/discovery/sources',{method:'PUT',body:JSON.stringify(body)});
+export const listDiscoverySyncs = () => request('/api/discovery/syncs');
+export const createDiscoverySync = body => request('/api/discovery/syncs',{method:'POST',body:JSON.stringify(body)});
+export const getDiscoverySync = id => request(`/api/discovery/syncs/${encodeURIComponent(id)}`);
+export const continueDiscoverySync = (id,body=null) => request(`/api/discovery/syncs/${encodeURIComponent(id)}/continue`,{method:'POST',body:JSON.stringify(body)});
+export const cancelDiscoverySync = (id,body) => request(`/api/discovery/syncs/${encodeURIComponent(id)}/cancel`,{method:'POST',body:JSON.stringify(body)});
+export const discoveryPostings = ({offset=0,source_id='',state=''}={}) => request('/api/discovery/postings?'+new URLSearchParams({limit:50,offset,...(source_id?{source_id}:{}),...(state?{state}:{})}));
+export const getJobOrigin = id => request(`/api/jobs/${encodeURIComponent(id)}/origin`);
+export const listApplications = () => request('/api/applications');
+export const createApplication = body => request('/api/applications',{method:'POST',body:JSON.stringify(body)});
+export const getApplication = id => request(`/api/applications/${encodeURIComponent(id)}`);
+export const appendApplicationEvent = (id,body) => request(`/api/applications/${encodeURIComponent(id)}/events`,{method:'POST',body:JSON.stringify(body)});

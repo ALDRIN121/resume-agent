@@ -390,3 +390,21 @@ class DiscoveryService:
         with self.store.connection() as conn:
             total = conn.execute('SELECT count(*) FROM discovery_postings p ' + where, params).fetchone()[0]
         return {'items': items, 'total': total, 'limit': limit, 'offset': offset, 'has_more': offset + len(items) < total}
+
+    def job_origin(self, job_id):
+        """Return exact archived observations, never replace the selected snapshot."""
+        self.jobs.get(job_id)
+        with self.store.connection() as conn:
+            rows = conn.execute('SELECT v.*,s.document AS source_document,p.job_id AS current_job_id,p.state, '
+                'p.last_seen_at,p.removed_at,st.document AS source_state_document '
+                'FROM discovery_posting_versions v JOIN discovery_sources s ON s.id=v.source_id '
+                'JOIN discovery_postings p ON p.source_id=v.source_id AND p.external_id=v.external_id '
+                'LEFT JOIN discovery_source_state st ON st.source_id=v.source_id '
+                'WHERE v.job_id=? ORDER BY v.observed_at', (job_id,)).fetchall()
+            return [{'source': json.loads(row['source_document']), 'external_id': row['external_id'],
+                     'job_id': job_id, 'current_job_id': row['current_job_id'],
+                     'selected_snapshot_is_current': row['current_job_id'] == job_id,
+                     'raw': json.loads(row['raw_json']), 'raw_hash': row['raw_hash'], 'observed_at': row['observed_at'],
+                     'posting_state': row['state'], 'last_seen_at': row['last_seen_at'], 'removed_at': row['removed_at'],
+                     'source_state': json.loads(row['source_state_document']) if row['source_state_document'] else {}}
+                    for row in rows]
