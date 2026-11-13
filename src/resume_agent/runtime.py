@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from . import library
+from .applications import ApplicationService
 from .config import CONFIG_DIR, ResumeAgentSettings
 from .contracts import content_hash
 from .imports import ImportService
@@ -35,6 +36,7 @@ class Runtime:
         self.jobs = JobStore(self.store)
         self.evaluations = EvaluationService(self.store, self.jobs, self.profiles, self.memory,
                                             settings=lambda: self.settings, model=model)
+        self.applications = ApplicationService(self.store, self.jobs, self.evaluations)
         if compile_adapter is None:
             compile_adapter = self._compile
         self.workflow = Workflow(self.store, artifacts_root=self.root / 'runs',

@@ -217,7 +217,8 @@ def delete_resume(thread_id: str, *, library_path: Path | None = None) -> bool:
         cur = conn.execute("DELETE FROM resumes WHERE thread_id = ?", (thread_id,))
         # Drop any company left with no resumes so the tree stays clean.
         conn.execute(
-            "DELETE FROM companies WHERE id NOT IN (SELECT DISTINCT company_id FROM resumes)"
+            "DELETE FROM companies WHERE id NOT IN (SELECT DISTINCT company_id FROM resumes) "
+            "AND name NOT IN (SELECT company_name FROM company_references)"
         )
         return cur.rowcount > 0
 

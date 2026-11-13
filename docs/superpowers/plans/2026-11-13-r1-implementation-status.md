@@ -12,7 +12,7 @@ The reliable generation workflow now serves the web app, API and CLI. It saves c
 | T10: durable model retry owner | Implemented; independent review and regression fixes approved |
 | T11/C1: acceptance, package and platform checks | Python 3.12 and 3.13: **710 passed, 46 skipped** each. Required browser/PDF/native-path suite: **54 passed, zero skips** before final recovery regressions. The two new navigation fixtures were corrected; all three real journeys then passed. All 55 distinct required checks pass across the combined and focused runs. Local C1 behavior gate passes. |
 | T12–T14/C2: reviewed memory, immutable jobs and evidence-based role decisions | T12–T14 implemented. Local C2 passes: Python 3.12/3.13 each 772 passed; required browser/PDF suite 63 passed with zero skips; frontend 14 tests and build pass. See the R2 acceptance matrix. Application tracking is next. |
-| T15–T18/C3: applications, outcomes and bounded discovery | Not implemented |
+| T15–T18/C3: applications, outcomes and bounded discovery | T15 application service/API implemented; full suite 782 passed. Outcomes, discovery and tracker UI are next; C3 pending. |
 | T19–T22/C4: structured CLI, host execution and distribution | Not implemented |
 
 The 46 full-suite skips are browser journeys disabled in the ordinary unit command. These run separately with required servers and real PDF tools. Seven upstream warnings remain visible. An initial ordinary run could not open a local socket; the approved local-socket rerun passed on both Python versions.

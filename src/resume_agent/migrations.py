@@ -1,6 +1,7 @@
 """Ordered library migrations; never writes LangGraph-owned state tables."""
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -104,7 +105,21 @@ def _career(conn: sqlite3.Connection) -> None:
                  'job_id TEXT NOT NULL REFERENCES career_jobs(id), result_json TEXT NOT NULL)')
 
 
-MIGRATIONS = (_core, _memory, _career)
+def _applications(conn: sqlite3.Connection) -> None:
+    conn.execute('CREATE TABLE applications (id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES career_jobs(id), document TEXT NOT NULL)')
+    conn.execute('CREATE TABLE application_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, '
+                 'application_id TEXT NOT NULL REFERENCES applications(id), payload_json TEXT NOT NULL, '
+                 'binding_json TEXT NOT NULL, recorded_at TEXT NOT NULL)')
+    conn.execute('CREATE INDEX application_event_owner ON application_events(application_id,seq)')
+    conn.execute('CREATE TABLE company_references (company_name TEXT NOT NULL, owner_kind TEXT NOT NULL, '
+                 'owner_id TEXT NOT NULL, PRIMARY KEY(company_name,owner_kind,owner_id))')
+    for job_id, document in conn.execute('SELECT id,document FROM career_jobs').fetchall():
+        company = json.loads(document).get('company')
+        if company:
+            conn.execute("INSERT INTO company_references VALUES (?,'job',?)", (company, job_id))
+
+
+MIGRATIONS = (_core, _memory, _career, _applications)
 
 
 def migrate(path: Path, *, migrations: Sequence[Callable[[sqlite3.Connection], None]] = MIGRATIONS) -> None:

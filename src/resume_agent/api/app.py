@@ -33,6 +33,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app(*, services=None) -> FastAPI:
     from ..runtime import Runtime
+    from .routers.applications import router as applications_router
     from .routers.jobs import evaluation_router
     from .routers.jobs import router as jobs_router
     from .routers.memory import router as memory_router
@@ -49,6 +50,7 @@ def create_app(*, services=None) -> FastAPI:
     app.include_router(memory_router)
     app.include_router(jobs_router)
     app.include_router(evaluation_router)
+    app.include_router(applications_router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

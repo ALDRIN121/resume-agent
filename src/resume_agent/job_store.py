@@ -57,6 +57,8 @@ class JobStore:
                 source_kind=source_kind, source_key=source_key, source_url=source_url, company=company, role=role,
                 captured_at=utc_now())
             conn.execute('INSERT INTO career_jobs VALUES (?,?,?)', (job.id, job.logical_id, canonical_json(job)))
+            if job.company:
+                conn.execute("INSERT OR IGNORE INTO company_references VALUES (?,'job',?)", (job.company, job.id))
             conn.execute('INSERT INTO job_heads VALUES (?,?,?,?) ON CONFLICT(logical_id) DO UPDATE SET snapshot_id=excluded.snapshot_id',
                          (job.logical_id, job.source_kind, job.source_key, job.id))
             return job
