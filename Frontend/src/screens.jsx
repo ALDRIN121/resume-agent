@@ -2302,11 +2302,6 @@ const TreeItem = ({ label, icon, count, active, onClick }) => (
 // ============== COMPANIES (the cabinet) ==============
 const CompaniesView = ({goto,openRun}) => <CareerCompanies goto={goto} openRun={openRun}/>;
 
-const tagStyle = (color, bg) => ({
-  fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 9px", borderRadius: 99,
-  background: bg || "var(--bg)", border: bg ? "none" : "1px solid var(--border)", color, letterSpacing: 0.2, fontWeight: bg ? 600 : 400,
-});
-
 // Hash a company name to a color from the mockup palette
 const COMPANY_COLORS = [
   { bg: "var(--info-soft)", fg: "var(--info)" },
