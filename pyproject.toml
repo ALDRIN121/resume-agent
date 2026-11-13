@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "resume-generator"
-version = "3.2.0"
+version = "3.3.0"
 description = "Locally reviewed resumes, evidence-based role decisions and manual job discovery"
 readme = "README.md"
 license = "MIT"
