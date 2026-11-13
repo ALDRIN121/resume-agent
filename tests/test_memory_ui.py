@@ -66,3 +66,26 @@ async def test_fact_correction_shows_exact_before_after_and_requires_acceptance(
         await expect(page.get_by_role('button',name='Revoke',exact=True)).to_be_visible()
         active=(await client.get('/api/memory/active')).json()['records']
         assert active[0]['payload']['work_modes']==['Remote']
+
+
+async def test_memory_form_survives_reload_and_hard_constraints_need_review(real_page,real_server):
+    page=real_page
+    await page.goto(real_server.url,wait_until='domcontentloaded')
+    await page.get_by_role('button',name='Memory',exact=True).click()
+    await page.get_by_label('Writing instruction',exact=True).fill('Preserve C++ and C# exactly.')
+    await page.get_by_label('Source or reason',exact=True).fill('My draft preference.')
+    await page.reload(wait_until='domcontentloaded')
+    await page.get_by_role('button',name='Memory',exact=True).click()
+    await expect(page.get_by_label('Writing instruction',exact=True)).to_have_value('Preserve C++ and C# exactly.')
+    await page.get_by_label('Change type',exact=True).select_option('target_preference')
+    await page.get_by_role('button',name='Add hard constraint',exact=True).click()
+    await page.get_by_label('Constraint category 1',exact=True).select_option('authorization')
+    await page.get_by_label('Constraint value 1',exact=True).fill('Needs sponsorship')
+    await page.get_by_label('Confirmed statement 1',exact=True).fill('I need employer visa sponsorship.')
+    await page.get_by_role('button',name='Create proposal',exact=True).click()
+    async with httpx.AsyncClient(base_url=real_server.url) as client:
+        assert (await client.get('/api/memory/active')).json()['records']==[]
+        await page.get_by_role('button',name='Accept reviewed change',exact=True).click()
+        await expect(page.get_by_role('button',name='Revoke',exact=True)).to_be_visible()
+        active=(await client.get('/api/memory/active')).json()['records']
+        assert active[0]['payload']['hard_constraints'][0]['text']=='I need employer visa sponsorship.'

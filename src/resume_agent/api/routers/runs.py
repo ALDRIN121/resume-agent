@@ -22,6 +22,9 @@ class CreateRunRequest(BaseModel):
     jd_url: str | None = None
     jd_file_id: str | None = None
     parent_run_id: str | None = None
+    job_id: str | None = None
+    evaluation_id: str | None = None
+    evaluation_override: bool = False
     job_location: str | None = None
     work_mode: WorkMode | None = None
     max_pages: int = Field(default=2, ge=1, le=5)

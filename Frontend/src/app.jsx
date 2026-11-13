@@ -4,6 +4,7 @@ import { Button, IconButton, StatusPill, Badge, EmptyState, Kbd, Logo, MonoTicke
 import { Dashboard, SetupWizard, ResumeEditor, NewRun, HistoryView, SettingsView, LibraryView, CompaniesView } from "./screens.jsx";
 import { LiveRunView } from "./live-run.jsx";
 import { CareerMemory } from "./career-memory.jsx";
+import { CareerJobs } from "./career-jobs.jsx";
 import { BaseResumeParseModal, ParsingBanner, ReplaceBaseResumeModal } from "./resume-upload.jsx";
 import { TweaksPanel, TweakColor, TweakRadio, TweakSection, TweakSelect, TweakToggle, useTweaks } from "./tweaks-panel.jsx";
 import { ACTIVE_LLM, PROVIDERS } from "./data.jsx";
@@ -243,6 +244,7 @@ const Sidebar = ({ route, goto, collapsed, setCollapsed, locked, mobileOpen = fa
     { id: "companies", icon: "building", label: "Companies" },
     { id: "resume", icon: "file-text", label: "Base resume" },
     { id: "memory", icon: "check-circle", label: "Memory" },
+    { id: "jobs", icon: "building", label: "Jobs" },
   ];
   const secondary = [
     { id: "settings", icon: "settings", label: "Settings" },
@@ -906,7 +908,8 @@ export const App = () => {
   // Close the mobile drawer once we grow back to a desktop width.
   useEffect(() => { if (!isMobile) setMobileNavOpen(false); }, [isMobile]);
 
-  const goto = (id, opts = {}) => { setRoute(id); setMobileNavOpen(false); setLibraryFilter(opts.libraryFilter ?? null); };
+  const [careerJobId,setCareerJobId]=React.useState(null);
+  const goto = (id, opts = {}) => { if(id==='jobs')setCareerJobId(opts.jobId||null);setRoute(id); setMobileNavOpen(false); setLibraryFilter(opts.libraryFilter ?? null); };
 
   const openRun = (threadId, state = "running", run = null) => {
     if (!threadId) { setRoute("run"); return; }
@@ -938,6 +941,7 @@ export const App = () => {
       case "new":       return <NewRun goto={goto} openRun={openRun} settings={appSettings} locked={isLocked} onRunStarted={(id) => openRun(id, "running")}/>;
       case "resume":    return <ResumeEditor onReplace={() => setReplaceOpen(true)} parsing={parsing}/>;
       case "memory":    return <CareerMemory/>;
+      case "jobs":      return <CareerJobs initialJobId={careerJobId} goto={goto} onRunStarted={run=>openRun(run.id,run.status,run)}/>;
       case "history":   return <HistoryView goto={goto} openRun={openRun}/>;
       case "settings":  return <SettingsView tweaks={tweaks} setTweak={setTweak} onSettingsSaved={handleSettingsSaved}/>;
       case "setup":     return <SetupWizard goto={goto} startParse={startParse} parsing={parsing} onSettingsSaved={handleSettingsSaved}/>;

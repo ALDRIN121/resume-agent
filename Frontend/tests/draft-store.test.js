@@ -15,3 +15,8 @@ test('unavailable storage rejects visibly instead of losing current edits', asyn
  const store=createDraftStore(null);
  await assert.rejects(store.put({form:'questions',run:'r',review:'q',revision:'v'},{answers:{q:'a'}}),/Draft storage unavailable/);
 });
+test('career draft forms preserve user input and exclude provider secrets',()=>{
+ assert.deepEqual(safeFormValue('job-capture',{text:'C++ role',company:'Example',apiKey:'secret'}),{text:'C++ role',company:'Example'});
+ assert.deepEqual(safeFormValue('eligibility',{authorization:'Needs sponsorship',provider:'secret'}),{authorization:'Needs sponsorship'});
+ assert.deepEqual(safeFormValue('memory-proposal',{kind:'writing_rule',instruction:'Keep metrics',source:'My preference',apiKey:'secret'}),{kind:'writing_rule',instruction:'Keep metrics',source:'My preference'});
+});

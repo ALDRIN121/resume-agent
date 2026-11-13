@@ -21,9 +21,9 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export const createRun = ({ jdText, jdUrl, jdFileId, jobLocation, workMode, maxPages } = {}) => request("/api/runs", {
+export const createRun = ({ jdText, jdUrl, jdFileId, jobLocation, workMode, maxPages, jobId, evaluationId, evaluationOverride=false } = {}) => request("/api/runs", {
   method: "POST",
-  body: JSON.stringify({ jd_text: jdText, jd_url: jdUrl, jd_file_id: jdFileId, job_location: jobLocation, work_mode: workMode, max_pages: maxPages }),
+  body: JSON.stringify({ jd_text: jdText, jd_url: jdUrl, jd_file_id: jdFileId, job_location: jobLocation, work_mode: workMode, max_pages: maxPages,job_id:jobId,evaluation_id:evaluationId,evaluation_override:evaluationOverride }),
 });
 
 export const uploadJdFile = (file) => {
@@ -107,3 +107,11 @@ export const proposeMemory = body => request('/api/memory/proposals',{method:'PO
 export const previewMemory = id => request(`/api/memory/${id}/preview`);
 export const memoryHistory = id => request(`/api/memory/${id}/history`);
 export const decideMemory = (id,body) => request(`/api/memory/${id}/decision`,{method:'POST',body:JSON.stringify(body)});
+export const listJobs = () => request('/api/jobs');
+export const captureJob = body => request('/api/jobs',{method:'POST',body:JSON.stringify(body)});
+export const getJob = id => request(`/api/jobs/${id}`);
+export const jobEvaluations = id => request(`/api/jobs/${id}/evaluations`);
+export const createEvaluation = (id,body={}) => request(`/api/jobs/${id}/evaluations`,{method:'POST',body:JSON.stringify(body)});
+export const getEvaluation = id => request(`/api/evaluations/${id}`);
+export const continueEvaluation = (id,body=null) => request(`/api/evaluations/${id}/continue`,{method:'POST',body:JSON.stringify(body)});
+export const cancelEvaluation = id => request(`/api/evaluations/${id}/cancel`,{method:'POST'});

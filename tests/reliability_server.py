@@ -44,6 +44,27 @@ def build_app(root: Path, profile_mode: str):
             stream.write(json.dumps({'stage': stage, 'schema': schema.__name__}) + '\n')
         if stage == 'import_profile':
             return profile.model_dump(mode='json')
+        if stage == 'role_evaluation':
+            fixed = json.loads(messages[-1]['content'])
+            text = fixed['job']['text']
+            unknown = 'CASE_UNKNOWN' in text
+            start = text.index('Python')
+            response = {'requirements': [{'id': 'skills', 'dimension': 'required_skills', 'operator': 'single',
+                'members': [{'id': 'python', 'text': 'Python', 'citations': [{'start': start, 'end': start + 6, 'quote': 'Python'}]}]}],
+                'findings': [{'member_id': 'python', 'status': 'unknown' if unknown else 'supported',
+                    'rationale': 'Evidence is unspecified.' if unknown else 'The reviewed profile lists Python.',
+                    'sources': [] if unknown else [{'kind': 'profile', 'input_hash': fixed['profile_revision'],
+                        'target_path': '/skills/Languages/0', 'quote': 'Python'}]}], 'eligibility': []}
+            if 'CASE_INELIGIBLE' in text:
+                quote = 'No visa sponsorship.'
+                position = text.index(quote)
+                statement = fixed['eligibility_facts'].get('authorization')
+                response['eligibility'] = [{'category': 'authorization', 'status': 'fail' if statement else 'unknown',
+                    'rationale': 'Compare the explicit posting restriction and supplied sponsorship statement.',
+                    'citation': {'start': position, 'end': position + len(quote), 'quote': quote},
+                    'sources': [{'kind': 'eligibility', 'input_hash': content_hash(fixed['eligibility_facts']),
+                        'target_path': '/authorization', 'quote': statement}] if statement else []}]
+            return response
         if stage == 'extract_jd':
             return {'company': 'Example QA', 'role_title': 'Reliability Engineer'}
         if stage == 'questions':

@@ -1266,3 +1266,216 @@ def _generate_v2(job, input_type, settings, *, max_pages=2):
     result = asyncio.run(generate_work())
     if result.status not in ('complete', 'cancelled'):
         raise typer.Exit(2 if result.pending or result.status == 'interrupted' else 3)
+
+
+# Career commands deliberately call the same services as the web application.
+jobs_app = typer.Typer(help='Capture and inspect immutable job descriptions.')
+memory_app = typer.Typer(help='Review durable corrections and future writing preferences.')
+evaluations_app = typer.Typer(help='Inspect, continue or cancel saved role evaluations.')
+app.add_typer(jobs_app, name='jobs')
+app.add_typer(memory_app, name='memory')
+app.add_typer(evaluations_app, name='evaluations')
+
+
+def _career_runtime():
+    from .runtime import Runtime
+    return Runtime(settings=_load_settings_gracefully())
+
+
+def _career_value(value, prefix=''):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _career_value(item, prefix + key.replace('_', ' ') + ': ')
+    elif isinstance(value, list):
+        for index, item in enumerate(value, 1):
+            _career_value(item, prefix + str(index) + '. ')
+    else:
+        console.print(prefix + (str(value) if value is not None else 'Not provided'), markup=False)
+
+
+def _career_error(exc):
+    print_error(str(exc))
+    raise typer.Exit(2) from None
+
+
+@jobs_app.command('capture')
+def capture_job(text: str | None = typer.Option(None, '--text'),
+                source: Path | None = typer.Option(None, '--file', exists=True, dir_okay=False),
+                source_key: str | None = typer.Option(None, '--source-key'),
+                company: str | None = typer.Option(None, '--company'), role: str | None = typer.Option(None, '--role')):
+    try:
+        if (text is None) == (source is None):
+            raise ValueError('Provide exactly one of --text or --file.')
+        if source:
+            if source.stat().st_size > 10 * 1024 * 1024:
+                raise ValueError('Job source exceeds the 10 MiB limit.')
+            text = source.read_text(encoding='utf-8')
+        job = _career_runtime().jobs.capture(text, source_key=source_key, company=company, role=role)
+        console.print('Job: ' + job.id, markup=False)
+        console.print(job.text, markup=False)
+    except (ValueError, KeyError, OSError) as exc:
+        _career_error(exc)
+
+
+@jobs_app.command('list')
+def list_jobs_cli():
+    for job in _career_runtime().jobs.list():
+        console.print(f'{job.id} · {job.company or "Company not supplied"} · {job.role or "Role not supplied"}', markup=False)
+
+
+@jobs_app.command('inspect')
+def inspect_job(job_id: str):
+    try:
+        _career_value(_career_runtime().jobs.get(job_id).model_dump(mode='json'))
+    except (KeyError, ValueError) as exc:
+        _career_error(exc)
+
+
+@jobs_app.command('tailor')
+def tailor_job(job_id: str, evaluation: str | None = typer.Option(None), override: bool = typer.Option(False),
+               max_pages: int = typer.Option(2, min=1, max=5)):
+    from .contracts import RunRequest
+    from .run_store import Conflict
+    try:
+        runtime = _career_runtime()
+        job = runtime.jobs.get(job_id)
+        run = runtime.create_run(RunRequest(job_input=job.text, input_type='text', job_id=job.id,
+            evaluation_id=evaluation, evaluation_override=override, max_pages=max_pages))
+        console.print('Run: ' + run.id, markup=False)
+        async def work():
+            await runtime.runs.drive(run.id)
+            return await _review_v2_run(runtime, run.id)
+        result = asyncio.run(work())
+        if result.status not in ('complete', 'cancelled'):
+            raise typer.Exit(2 if result.pending or result.status == 'interrupted' else 3)
+    except (ValueError, KeyError, Conflict) as exc:
+        _career_error(exc)
+
+
+def _show_evaluation(view):
+    console.print('Evaluation: ' + view['id'] + ' · ' + view['status'], markup=False)
+    if view['stale']:
+        console.print('Changed inputs: ' + ', '.join(view['stale_reasons']), markup=False)
+    if view['result']:
+        result, fit = view['result'], view['result']['fit']
+        console.print('Advisory evidence fit (product defaults; not a hiring probability)', markup=False)
+        console.print('Insufficient evidence to score.' if fit['lower'] is None else
+                      f"Evidence interval: {fit['lower']}–{fit['upper']} · Coverage: {fit['coverage']}%", markup=False)
+        console.print(f"Eligibility: {result['eligibility_status']} · Recommendation: {fit['recommendation']}", markup=False)
+        _career_value(result['analysis'])
+    elif view['diagnostics']:
+        _career_value(view['diagnostics'])
+
+
+@app.command('evaluate')
+def evaluate_job(job_id: str, authorization: str | None = typer.Option(None), clearance: str | None = typer.Option(None),
+                 presence: str | None = typer.Option(None), hard_constraint: str | None = typer.Option(None)):
+    from .run_store import Conflict
+    try:
+        runtime = _career_runtime()
+        facts = {k: v for k, v in dict(authorization=authorization, clearance=clearance, presence=presence,
+                                      user_hard_constraint=hard_constraint).items() if v is not None}
+        created = runtime.evaluations.create(job_id, eligibility_facts=facts)
+        console.print('Saved evaluation: ' + created['id'], markup=False)
+        result = asyncio.run(runtime.evaluations.drive(created['id']))
+        _show_evaluation(result)
+        if result['status'] == 'failed':
+            raise typer.Exit(3)
+    except (ValueError, KeyError, Conflict) as exc:
+        _career_error(exc)
+
+
+@evaluations_app.command('inspect')
+def inspect_evaluation(evaluation_id: str):
+    try:
+        _show_evaluation(_career_runtime().evaluations.get(evaluation_id))
+    except (ValueError, KeyError) as exc:
+        _career_error(exc)
+
+
+@evaluations_app.command('continue')
+def continue_evaluation_cli(evaluation_id: str, action_id: str = typer.Option(...)):
+    from .contracts import Continue
+    from .run_store import Conflict
+    try:
+        result = asyncio.run(_career_runtime().evaluations.drive(evaluation_id, Continue(action_id=action_id)))
+        _show_evaluation(result)
+        if result['status'] == 'failed':
+            raise typer.Exit(3)
+    except (ValueError, KeyError, Conflict) as exc:
+        _career_error(exc)
+
+
+@evaluations_app.command('cancel')
+def cancel_evaluation_cli(evaluation_id: str):
+    try:
+        _show_evaluation(_career_runtime().evaluations.cancel(evaluation_id))
+    except (ValueError, KeyError) as exc:
+        _career_error(exc)
+
+
+@memory_app.command('list')
+def list_memory_cli():
+    for record in _career_runtime().memory.list():
+        console.print(f"{record['id']} · {record['kind']} · {record['status']}", markup=False)
+        _career_value(record['payload'])
+
+
+@memory_app.command('inspect')
+def inspect_memory_cli(record_id: str):
+    from .run_store import Conflict
+    try:
+        preview = _career_runtime().memory.preview(record_id)
+        console.print('Before', markup=False)
+        _career_value(preview['before'])
+        console.print('After', markup=False)
+        _career_value(preview['after'])
+        console.print('Source', markup=False)
+        _career_value(preview['record']['source_refs'])
+        console.print('Revision: ' + preview['record']['revision'], markup=False)
+        if preview['stale']:
+            console.print('Profile changed. Create a new proposal before accepting.', markup=False)
+    except (ValueError, KeyError, Conflict) as exc:
+        _career_error(exc)
+
+
+@memory_app.command('propose')
+def propose_memory_cli(kind: str = typer.Option(...), source: str = typer.Option(...),
+                       instruction: str | None = typer.Option(None), payload_file: Path | None = typer.Option(None, exists=True, dir_okay=False),
+                       base_revision: str | None = typer.Option(None), supersedes: str | None = typer.Option(None),
+                       supersedes_revision: str | None = typer.Option(None)):
+    import json
+
+    from .run_store import Conflict
+    try:
+        if payload_file:
+            if payload_file.stat().st_size > 10 * 1024 * 1024:
+                raise ValueError('Proposal exceeds the 10 MiB limit.')
+            payload = json.loads(payload_file.read_text(encoding='utf-8'))
+        elif kind == 'writing_rule' and instruction is not None:
+            payload = {'instruction': instruction}
+        else:
+            raise ValueError('Provide --payload-file, or --instruction for a writing rule.')
+        if bool(supersedes) != bool(supersedes_revision):
+            raise ValueError('Replacement requires both --supersedes and --supersedes-revision.')
+        body = dict(kind=kind, payload=payload, source_refs=[{'kind': 'user_text', 'text': source}])
+        if base_revision:
+            body['base_profile_revision'] = base_revision
+        if supersedes:
+            body['supersedes'] = {'id': supersedes, 'revision': supersedes_revision}
+        record = _career_runtime().memory.propose(body)
+        console.print('Pending proposal: ' + record['id'], markup=False)
+        console.print('Inspect the exact before/after values and source before deciding.', markup=False)
+    except (ValueError, KeyError, OSError, Conflict) as exc:
+        _career_error(exc)
+
+
+@memory_app.command('decide')
+def decide_memory_cli(record_id: str, decision: str = typer.Option(...), revision: str = typer.Option(...),
+                      action_id: str = typer.Option(...)):
+    from .run_store import Conflict
+    try:
+        result = _career_runtime().memory.decide(record_id, decision, expected_revision=revision, action_id=action_id)
+        console.print('Memory decision: ' + result['status'], markup=False)
+    except (ValueError, KeyError, Conflict) as exc:
+        _career_error(exc)

@@ -100,6 +100,20 @@ class Runtime:
                 'execution_modes': ['app']}
 
     def create_run(self, request):
+        if request.evaluation_id and not request.job_id:
+            raise Conflict('selected_job_required')
+        if request.job_id:
+            job = self.jobs.get(request.job_id)
+            if request.input_type != 'text' or request.job_input != job.text:
+                raise Conflict('selected_job_text_mismatch')
+            if request.evaluation_id:
+                evaluation = self.evaluations.get(request.evaluation_id)
+                if evaluation['job_id'] != job.id:
+                    raise Conflict('evaluation_job_mismatch')
+                if evaluation['status'] != 'complete' or evaluation['result'] is None:
+                    raise Conflict('completed_evaluation_required')
+                if (evaluation['stale'] or evaluation['result']['fit']['recommendation'] != 'prioritize') and not request.evaluation_override:
+                    raise Conflict('explicit_evaluation_override_required')
         readiness = self.readiness()
         if not readiness['generation_ready']:
             raise Conflict('generation_not_ready')

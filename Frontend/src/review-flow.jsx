@@ -7,20 +7,20 @@ import { FieldValue, targetLabel, AdvisoryList } from './profile-facts.jsx';
 export function useFormDraft(identity, initial) {
   const key = draftKey(identity);
   const [value, setValue] = React.useState(initial);
-  const [loaded, setLoaded] = React.useState(false);
+  const [loadedKey, setLoadedKey] = React.useState(null);
   const [stale, setStale] = React.useState([]);
   const [storageError, setStorageError] = React.useState(null);
   const identityRef = React.useRef(identity); identityRef.current = identity;
   const writes = React.useRef(Promise.resolve());
   React.useEffect(() => {
     let alive = true;
-    setLoaded(false);
+    setLoadedKey(null);
     draftStore.list().then(rows => {
       if (!alive) return;
       const found = matchingDrafts(rows, identityRef.current);
       setValue(found.exact?.value || initial);
       setStale(found.stale);
-    }).catch(e => { if (alive) setStorageError(e.message); }).finally(() => { if (alive) setLoaded(true); });
+    }).catch(e => { if (alive) setStorageError(e.message); }).finally(() => { if (alive) setLoadedKey(key); });
     return () => { alive = false; };
   }, [key]);
   const edit = next => setValue(current => {
@@ -38,7 +38,7 @@ export function useFormDraft(identity, initial) {
     await writes.current;
     try { await draftStore.remove(identityRef.current); } catch(e) { setStorageError(e.message); }
   };
-  return { value, edit, loaded, stale, storageError, discard, clear };
+  return { value, edit, loaded:loadedKey===key, stale, storageError, discard, clear };
 }
 
 export function DraftNotice({ draft, reconcile }) {

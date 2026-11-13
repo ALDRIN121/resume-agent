@@ -42,6 +42,7 @@ class RunRequest(Contract):
     max_pages: Annotated[int, Field(ge=1, le=5)] = 2
     job_id: str | None = None
     evaluation_id: str | None = None
+    evaluation_override: bool = False
     parent_run_id: str | None = None
     job_location: str | None = None
     work_mode: str | None = None

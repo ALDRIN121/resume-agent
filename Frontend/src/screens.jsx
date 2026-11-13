@@ -4,7 +4,7 @@ import { Icon } from "./icons.jsx";
 import { ResumeImportProgress } from "./resume-upload.jsx";
 import { JobContextFields, JobContextLine, WorkPreferencesFields } from "./work-context.jsx";
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
-import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders, getProfile } from "./api/client.js";
+import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders, getProfile,captureJob } from "./api/client.js";
 import { startOpenRouterSignIn } from "./api/openrouter-oauth.js";
 import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS } from "./data.jsx";
 
@@ -1493,6 +1493,11 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
           <JobContextFields location={jobLocation} mode={workMode} onLocationChange={setJobLocation} onModeChange={setWorkMode}/>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+            <Button variant="secondary" disabled={submitting||uploadingFile||(tab==='text'&&(!text.trim()||tone==='danger'))} onClick={async()=>{
+              if(tab!=='text'){goto('jobs');return;}
+              setSubmitting(true);setError(null);
+              try{const job=await captureJob({text});goto('jobs',{jobId:job.id});}catch(e){setError(e.message);}finally{setSubmitting(false);}
+            }}>Evaluate before tailoring</Button>
             <span style={{ flex: 1, minWidth: 180, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-faint)" }}>
               {error ? <span style={{ color: "var(--danger)" }}>{error}</span> : <><Icon name="loader" size={13} style={{ animation: "none" }}/>Generation can take a few minutes. You can leave and come back.</>}
             </span>

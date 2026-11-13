@@ -2,6 +2,9 @@
 const FIELDS = {
   'new-run': ['tab', 'text', 'url', 'jobLocation', 'workMode', 'maxPages'],
   questions: ['answers'], content: ['selected'],
+  'job-capture': ['text','company','role','source_url','source_key'],
+  eligibility: ['authorization','clearance','presence','user_hard_constraint'],
+  'memory-proposal': ['kind','instruction','source','locations','modes','path','after','constraints'],
 };
 export const draftKey = identity => JSON.stringify(['v2', identity.form, identity.run || '', identity.review || '', identity.revision || '']);
 export function safeFormValue(form, value) {

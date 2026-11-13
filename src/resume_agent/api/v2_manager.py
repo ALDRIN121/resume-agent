@@ -54,6 +54,7 @@ class V2RunManager:
         if key != 'jd_url' and len(source) > MAX_JD_TEXT_CHARS:
             raise ValueError('jd_input_too_large')
         request = RunRequest(job_input=source, input_type='url' if key == 'jd_url' else 'text',
+            job_id=body.get('job_id'), evaluation_id=body.get('evaluation_id'), evaluation_override=body.get('evaluation_override', False),
             max_pages=body.get('max_pages', 2), parent_run_id=body.get('parent_run_id'), job_location=body.get('job_location'), work_mode=body.get('work_mode'))
         view = self.services.create_run(request)
         queued = self.get_run(view.id)
@@ -109,6 +110,8 @@ class V2RunManager:
             'work_mode': jd.get('work_mode', fixed['request'].get('work_mode')), 'remote_policy': jd.get('remote_policy'),
             'work_preferences': fixed['profile_snapshot']['work_preferences'],
             'source_revision': fixed['profile_revision'], 'created_at': created,
+            'job_id': fixed['request'].get('job_id'), 'evaluation_id': fixed['request'].get('evaluation_id'),
+            'evaluation_override': fixed['request'].get('evaluation_override', False),
             'provider': fixed.get('provider'), 'model': fixed.get('model'),
             'review_stats': {
                 'questions': len(values['questions']) if 'questions' in values else None,

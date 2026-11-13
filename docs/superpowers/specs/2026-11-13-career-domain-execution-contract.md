@@ -45,3 +45,11 @@ Use configured provider/board identities only. Enforce the design's20boards,1000
 Any malformed record, missing stable identity, conflicting or repeated external ID, pagination failure or enforced truncation makes the board partial. Preserve valid results and previous jobs; report the exact rejected/duplicate/limit counts. Identical duplicates may be deduplicated for storage, but completeness remains conservative. Only a clean, fully exhausted refresh can mark unseen prior postings removed.
 
 Keep immutable JD snapshots per provider/board/external identity and content hash. Cross-provider similarity is a review hint, not an automatic merge. Discovery never calls a model or submits an application.
+
+## Application event decisions
+
+An application record represents one attempt, with at most one effective explicit submission. Reopening changes progress and does not resubmit. A separate attempt needs a new application, or a linked correction when original submission data was wrong. Recording a forgotten earlier submission preserves already-recorded later progress.
+
+Corrections retain the original event and name it explicitly. An optional validated replacement takes effect at that original event's position. The latest explicit correction to that original controls its effective value; corrections cannot target corrections. Keep the full original audit. Unknown occurrence dates remain null.
+
+At submission, freeze the complete evaluation the user selected, including its exact lower fraction, rubric and input identities. Record whether it was stale when recorded. Never choose the latest evaluation or artifact implicitly. Selected released artifacts retain their hashes if files disappear. A role mismatch remains visible rather than rewriting truthful sent-document history. Reports require an effective explicit submission; other progress remains visible until the user records that missing submission event.
