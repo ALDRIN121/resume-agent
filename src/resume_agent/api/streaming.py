@@ -183,6 +183,11 @@ def _hitl_event(payload: Any) -> HITLPendingEvent | None:
             kind="ask_missing",
             questions=list(payload.get("questions") or []),
         )
+    if kind == "review_pdf":
+        return HITLPendingEvent(
+            kind="review_pdf", review=payload["review"],
+            run_id=payload.get("run_id"), preview_url=payload.get("preview_url"),
+        )
     if kind == "tailoring_suggestions":
         return HITLPendingEvent(
             kind="present_suggestions",

@@ -4,9 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "resume-generator"
-version = "2.1.0"
-description = "AI-powered multi-agent resume generator — LangGraph + LaTeX + Rich CLI"
+version = "3.3.0"
+description = "Locally reviewed resumes, evidence-based role decisions and manual job discovery"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.14"
 dependencies = [
     # LangGraph / LangChain (floors track the tested 1.x lock; some carry CVE fixes)
@@ -34,6 +36,7 @@ dependencies = [
     # Config / Utilities
     "pyyaml>=6.0.0",
     "python-slugify>=8.0.0",
+    "filelock>=3.32.7",
     # Local web app
     "fastapi>=0.115.0",
     "starlette>=1.0.1",
@@ -45,11 +48,20 @@ dependencies = [
 [project.scripts]
 resume-generator = "resume_agent.cli:app"
 
+[project.urls]
+Homepage = "https://github.com/ALDRIN121/resume-agent"
+Issues = "https://github.com/ALDRIN121/resume-agent/issues"
+Documentation = "https://github.com/ALDRIN121/resume-agent#readme"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/resume_agent"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "Frontend/dist" = "resume_agent/_frontend"
+"skills/resume-agent" = "resume_agent/_skills/resume-agent"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.egm", "/.superpowers", "/.agents", "/.codex", "/.claude", "/.venv", "/.env", "/output", "/dist", "/build", "/Frontend/node_modules"]
 
 [tool.hatch.build.targets.sdist.force-include]
 "Frontend/dist" = "Frontend/dist"
@@ -70,6 +82,7 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["slow: real PDF compilation and structural checks"]
 
 [dependency-groups]
 dev = [

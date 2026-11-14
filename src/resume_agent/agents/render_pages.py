@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..artifacts import RunArtifacts
 from ..state import ResumeGenState
 from ..tools.pdf_to_images import pdf_to_images
 from ..ui.panels import print_info, print_warning
@@ -20,7 +21,14 @@ def render_pages_node(state: ResumeGenState) -> dict:
     print_info("Rendering PDF pages to images for validation…")
 
     try:
-        image_paths = pdf_to_images(pdf_path, dpi=150)
+        output_dir = None
+        if state.get("artifact_id"):
+            run = RunArtifacts.create(state["artifact_id"])
+            attempt = run.attempt(state.get("attempt_number"))
+            if str(attempt.pdf_path) != pdf_path:
+                raise ValueError("PDF path does not match run attempt")
+            output_dir = attempt.images_dir
+        image_paths = pdf_to_images(pdf_path, dpi=150, output_dir=output_dir)
     except RuntimeError as e:
         print_warning(f"Could not render pages: {e}")
         return {

@@ -137,3 +137,16 @@ def prompt_resume_feedback() -> str:
 def confirm(message: str, default: bool = True) -> bool:
     """Yes/no confirmation using Rich Confirm (shows [Y/n] or [y/N] clearly)."""
     return Confirm.ask(f"  [accent]{message}[/accent]", console=console, default=default)
+
+
+def display_content_preview(preview) -> None:
+    """Show the full exact ordered display projection and all declared omissions."""
+    console.print('Complete display content:', markup=False)
+    for field in preview.manifest.display_fields:
+        if field.visible_label is not None:
+            console.print(field.visible_label, markup=False)
+        console.print(field.text, markup=False)
+    console.print('Declared omissions:', markup=False)
+    for omission in preview.manifest.omissions:
+        console.print(omission.source_path + ': ' + omission.reason, markup=False)
+    console.print('Content hash: ' + preview.manifest.content_hash, markup=False)

@@ -28,13 +28,35 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     # Graceful shutdown: cancel any graph runs still in flight.
-    from .run_manager import run_manager
-
-    await run_manager.shutdown()
+    await app.state.run_manager.shutdown()
 
 
-def create_app() -> FastAPI:
+def create_app(*, services=None) -> FastAPI:
+    from ..runtime import Runtime
+    from .routers.applications import router as applications_router
+    from .routers.discovery import router as discovery_router
+    from .routers.jobs import evaluation_router
+    from .routers.jobs import router as jobs_router
+    from .routers.memory import router as memory_router
+    from .routers.model_tasks import router as model_tasks_router
+    from .routers.outcomes import router as outcomes_router
+    from .routers.readiness import router as readiness_router
+    from .routers.resume import create_profile_router
+    from .v2_manager import V2RunManager
+
+    services = services if services is not None else Runtime()
     app = FastAPI(title="Resume Generator", version=__version__, lifespan=_lifespan)
+    app.state.services = services
+    app.state.run_manager = V2RunManager(services)
+    app.include_router(create_profile_router(services.imports))
+    app.include_router(readiness_router)
+    app.include_router(memory_router)
+    app.include_router(model_tasks_router)
+    app.include_router(jobs_router)
+    app.include_router(evaluation_router)
+    app.include_router(applications_router)
+    app.include_router(discovery_router)
+    app.include_router(outcomes_router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

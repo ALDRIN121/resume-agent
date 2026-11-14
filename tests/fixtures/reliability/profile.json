@@ -1,0 +1,45 @@
+{
+  "personal": {
+    "full_name": "Mira Example",
+    "email": "mira@example.invalid",
+    "location": "Example City"
+  },
+  "summary": "Backend engineer who contributes to API reliability and incident response.",
+  "experience": [
+    {
+      "company": "Cedar Example Labs",
+      "title": "Software Engineer",
+      "start": "2023-01",
+      "end": null,
+      "bullets": [
+        "Improved service observability with structured logs.",
+        "Reduced API p99 latency from 450ms to 90ms through query optimization.",
+        "Helped the platform lead investigate incidents and document follow-up actions."
+      ],
+      "tech": ["Python", "PostgreSQL"]
+    },
+    {
+      "company": "Birch Example Systems",
+      "title": "Associate Software Engineer",
+      "start": "2021-06",
+      "end": "2022-12",
+      "bullets": [
+        "Improved service observability with structured logs.",
+        "Assisted the migration owner with integration tests for a queue upgrade."
+      ],
+      "tech": ["Python", "Redis"]
+    }
+  ],
+  "skills": {"Languages": ["Python", "SQL"], "Tools": ["PostgreSQL", "Redis"]},
+  "projects": [
+    {
+      "name": "Example Queue Inspector",
+      "description": "A fictional local queue debugging tool.",
+      "bullets": ["Added read-only queue inspection for a demonstration workload."],
+      "tech": ["Python"]
+    }
+  ],
+  "education": [
+    {"institution": "Example Institute", "degree": "BSc", "field": "Computing", "graduation": "2021"}
+  ]
+}

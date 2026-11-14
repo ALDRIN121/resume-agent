@@ -8,13 +8,13 @@ so the user can inspect and debug manually.
 from __future__ import annotations
 
 import shutil
+from uuid import uuid4
 
-from ..config import CONFIG_DIR, ResumeAgentSettings
+from ..artifacts import RunArtifacts
+from ..config import ResumeAgentSettings
 from ..state import ResumeGenState
 from ..tools.fs import build_failed_path
 from ..ui.panels import print_error
-
-_WORK_DIR = CONFIG_DIR / "_working"
 
 
 def terminal_failure_node(
@@ -23,6 +23,9 @@ def terminal_failure_node(
     """Save debug artifacts and surface a clear error to the user."""
     settings = settings or ResumeAgentSettings.load()
     failed_dir = build_failed_path(settings.output_base_dir.resolve())
+    # Timestamp alone can collide across concurrent failures.
+    failed_dir = failed_dir / str(uuid4())
+    failed_dir.mkdir()
 
     # Save whatever we have
     latex_source = state.get("latex_source", "")
@@ -41,9 +44,10 @@ def terminal_failure_node(
         (failed_dir / "errors.txt").write_text(error_log, encoding="utf-8")
 
     # Copy the full Tectonic + TeX log if it exists
-    raw_log_src = _WORK_DIR / "tectonic_raw.log"
-    if raw_log_src.exists():
-        shutil.copy2(raw_log_src, failed_dir / "tectonic_raw.log")
+    if state.get("artifact_id"):
+        attempt = RunArtifacts.create(state["artifact_id"]).attempt(state.get("attempt_number"))
+        if attempt.log_path.exists():
+            shutil.copy2(attempt.log_path, failed_dir / "tectonic_raw.log")
 
     print_error(
         f"Generation failed after {state.get('generator_retries', 0)} attempts.",

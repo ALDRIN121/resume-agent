@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from typing import Literal
@@ -12,16 +13,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ── Token / context budget constants ─────────────────────────────────────────
 # Centralised here so model swaps don't silently truncate in unexpected places.
-MAX_JD_TEXT_CHARS: int = 8_000       # scraped JD text sent to jd_extractor
-MAX_JD_STORAGE_CHARS: int = 2_000    # JD raw_text stored on JobDescription
-MAX_RESUME_PARSE_CHARS: int = 12_000 # resume text sent to base_resume_loader
+MAX_JD_TEXT_CHARS: int = 48_000      # inclusive supported JD text limit
+MAX_JD_STORAGE_CHARS: int = 48_000   # retained for compatibility; supported JDs are stored whole
+MAX_RESUME_PARSE_CHARS: int = 48_000 # inclusive supported resume text limit
+MAX_RESUME_UPLOAD_BYTES: int = 10 * 1024 * 1024
 MAX_LLM_OUTPUT_TOKENS: int = 16_384  # max_tokens for all LLM calls — full LaTeX resume needs ~5–8k tokens
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 _OLD_CONFIG_DIR = Path.home() / ".resume_agent"   # pre-rename legacy location
 
-CONFIG_DIR = Path.home() / ".resume_generator"
+_STATE_DIR_OVERRIDE = os.environ.get("RESUME_GENERATOR_STATE_DIR")
+if _STATE_DIR_OVERRIDE is not None and not _STATE_DIR_OVERRIDE.strip():
+    raise ValueError("RESUME_GENERATOR_STATE_DIR must not be empty")
+CONFIG_DIR = (
+    Path(_STATE_DIR_OVERRIDE).expanduser().resolve()
+    if _STATE_DIR_OVERRIDE is not None
+    else Path.home() / ".resume_generator"
+)
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 SECRETS_FILE = CONFIG_DIR / ".env"        # API keys stored here (chmod 600)
 SOURCE_DIR = CONFIG_DIR / "source"        # Drop your .pdf / .tex here
@@ -32,7 +41,7 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 def migrate_config_dir() -> None:
     """Move ~/.resume_agent → ~/.resume_generator on first run after rename."""
-    if CONFIG_DIR.exists() or not _OLD_CONFIG_DIR.exists():
+    if _STATE_DIR_OVERRIDE is not None or CONFIG_DIR.exists() or not _OLD_CONFIG_DIR.exists():
         return
     try:
         shutil.copytree(str(_OLD_CONFIG_DIR), str(CONFIG_DIR))
@@ -103,9 +112,8 @@ class ResumeAgentSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="RESUME_GENERATOR_",
         env_nested_delimiter="__",
-        # Load from project .env first, then from the user-level secrets file.
-        # Later entries in the list take lower priority (first match wins).
-        env_file=[".env", str(SECRETS_FILE)],
+        # An explicit state root must never inherit the project's dotenv file.
+        env_file=[str(SECRETS_FILE)] if _STATE_DIR_OVERRIDE is not None else [".env", str(SECRETS_FILE)],
         env_file_encoding="utf-8",
         populate_by_name=True,
         extra="ignore",

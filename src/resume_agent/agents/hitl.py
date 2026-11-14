@@ -16,7 +16,7 @@ from langgraph.types import interrupt
 
 from ..config import ResumeAgentSettings
 from ..llm import get_chat_model
-from ..schemas import GapAnalysis, UserResume
+from ..schemas import ContentSnapshot, GapAnalysis, UserResume
 from ..state import ResumeGenState
 from ..ui.panels import print_info
 
@@ -126,3 +126,15 @@ def _coerce_answers(raw) -> dict[str, str]:
     if not isinstance(answers, dict):
         return {}
     return {str(k): str(v).strip() for k, v in answers.items()}
+
+
+def collect_answers_v2(
+    profile: dict, source_revision: str, answers: dict[str, str], *,
+    user_text: dict[str, str] | None = None,
+) -> ContentSnapshot:
+    """Freeze answers as evidence only. Proposal generation is a later boundary."""
+    return ContentSnapshot.model_validate({
+        'profile': profile, 'source_revision': source_revision,
+        'answers': answers, 'user_text': {} if user_text is None else user_text,
+        'proposals': [],
+    }).model_copy(deep=True)

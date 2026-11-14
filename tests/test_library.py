@@ -34,7 +34,8 @@ def test_upsert_creates_company_and_resume(lib):
     resumes = lib.list_resumes()
     assert len(resumes) == 1
     assert resumes[0]["company"] == "TechCorp"
-    assert resumes[0]["pdf_url"] == "/api/runs/t1/pdf"  # complete + pdf → downloadable
+    assert resumes[0]["pdf_url"] is None  # a missing historical file stays visible
+    assert resumes[0]["artifact_status"] == "missing"
 
 
 def test_job_location_and_work_mode_survive_library_updates(lib):
@@ -103,9 +104,98 @@ def test_migrate_from_jsonl(lib, tmp_path):
         encoding="utf-8",
     )
 
-    imported = lib.migrate_from_jsonl(history)
-    assert imported == 2
+    # A canonical database already exists, even though it is empty.
+    assert lib.migrate_from_jsonl(history) == 0
+    assert lib.list_resumes() == []
+    lib.LIBRARY_DB.unlink()
+    lib.init_db()
     assert {r["thread_id"] for r in lib.list_resumes()} == {"h1", "h2"}
-    # Re-running must not duplicate (idempotent upsert by thread_id).
-    lib.migrate_from_jsonl(history)
+    assert lib.migrate_from_jsonl(history) == 0
     assert len(lib.list_resumes()) == 2
+
+
+def test_jsonl_never_regresses_or_restores_canonical_history(lib, tmp_path):
+    history = tmp_path / "run_history.jsonl"
+    history.write_text(json.dumps({"thread_id": "old", "company": "Old", "status": "complete", "pdf_path": "/old.pdf"}) + "\n")
+    lib.upsert_resume(thread_id="old", company="Current", status="cancelled")
+    lib.init_db()
+    lib.migrate_from_jsonl(history)
+    assert lib.get_resume("old")["status"] == "cancelled"
+    assert lib.get_resume("old")["pdf"] is None
+    lib.delete_resume("old")
+    lib.init_db()
+    lib.migrate_from_jsonl(history)
+    assert lib.list_resumes() == []
+
+
+def test_import_reports_invalid_rows_and_rolls_back_required_writes(lib, tmp_path, monkeypatch, caplog):
+    history = tmp_path / "run_history.jsonl"
+    history.write_text('{broken\n[]\n' + json.dumps({"thread_id": "good", "company": "Example"}) + "\n")
+    lib.LIBRARY_DB.unlink()
+    original = lib._company_id
+    def fail(conn, name):
+        raise RuntimeError("required persistence failed")
+    monkeypatch.setattr(lib, "_company_id", fail)
+    with pytest.raises(RuntimeError, match="required persistence failed"):
+        lib.init_db()
+    with lib._connect() as conn:
+        assert conn.execute("SELECT value FROM migration_meta WHERE key='legacy_jsonl_imported'").fetchone() is None
+        assert conn.execute("SELECT COUNT(*) FROM resumes").fetchone()[0] == 0
+    monkeypatch.setattr(lib, "_company_id", original)
+    lib.init_db()
+    assert lib.get_resume("good") is not None
+    assert "line 1" in caplog.text and "line 2" in caplog.text
+
+
+def test_historical_relink_requires_inspection_and_confirmation(lib, tmp_path):
+    from pypdf import PdfWriter
+
+    lib.upsert_resume(thread_id="old", company="Example", status="complete", pdf_path="/missing.pdf")
+    invalid = tmp_path / "wrong.pdf"
+    invalid.write_bytes(b"not a PDF")
+    with pytest.raises(ValueError, match="invalid_pdf"):
+        lib.inspect_legacy_artifact("old", invalid)
+    pdf = tmp_path / "observed.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.write(pdf)
+    inspected = lib.inspect_legacy_artifact("old", pdf)
+    assert lib.get_resume("old")["pdf"] == "missing.pdf"
+    with pytest.raises(ValueError, match="confirmation_required"):
+        lib.relink_legacy_artifact("old", review_id=inspected["review_id"], observed_hash=inspected["observed_hash"], action_id="a", confirmed=False)
+    observed = lib.relink_legacy_artifact("old", review_id=inspected["review_id"], observed_hash=inspected["observed_hash"], action_id="a", confirmed=True)
+    assert observed["artifact_status"] == "legacy_unverified"
+    assert observed["identity_verified"] is False
+    assert observed["inspection_hash"] == inspected["observed_hash"]
+    assert observed["pdf_url"] == "/api/runs/old/pdf"
+    assert lib.relink_legacy_artifact("old", review_id=inspected["review_id"], observed_hash=inspected["observed_hash"], action_id="a", confirmed=True) == observed
+
+
+def test_changed_bytes_cannot_reuse_legacy_inspection(lib, tmp_path):
+    from pypdf import PdfWriter
+
+    lib.upsert_resume(thread_id="old", company="Example", status="complete")
+    pdf = tmp_path / "pdf.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.write(pdf)
+    inspection = lib.inspect_legacy_artifact("old", pdf)
+    pdf.write_bytes(b"replaced")
+    with pytest.raises(ValueError, match="artifact_changed"):
+        lib.relink_legacy_artifact("old", review_id=inspection["review_id"], observed_hash=inspection["observed_hash"], action_id="a", confirmed=True)
+
+
+def test_explicit_library_path_isolated_from_default(lib, tmp_path):
+    root = tmp_path / 'isolated'
+    root.mkdir()
+    history = root / 'run_history.jsonl'
+    history.write_text(json.dumps({'thread_id': 'isolated', 'company': 'Separate'}) + '\n')
+    database = root / 'library.sqlite'
+    lib.init_db(library_path=database)
+    assert lib.get_resume('isolated', library_path=database)['company'] == 'Separate'
+    assert lib.get_resume('isolated') is None
+    lib.upsert_resume(thread_id='added', company='Separate', library_path=database)
+    assert len(lib.list_resumes(library_path=database)) == 2
+    assert lib.list_companies(library_path=database)[0]['total'] == 2
+    assert lib.delete_resume('added', library_path=database)
+    assert lib.list_resumes() == []

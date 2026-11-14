@@ -58,7 +58,8 @@ async def test_adapter_sends_authenticated_chat_request(isolated):
     assert route.calls[0].request.headers["authorization"] == "Bearer test-secret"
     assert json.loads(route.calls[0].request.content)["model"] == MODEL
     assert llm.request_timeout == 120
-    assert llm.max_retries == 2
+    assert llm.max_retries == 0
+    assert llm.model_kwargs["num_retries"] == 0
 
 
 def test_save_and_test_settings_do_not_expose_key(isolated, monkeypatch):

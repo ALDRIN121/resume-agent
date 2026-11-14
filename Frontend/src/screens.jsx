@@ -1,10 +1,13 @@
 import React from "react";
+import { ReadinessPanel, useFormDraft, DraftNotice } from "./review-flow.jsx";
 import { Icon } from "./icons.jsx";
 import { ResumeImportProgress } from "./resume-upload.jsx";
 import { JobContextFields, JobContextLine, WorkPreferencesFields } from "./work-context.jsx";
 import { Button, IconButton, StatusPill, Card, Input, Textarea, Tabs, Badge, Toggle, EmptyState, SectionHeader, MonoTicker, Kbd, UploadDropzone } from "./components.jsx";
-import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders } from "./api/client.js";
+import { createRun, listRuns, getResume, getResumeRaw, updateResume, getSettings, getProviders, updateSettings, testConnection, runDoctor, listLibraryResumes, downloadPdf, uploadJdFile, detectProviders, getProfile,captureJob } from "./api/client.js";
 import { startOpenRouterSignIn } from "./api/openrouter-oauth.js";
+import { getMetrics } from "./api/client.js";
+import { CareerCompanies } from "./career-companies.jsx";
 import { ACTIVE_LLM, PROVIDERS, PROVIDER_MODELS, PROVIDER_VISION_MODELS } from "./data.jsx";
 
 // Fetch the live provider catalogue (A4); fall back to the static data.jsx
@@ -132,10 +135,18 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
   const runs = useRuns();
   const settings = useSettings();
   const [tab, setTab] = React.useState("overview");
+  const [metrics,setMetrics]=React.useState(null),[metricsError,setMetricsError]=React.useState(null);
+  React.useEffect(()=>{
+    let alive=true;
+    const refresh=()=>getMetrics().then(data=>{
+      if(!data.generation||typeof data.applications?.submitted!=='number')throw new Error('Application counts are unavailable.');
+      if(alive){setMetrics(data);setMetricsError(null);}
+    }).catch(e=>{if(alive){setMetrics(null);setMetricsError(e.message);}});
+    refresh();const timer=setInterval(refresh,5000);return()=>{alive=false;clearInterval(timer);};
+  },[]);
 
-  const totalRuns = runs.length;
   const activityData = computeActivity(runs);
-  const durations = runs.map(r => parseDurationSecs(r.duration)).filter(n => n !== null);
+  const durations = runs.filter(r=>['complete','failed'].includes(r.status)).map(r => parseDurationSecs(r.duration)).filter(n => n !== null);
   const avgDuration = durations.length
     ? (() => { const a = Math.round(durations.reduce((x, y) => x + y, 0) / durations.length); return a >= 60 ? `${Math.floor(a / 60)}m ${a % 60}s` : `${a}s`; })()
     : "—";
@@ -146,20 +157,20 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
   const doctorFailing = (doctor?.checks || []).filter(c => !c.ok).length;
 
   const weekCount = activityData.slice(-7).reduce((a, b) => a + b, 0);
-  const needsInput = runs.filter(r => r.status === "awaiting-input").length;
-  const successRate = totalRuns ? Math.round((completed / totalRuns) * 100) : 0;
+  const needsInput = runs.filter(r => ["awaiting-input","interrupted"].includes(r.status)).length;
+  const completedWeekCount=computeActivity(runs.filter(r=>r.status==='complete')).slice(-7).reduce((a,b)=>a+b,0);
   // Full lists for tab content (no artificial cap)
-  const activeRuns = runs.filter(r => ["running", "awaiting-input", "queued", "retrying"].includes(r.status));
+  const activeRuns = runs.filter(r => ["running", "awaiting-input", "queued", "retrying","interrupted"].includes(r.status));
   const activeRunsSummary = activeRuns.slice(0, 3);
   const completedRuns = runs.filter(r => r.status === "complete");
   const recentDone = completedRuns.slice(0, 4);
-  const needsRuns = runs.filter(r => r.status === "awaiting-input");
+  const needsRuns = runs.filter(r => ["awaiting-input","interrupted"].includes(r.status));
   const failedRuns = runs.filter(r => r.status === "failed");
   const activityFeed = [...runs].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 5);
   const maxBar = Math.max(1, ...activityData);
 
-  const Stat = ({ icon, label, value, sub, alert }) => (
-    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)", padding: "15px 16px 13px", boxShadow: "var(--shadow-sm)" }}>
+  const Stat = ({ icon, label, value, sub, alert,testId }) => (
+    <div data-testid={testId} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)", padding: "15px 16px 13px", boxShadow: "var(--shadow-sm)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-muted)", fontWeight: 500 }}>
         <Icon name={icon} size={15} style={{ color: "var(--text-faint)" }}/>{label}
       </div>
@@ -446,12 +457,15 @@ const Dashboard = ({ goto, openRun, locked, doctor }) => {
 
       {/* KPI stats — visible on every tab */}
       <div className="kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, margin: "22px 0" }}>
-        <Stat icon="file-text" label="Resumes generated" value={completed} sub={<><span style={{ color: "var(--success)", fontWeight: 600 }}>+{weekCount}</span> this week</>}/>
-        <Stat icon="check-circle" label="Success rate" value={`${successRate}%`} sub={`${completed} of ${totalRuns || 0} compiled`}/>
-        <Stat icon="loader" label="Avg generation" value={avgDuration} sub="across all runs"/>
+        <Stat icon="file-text" label="Resumes generated" value={completed} sub={<><span style={{ color: "var(--success)", fontWeight: 600 }}>+{completedWeekCount}</span> this week</>}/>
+        <Stat icon="check-circle" testId="generation-health" label="Generation health" value={metrics?(metrics.generation.percent==null?'—':`${metrics.generation.percent}%`):metricsError?'Unavailable':'…'} sub={metrics?`${metrics.generation.completed} complete · ${metrics.generation.failed} failed · ${metrics.generation.cancelled} cancelled`:'Checking completed and failed runs'}/>
+        <Stat icon="loader" label="Avg generation" value={avgDuration} sub="completed and failed runs"/>
         <Stat icon="alert" label="Needs your input" value={needsInput} alert sub={needsInput ? <span style={{ color: "var(--warning)", fontWeight: 600 }}>waiting on you</span> : "all clear"}/>
-        <Stat icon="building" label="Companies" value={companies.length} sub="targeted"/>
+        <Stat icon="building" label="Companies" value={metrics?metrics.companies:metricsError?'Unavailable':'…'} sub="with saved records"/>
+        <Stat icon="file-text" testId="submitted-applications" label="Submitted applications" value={metrics?metrics.applications.submitted:metricsError?'Unavailable':'…'} sub="explicit submission events"/>
+        <Stat icon="check-circle" testId="positive-outcomes" label="Positive evidence" value={metrics?metrics.applications.positive:metricsError?'Unavailable':'…'} sub="favorable reply or recorded progress"/>
       </div>
+      {metricsError&&<p role="alert">{metricsError}</p>}
 
       {/* Tab content */}
       <div key={tab} className="route-in">
@@ -954,6 +968,8 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   const [expanded, setExpanded] = React.useState({});
   const [resume, setResume] = React.useState(null);
   const [base, setBase] = React.useState({});
+  const [profileRevision, setProfileRevision] = React.useState(null);
+  const [saveError, setSaveError] = React.useState(null);
   const [rawYaml, setRawYaml] = React.useState(null);
   const [dirty, setDirty] = React.useState(false);
   const [saveState, setSaveState] = React.useState("idle"); // idle | saving | saved | error
@@ -961,8 +977,10 @@ const ResumeEditor = ({ onReplace, parsing }) => {
   const parsingActive = !!parsing && !parsing.completed && !parsing.failed;
 
   const load = React.useCallback(() => {
-    getResume()
-      .then(data => {
+    getProfile()
+      .then(snapshot => {
+        const data = snapshot.profile;
+        setProfileRevision(snapshot.revision);
         const ui = resumeForUi(data);
         if (!ui) { setResume(false); return; }
         setBase(data);
@@ -1011,12 +1029,16 @@ const ResumeEditor = ({ onReplace, parsing }) => {
     if (!resume) return;
     setSaveState("saving");
     try {
-      const saved = await updateResume(uiToResume(resume, base));
-      setBase(saved);
+      const saved = await updateResume(uiToResume(resume, base), profileRevision);
+      const snapshot = await getProfile();
+      setProfileRevision(snapshot.revision);
+      setBase(snapshot.profile || saved);
+      setSaveError(null);
       setRawYaml(null);
       setDirty(false);
       setSaveState("saved");
-    } catch {
+    } catch (error) {
+      setSaveError(error.status === 409 ? "The base resume changed elsewhere. Your edits are still here. Copy your changes, then reload the current profile before saving again." : error.message);
       setSaveState("error");
     }
   };
@@ -1036,6 +1058,7 @@ const ResumeEditor = ({ onReplace, parsing }) => {
 
   return (
     <div className="editor-layout" style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 1fr)", height: "100%", minHeight: 0 }}>
+      {saveError && <div role="alert" className="editor-conflict">{saveError}<Button onClick={() => navigator.clipboard?.writeText(JSON.stringify(uiToResume(resume,base),null,2))}>Copy my edits</Button><Button onClick={() => { setSaveError(null);load(); }}>Reload current profile</Button></div>}
       {/* Left nav */}
       <div style={{
         borderRight: "1px solid var(--border)", background: "var(--surface)",
@@ -1300,11 +1323,17 @@ const ResumeEditor = ({ onReplace, parsing }) => {
 
 // ============== NEW RUN ==============
 const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) => {
-  const [tab, setTab] = React.useState("text");
-  const [text, setText] = React.useState("");
-  const [url, setUrl] = React.useState("");
-  const [jobLocation, setJobLocation] = React.useState("");
-  const [workMode, setWorkMode] = React.useState("");
+  const [revision,setRevision] = React.useState("");
+  const [ready,setReady] = React.useState(false);
+  React.useEffect(() => { getProfile().then(p => setRevision(p.revision || "")).catch(() => {}); }, []);
+  const formDraft = useFormDraft({form:"new-run",run:"new",review:"job",revision}, {tab:"text",text:"",url:"",jobLocation:"",workMode:"",maxPages:2});
+  const {tab="text",text="",url="",jobLocation="",workMode="",maxPages=2} = formDraft.value;
+  const setField = (field,value) => formDraft.edit(current => ({...current,[field]:value}));
+  const setTab = value => setField("tab",value);
+  const setText = value => setField("text",value);
+  const setUrl = value => setField("url",value);
+  const setJobLocation = value => setField("jobLocation",value);
+  const setWorkMode = value => setField("workMode",value);
   const [jdFileId, setJdFileId] = React.useState(null);
   const [jdFileName, setJdFileName] = React.useState(null);
   const [uploadingFile, setUploadingFile] = React.useState(false);
@@ -1324,7 +1353,10 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
       setUploadingFile(true);
       setError(null);
       try {
-        const { file_id } = await uploadJdFile(file);
+        const { file_id, text: extractedText } = await uploadJdFile(file);
+        if (!extractedText) throw new Error("No readable job description text was returned. Upload the file again.");
+        setText(extractedText);
+        setTab("text");
         setJdFileId(file_id);
         setJdFileName(file.name);
       } catch (err) {
@@ -1337,7 +1369,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
     setError("Only .txt and .pdf files are supported.");
   };
   const charCount = text.length;
-  const tone = charCount > 8000 ? "danger" : charCount > 7000 ? "warning" : "neutral";
+  const tone = charCount > 48000 ? "danger" : charCount > 45000 ? "warning" : "neutral";
   const startRun = async () => {
     setSubmitting(true);
     setError(null);
@@ -1348,8 +1380,10 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
         jdFileId: tab === "file" ? jdFileId : undefined,
         jobLocation: jobLocation.trim() || undefined,
         workMode: workMode || undefined,
+        maxPages,
       });
-      onRunStarted?.(result.thread_id);
+      await formDraft.clear();
+      onRunStarted?.(result.thread_id || result.id);
     } catch (err) {
       setError(err.message || "Could not start run.");
     } finally {
@@ -1411,6 +1445,9 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
       <div className="serif" style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1.1, lineHeight: 1.05 }}>Tailor a resume to a job</div>
       <div style={{ fontSize: 13.5, color: "var(--text-muted)", marginTop: 8, maxWidth: 620 }}>Paste the posting or drop a URL — the agents read it against your base résumé, ask only what they can't infer, and file the finished PDF under the company.</div>
 
+      <ReadinessPanel onReady={setReady} goto={goto}/>
+      <DraftNotice draft={formDraft} reconcile={value => formDraft.edit({...formDraft.value,...value})}/>
+      <label className="work-field"><span>Maximum PDF pages</span><select aria-label="Maximum PDF pages" value={maxPages} onChange={e => setField("maxPages",Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
       <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)", gap: 32, alignItems: "start", marginTop: 24 }}>
         {/* input card */}
         <Card padding={22}>
@@ -1436,7 +1473,7 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: detected ? "var(--success)" : "var(--text-faint)" }}>
                     <Icon name={detected ? "check-circle" : "info"} size={14}/>{detected ? "Ready to analyze the company and role" : "Paste the full job description above"}
                   </span>
-                  <span className="mono" style={{ fontSize: 11.5, color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-faint)" }}>{charCount.toLocaleString()} / 8,000</span>
+                  <span className="mono" style={{ fontSize: 11.5, color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-faint)" }}>{charCount.toLocaleString()} / 48,000</span>
                 </div>
               </>
             ) : tab === "url" ? (
@@ -1469,6 +1506,11 @@ const NewRun = ({ goto, openRun, locked, onRunStarted, settings = ACTIVE_LLM }) 
           <JobContextFields location={jobLocation} mode={workMode} onLocationChange={setJobLocation} onModeChange={setWorkMode}/>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+            <Button variant="secondary" disabled={submitting||uploadingFile||(tab==='text'&&(!text.trim()||tone==='danger'))} onClick={async()=>{
+              if(tab!=='text'){goto('jobs');return;}
+              setSubmitting(true);setError(null);
+              try{const job=await captureJob({text});goto('jobs',{jobId:job.id});}catch(e){setError(e.message);}finally{setSubmitting(false);}
+            }}>Evaluate before tailoring</Button>
             <span style={{ flex: 1, minWidth: 180, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-faint)" }}>
               {error ? <span style={{ color: "var(--danger)" }}>{error}</span> : <><Icon name="loader" size={13} style={{ animation: "none" }}/>Generation can take a few minutes. You can leave and come back.</>}
             </span>
@@ -2258,55 +2300,7 @@ const TreeItem = ({ label, icon, count, active, onClick }) => (
 );
 
 // ============== COMPANIES (the cabinet) ==============
-const CompaniesView = ({ goto, openRun }) => {
-  const rows = useLibrary();
-  const all = rows || [];
-  const groups = groupByCompany(all);
-
-  return (
-    <div className="page-pad" style={{ padding: "40px 40px 64px", maxWidth: 1240, margin: "0 auto" }}>
-      <Masthead crumb="Workspace / Companies" title="Companies"
-        sub={`${groups.length} compan${groups.length === 1 ? "y" : "ies"} you've applied to`}
-        action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>New résumé</Button>}
-      />
-      {rows === null ? (
-        <Card padding={0}><EmptyState icon="loader" title="Opening the cabinet…"/></Card>
-      ) : groups.length === 0 ? (
-        <Card padding={0}><EmptyState icon="building" title="No companies yet" sub="Start a résumé for a company and a folder appears here."
-          action={<Button variant="primary" iconRight="arrow-right" onClick={() => goto("new")}>Create a résumé</Button>}/></Card>
-      ) : (
-        <div className="provider-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(244px, 1fr))", gap: 16 }}>
-          {groups.map(([name, rs]) => {
-            const final = rs.filter(r => libMeta(r.status).key === "final").length;
-            const needs = rs.filter(r => libMeta(r.status).key === "needs").length;
-            const failed = rs.filter(r => libMeta(r.status).key === "failed").length;
-            const roles = Array.from(new Set(rs.map(r => r.role))).slice(0, 2).join(" · ");
-            return (
-              <Card key={name} padding={20} hover onClick={() => openRun(rs[0].id, rs[0].status, rs[0])}>
-                <div style={{ width: 42, height: 42, borderRadius: "var(--radius-md)", background: companyColor(name).bg, color: companyColor(name).fg, display: "grid", placeItems: "center", marginBottom: 14, fontSize: 17, fontWeight: 800 }}>
-                  {name[0].toUpperCase()}
-                </div>
-                <div className="serif" style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.1 }}>{name}</div>
-                <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }} title={roles}>{roles || "—"}</div>
-                <div style={{ display: "flex", gap: 6, marginTop: 15, flexWrap: "wrap" }}>
-                  {final > 0 && <span style={tagStyle("#052E16", "var(--success-chip)")}>{final} final</span>}
-                  {needs > 0 && <span style={tagStyle("#422006", "var(--warning-chip)")}>{needs} needs you</span>}
-                  {failed > 0 && <span style={tagStyle("var(--danger)", "var(--danger-soft)")}>{failed} failed</span>}
-                  <span style={tagStyle("var(--text-muted)")}>{rs.length} total</span>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const tagStyle = (color, bg) => ({
-  fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 9px", borderRadius: 99,
-  background: bg || "var(--bg)", border: bg ? "none" : "1px solid var(--border)", color, letterSpacing: 0.2, fontWeight: bg ? 600 : 400,
-});
+const CompaniesView = ({goto,openRun}) => <CareerCompanies goto={goto} openRun={openRun}/>;
 
 // Hash a company name to a color from the mockup palette
 const COMPANY_COLORS = [

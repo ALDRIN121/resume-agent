@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 #  Tectonic compile wrapper
 # ══════════════════════════════════════════════════════════════════════════════
@@ -379,9 +378,7 @@ class TestHRReviewNode:
 
     def test_hr_review_disabled_by_config_skips_llm(self):
         """When enable_hr_review=False, the routing closure bypasses the node."""
-        from resume_agent.config import FeaturesConfig, ResumeAgentSettings
-
-        settings = ResumeAgentSettings.load.__func__  # bypass load, create directly
+        from resume_agent.config import FeaturesConfig
         # Verify FeaturesConfig respects the flag
         features = FeaturesConfig(enable_hr_review=False)
         assert features.enable_hr_review is False
@@ -510,17 +507,22 @@ class TestPDFValidatorNode:
 #  Bot-wall test — verify it actually tests the fallback path
 # ══════════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.usefixtures("public_dns")
 class TestBotWallFallback:
 
     @pytest.mark.asyncio
-    async def test_bot_wall_triggers_playwright_fallback_error(self):
+    async def test_bot_wall_triggers_playwright_fallback_error(self, monkeypatch):
         """
         When httpx returns bot-wall content AND playwright_fallback=True,
-        the scraper must attempt Playwright (which fails without a real browser,
-        giving a specific error message).
+        the scraper must attempt Playwright and retain its failure status.
         """
-        import respx
+        from unittest.mock import AsyncMock
+
         import httpx
+        import respx
+
+        browser = AsyncMock(return_value=("", "synthetic browser failure"))
+        monkeypatch.setattr("resume_agent.tools.scrape._scrape_playwright", browser)
 
         with respx.mock:
             respx.get("https://linkedin.com/jobs/1").mock(
@@ -530,16 +532,14 @@ class TestBotWallFallback:
             )
 
             from resume_agent.tools.scrape import scrape_url
-            # With playwright_fallback=True (default), it should attempt Playwright
-            # and fail with an ImportError or Playwright error — not a content error.
             result = await scrape_url(
                 "https://linkedin.com/jobs/1",
                 playwright_fallback=True,
             )
 
-        # Either Playwright is installed (and fails with network), or not installed.
-        # In both cases, error should mention "Both scrapers failed" or "not installed".
-        assert result.error is not None
+        browser.assert_awaited_once_with("https://linkedin.com/jobs/1", timeout=30)
+        assert "Both scrapers failed" in result.error
+        assert "synthetic browser failure" in result.error
         assert result.used_playwright is True
 
     @pytest.mark.asyncio
@@ -548,8 +548,8 @@ class TestBotWallFallback:
         With playwright_fallback=False, bot-wall returns an error about short/bot content,
         NOT a playwright error. This is the original test's intended behaviour.
         """
-        import respx
         import httpx
+        import respx
 
         with respx.mock:
             respx.get("https://linkedin.com/jobs/1").mock(

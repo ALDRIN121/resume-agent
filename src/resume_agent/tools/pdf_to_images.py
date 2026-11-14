@@ -36,7 +36,8 @@ def pdf_to_images(
 
     for i, img in enumerate(images, 1):
         img_path = dest_dir / f"page_{i}.png"
-        img.save(str(img_path), "PNG")
+        with img_path.open("xb") as stream:
+            img.save(stream, "PNG")
         paths.append(str(img_path))
 
     return paths

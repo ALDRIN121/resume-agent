@@ -5,14 +5,15 @@ properties that would catch the original template defects:
   • "companys" apostrophe loss
   • page count outside the expected range
 
-Requires tectonic and pypdf.  Both guards use pytest.skip so CI can run the suite
-without either dependency.  Mark with -m slow to opt in:
+Requires tectonic and pypdf. Required acceptance fails if its PDF toolchain is
+missing; ordinary developer runs may skip without it. Run directly with:
 
     pytest -m slow tests/test_visual_regression.py
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -24,13 +25,21 @@ pytestmark = pytest.mark.slow
 
 
 def _tectonic_available() -> bool:
-    return shutil.which("tectonic") is not None
+    available = shutil.which("tectonic") is not None
+    if os.getenv("RESUME_REQUIRE_PDF_TOOLS") == "1":
+        assert available, "Required PDF tool missing: tectonic"
+        for tool in ("pdftoppm", "pdfinfo"):
+            assert shutil.which(tool), f"Required PDF tool missing: {tool}"
+    return available
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
 def _pypdf():
+    if os.getenv("RESUME_REQUIRE_PDF_TOOLS") == "1":
+        import pypdf
+        return pypdf
     return pytest.importorskip("pypdf")
 
 

@@ -227,3 +227,11 @@ def _encode_image(path: str) -> str:
     """Base64-encode an image file for inline embedding."""
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
+
+
+async def review_approved_images(record, *, reviewer=None, check_cancelled=None):
+    """Private v2 vision advice; diagnostics never alter content or routing."""
+    from ..approved_render import review_advisory
+
+    return await review_advisory('vision', record.image_paths, reviewer=reviewer,
+                                 check_cancelled=check_cancelled)

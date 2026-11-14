@@ -1,7 +1,10 @@
 import React from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, UploadDropzone } from "./components.jsx";
+import { actionForRetry } from "./draft-store.js";
+import { decideImport, importSourceUrl,continueImport,cancelImport } from "./api/client.js";
 import { PARSE_STAGES } from "./data.jsx";
+import { FieldValue } from "./profile-facts.jsx";
 
 const doneCount = (parsing) => parsing.completed ? PARSE_STAGES.length
   : PARSE_STAGES.filter(stage => parsing.statuses?.[stage.id] === "done").length;
@@ -14,7 +17,7 @@ const formatElapsed = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms 
 function useElapsed(parsing) {
   const [elapsed, setElapsed] = React.useState(0);
   const startedAt = parsing?.startedAt;
-  const finished = parsing?.completed || parsing?.failed;
+  const finished = parsing?.completed || parsing?.failed || ['interrupted','cancelled','pending_review'].includes(parsing?.operation?.status);
   React.useEffect(() => {
     if (startedAt == null) return;
     setElapsed(Date.now() - startedAt);
@@ -120,9 +123,12 @@ export function ResumeImportProgress({ parsing }) {
     </div>;
 }
 
-export function BaseResumeParseModal({ parsing, onClose, onMinimize, onRetry }) {
+export function BaseResumeParseModal({ parsing, onClose, onMinimize, onRetry, onDecision }) {
   if (!parsing) return null;
   const { completed, failed } = parsing;
+  if (parsing.operation?.pending?.kind === "import_review") return <ImportReviewModal key={parsing.operation.pending.review_id} operation={parsing.operation} onMinimize={onMinimize} onDecision={onDecision}/>;
+  if (parsing.operation?.status === "cancelled") return <ResumeDialog title="Import stopped" subtitle="The saved source and audit remain available." icon="file-text" tone="is-success" onDismiss={onClose}><div className="resume-dialog-body"><p>Any profile decision already saved is retained. Stopping an import does not reverse an earlier acceptance.</p><Button onClick={onClose}>Close</Button></div></ResumeDialog>;
+  if (['interrupted','pending_model'].includes(parsing.operation?.status)) return <ImportRecoveryModal key={parsing.operation.id} operation={parsing.operation} onMinimize={onMinimize} onDecision={onDecision}/>;
   const title = failed ? "Resume parsing failed" : completed ? "Base resume parsed" : "Parsing your base resume";
   return <ResumeDialog title={title}
     subtitle={completed ? "Your new base resume is ready to review." : failed ? "Review the issue below, then try again." : "We’ll turn your document into an editable base resume."}
@@ -143,13 +149,33 @@ export function BaseResumeParseModal({ parsing, onClose, onMinimize, onRetry }) 
   </ResumeDialog>;
 }
 
+function ImportRecoveryModal({operation,onMinimize,onDecision}) {
+  const [busy,setBusy]=React.useState(false),[error,setError]=React.useState(null);
+  const action=React.useRef(actionForRetry());
+  const interrupted=operation.status==='interrupted',waitingModel=operation.pending?.kind==='model_request';
+  const perform=async work=>{setBusy(true);setError(null);try{onDecision(await work());}catch(e){setError(e.message);}finally{setBusy(false);}};
+  return <ResumeDialog title={interrupted?'Import interrupted':waitingModel?'Waiting for agent result':'Import ready to process'}
+    subtitle="The saved work is available. Choose how to continue." icon="file-text" onDismiss={onMinimize}>
+    <div className="resume-dialog-body review-flow">{error&&<p role="alert">{error}</p>}
+      <p>Source: {operation.source?.filename}</p><a href={importSourceUrl(operation.id)} target="_blank" rel="noreferrer">Open original source</a>
+      <p>{waitingModel?'This import needs a structured response from its agent. Continue it through the agent interface.':'Continuation resumes the saved operation. An earlier profile decision may already have been saved.'}</p>
+      {operation.draft&&<details><summary>Saved parsed draft</summary><FieldValue value={operation.draft}/></details>}
+      {operation.diagnostics?.map((d,i)=><p key={i}>{d.code}</p>)}
+    </div><footer className="resume-dialog-footer"><p>Use the saved operation instead of uploading the same file again.</p><div className="resume-dialog-actions">
+      <Button variant="secondary" disabled={busy} onClick={()=>perform(()=>cancelImport(operation.id))}>Cancel import</Button>
+      {!waitingModel&&<Button disabled={busy} onClick={()=>perform(()=>continueImport(operation.id,interrupted?action.current({kind:'continue'}):null))}>Continue saved import</Button>}
+      <Button variant="ghost" onClick={onMinimize}>Minimize</Button>
+    </div></footer>
+  </ResumeDialog>;
+}
+
 export function ParsingBanner({ parsing, onOpen }) {
   const elapsed = useElapsed(parsing);
   if (!parsing || parsing.completed || parsing.failed || parsing.modalOpen) return null;
   const stage = currentStage(parsing);
   return <button className="resume-parsing-banner" onClick={onOpen}>
     <Icon className="resume-step-spinner" name="loader" size={16}/>
-    <span className="resume-banner-copy"><strong>Parsing your base resume</strong><span>{stage.label}</span></span>
+    <span className="resume-banner-copy"><strong>{parsing.operation?.status==='interrupted'?'Import interrupted':'Parsing your base resume'}</strong><span>{parsing.operation?.source?.filename||stage.label}</span></span>
     <span className="resume-banner-time">{elapsed}</span>
     <span className="resume-banner-action">View progress <Icon name="arrow-right" size={14}/></span>
   </button>;
@@ -161,11 +187,45 @@ export function ReplaceBaseResumeModal({ open, onClose, onUpload }) {
     icon="upload" tone="is-upload" onDismiss={onClose}>
     <div className="resume-dialog-body resume-upload-body">
       <UploadDropzone onUpload={onUpload} label="Choose a resume file" hint="Drop a PDF or LaTeX file here, or click to browse." padding="32px 20px"/>
-      <div className="resume-import-note"><Icon name="file-text" size={16}/><p>Your current base resume is replaced after the new file is successfully parsed.</p></div>
+      <div className="resume-import-note"><Icon name="file-text" size={16}/><p>Your current base resume is replaced only after you review and accept the parsed draft.</p></div>
     </div>
     <footer className="resume-dialog-footer">
       <p>AI parsing can take a minute or two. You can review and edit the result.</p>
       <div className="resume-dialog-actions"><Button variant="secondary" onClick={onClose}>Cancel</Button></div>
     </footer>
+  </ResumeDialog>;
+}
+
+function ImportReviewModal({operation,onMinimize,onDecision}) {
+  const pending = operation.pending;
+  const [blank,setBlank] = React.useState([]);
+  const [busy,setBusy] = React.useState(false);
+  const [error,setError] = React.useState(null);
+  const [conflict,setConflict] = React.useState(false);
+  const action = React.useRef(actionForRetry());
+  const source = operation.source || pending.payload?.source;
+  const draft = operation.draft || pending.payload?.draft;
+  const unreadable = pending.unreadable_pages || [];
+  const decide = async decision => {
+    setBusy(true);setError(null);
+    const body = decision === "accept" ? {kind:"accept_import",review_id:pending.review_id,draft_hash:pending.draft_hash,expected_profile_revision:pending.expected_profile_revision,intentionally_blank_pages:blank} : {kind:"reject_import",review_id:pending.review_id};
+    try { onDecision(await decideImport(operation.id,decision,action.current(body))); }
+    catch(e) { setError(e.status === 409 ? "The profile or import changed. Refresh the import and review it against the current profile before accepting." : e.message); if(e.status === 409) setConflict(true); }
+    finally {setBusy(false);}
+  };
+  return <ResumeDialog title="Review imported resume" subtitle="Compare the original document with the parsed draft before replacing your base resume." icon="file-text" onDismiss={onMinimize}>
+    <div className="resume-dialog-body review-flow">
+      {error && <p role="alert">{error}</p>}
+      <a href={importSourceUrl(operation.id)} target="_blank" rel="noreferrer">Open original source</a>
+      <h3>Original source: {source?.filename}</h3><pre>{source?.text}</pre>
+      <h3>Parsed profile draft</h3><FieldValue value={draft}/>
+      <p>{operation.coverage_note || "Parsing can omit information. Compare every section and every source page before accepting."}</p>
+      {unreadable.map(page => <label className="review-question" key={page}><span><input type="checkbox" checked={blank.includes(page)} disabled={busy || conflict} onChange={e => setBlank(e.target.checked ? [...blank,page] : blank.filter(n => n !== page))}/> I checked page {page}; it is intentionally blank.</span></label>)}
+      {source?.pages?.map(page => <details key={page.page_number}><summary>Page {page.page_number} · {page.readable ? "Readable" : "Unreadable"}</summary><p>{page.warning}</p><pre>{page.text}</pre></details>)}
+    </div>
+    <footer className="resume-dialog-footer"><p>Accepting replaces the current profile. Rejection keeps it unchanged.</p><div className="resume-dialog-actions">
+      <Button disabled={busy} onClick={() => decide("reject")}>Reject import</Button>
+      <Button variant="primary" disabled={busy || conflict || unreadable.some(page => !blank.includes(page))} onClick={() => decide("accept")}>Accept reviewed import</Button>
+    </div></footer>
   </ResumeDialog>;
 }

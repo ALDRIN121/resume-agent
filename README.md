@@ -3,7 +3,9 @@
 [![CI](https://github.com/ALDRIN121/resume-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ALDRIN121/resume-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An AI-powered CLI tool that reads a job description and your existing resume, then produces a professionally formatted, tailored PDF — ready to send.
+A local resume and job-search workflow with source-bound proposals, explicit content review and approval of the exact PDF bytes.
+
+**Local candidate:** These upgrades are prepared in the current checkout and have not been pushed or published. See the [implementation status](docs/superpowers/plans/2026-11-13-r1-implementation-status.md). Public installers follow the published repository branch; they cannot install unpushed changes.
 
 ```
  ██████╗ ███████╗███████╗██╗   ██╗███╗   ███╗███████╗
@@ -19,18 +21,18 @@ An AI-powered CLI tool that reads a job description and your existing resume, th
 
 ## What it does
 
-1. You paste or link a job description.
-2. The tool reads your resume and the job description, then identifies gaps and tailoring opportunities.
-3. It asks you a few questions (only what it can't figure out on its own).
-4. You approve or reject suggested rewrites to your bullet points.
-5. A polished, job-specific PDF is saved in the output folder and opened automatically.
+1. Import a text-based PDF or TEX source into a reviewable profile draft.
+2. Save the complete job description as a fixed input.
+3. Review evidence questions and source-bound wording proposals.
+4. Choose changes, then inspect the complete content projection and omissions.
+5. Review the exact compiled PDF before release.
+6. Retain accepted memory, evaluate chosen roles, and record explicit application events when desired.
 
-Two ways to drive it: a **CLI** (the primary interface) and an **optional local web UI** (`resume-generator serve`) that runs entirely on your own machine — nothing is hosted. Your files stay local; only the resume and job-description text are sent to whichever AI provider you choose. If you want the AI step to stay local too, use Ollama with a local model.
+Use the local web app, interactive CLI or [agent JSON interface](docs/agent-json.md). State and PDFs stay on the local filesystem. Configured-provider mode sends required profile, posting, answer and accepted-rule text to the chosen provider. Local Ollama can perform model work locally. External-agent mode returns model requests to the calling agent and makes no configured-backend model calls.
 
-<p align="center">
-  <img src="docs/screenshots/dashboard-light.jpg" width="49%" alt="Dashboard overview, light theme">
-  <img src="docs/screenshots/dashboard-dark.jpg" width="49%" alt="Dashboard overview, dark theme">
-</p>
+Discovery reads only configured public Greenhouse, Lever and Ashby boards. Refresh is manual. Partial or failed scans preserve earlier jobs. Generating a PDF does not record a submission. Evidence scores are product-default advice, not hiring probabilities.
+
+See [agent installation and tested hosts](docs/agent-hosts.md) and the [fictional demonstration](docs/demo.md).
 
 ---
 
@@ -118,7 +120,7 @@ resume-generator generate --jd-file C:\Users\you\Documents\job_description.txt
 resume-generator generate --jd-url "https://jobs.example.com/senior-engineer"
 ```
 
-Your tailored PDF will be saved to `./output/<company>/` and opened automatically.
+The released PDF is saved under the configured output directory after content and PDF review.
 
 ---
 
@@ -130,12 +132,12 @@ The tool needs to call an AI model. Pick one:
 
 | Provider | Cost | Where to get a key |
 |----------|------|--------------------|
-| **Google Gemini** | Free tier available | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| **NVIDIA NIM** | Free tier available | [build.nvidia.com](https://build.nvidia.com) |
+| **Google Gemini** | Provider pricing and limits apply | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| **NVIDIA NIM** | Provider pricing and limits apply | [build.nvidia.com](https://build.nvidia.com) |
 | **Anthropic Claude** | Paid | [console.anthropic.com](https://console.anthropic.com) |
 | **Command Code** | API access | [commandcode.ai/studio/api-keys](https://commandcode.ai/studio/api-keys) |
 | **OpenAI GPT** | Paid | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| **Ollama** | Free, runs locally | [ollama.com](https://ollama.com) — no key needed for local |
+| **Ollama** | Local compute; no cloud API key required | [ollama.com](https://ollama.com) — no key needed for local |
 
 ### Running the setup wizard
 
@@ -149,7 +151,7 @@ The wizard asks you to:
 1. Pick your AI provider (arrow keys).
 2. Enter your API key (hidden as you type).
 3. Pick a text model (sensible default is pre-selected).
-4. Optionally enable PDF layout validation (uses a vision model to check the final PDF looks right).
+4. Run the local readiness checks. The reviewed workflow uses deterministic PDF checks and human review.
 
 Settings are saved to `~/.resume_generator/config.yaml`. Your API key is stored separately in `~/.resume_generator/.env` (chmod 600 on Mac/Linux).
 
@@ -171,19 +173,24 @@ resume-generator generate --jd-url <url>    # Generate from a job listing URL
 resume-generator resume <thread-id>       # Resume an interrupted session
 resume-generator config show              # Show current settings
 resume-generator config set provider openai
-resume-generator config set retries.generator_max 5
 resume-generator doctor                   # Check tools and API keys
 resume-generator install-deps             # Auto-install Tectonic and Poppler
 resume-generator serve                    # Launch the local web UI (FastAPI + React)
 resume-generator update                   # Pull latest version from GitHub
+resume-generator jobs --help              # Save roles and preserve selected snapshots
+resume-generator memory --help            # Propose and review durable corrections
+resume-generator discover --help          # Configure and manually scan public boards
+resume-generator applications --help      # Record local application events
+resume-generator agent --help             # Non-interactive JSON commands
+resume-generator skill export --destination PATH
 ```
 
 ### Overriding the AI model for one run
 
 ```bash
-resume-generator generate --jd-url <url> --provider openai --model gpt-5.5
-resume-generator generate --jd-url <url> --provider anthropic --model claude-sonnet-4-6
-resume-generator generate --jd-url <url> --provider nvidia --model meta/llama-3.3-70b-instruct
+resume-generator generate --jd-url <url> --provider openai --model YOUR_MODEL_ID
+resume-generator generate --jd-url <url> --provider anthropic --model YOUR_MODEL_ID
+resume-generator generate --jd-url <url> --provider nvidia --model YOUR_MODEL_ID
 ```
 
 ---
@@ -201,12 +208,6 @@ If you installed with the one-liner, this already ran automatically and a browse
 
 It runs a FastAPI backend plus a pre-built React frontend entirely on your machine — there is no hosted service and no telemetry. The UI covers the same flow as the CLI: configure your provider, upload/parse a base resume, paste or upload a job description (`.txt`/`.pdf`), watch the pipeline stream live (with the human-in-the-loop questions and suggestion review inline), and download the generated PDF. A dashboard tracks runs per company, and appearance (theme/accent/density) is remembered across reloads.
 
-<p align="center">
-  <img src="docs/screenshots/companies.jpg" width="32%" alt="Companies tab with per-company run stats">
-  <img src="docs/screenshots/settings-appearance.jpg" width="32%" alt="Settings, dark theme with appearance controls">
-  <img src="docs/screenshots/base-resume.jpg" width="32%" alt="Base resume editor">
-</p>
-
 Notes:
 - Bind address defaults to loopback (`127.0.0.1`). Because the app ships no login, state-changing requests and WebSocket connections are only accepted from loopback — a deliberate guard against malicious web pages or DNS-rebinding driving your local API.
 - `--reload` is for frontend/static development only; it restarts the worker and drops in-flight runs (run state is in-memory).
@@ -222,7 +223,7 @@ Config file: `~/.resume_generator/config.yaml`
 provider: gemini
 model:
   default: gemini-2.5-flash     # Text model for writing and analysis
-  vision: gemini-2.5-flash      # Vision model for PDF layout checking
+  vision: YOUR_MODEL_ID         # Legacy optional setting; reviewed v2 uses deterministic PDF checks
 scraping:
   playwright_fallback: true     # Use a full browser for JS-heavy sites (e.g. LinkedIn)
 latex:
@@ -264,7 +265,7 @@ When the AI finds a requirement in the job description that isn't documented in 
 ╰─────────────────────────────────────────────────────────────╯
 ```
 
-Your answers are used to write more accurate bullet points. Nothing is fabricated — the tool only includes what you actually told it.
+Answers become fixed evidence for proposals. Source references and selected changes are validated. You must still compare facts with the original source; schema validity does not prove a claim true.
 
 If you press Ctrl-C mid-session, your progress is automatically saved. Resume with:
 
@@ -278,85 +279,39 @@ The thread ID is printed at the start of each generation run.
 
 ## How the suggestion review step works
 
-After the Q&A, the tool proposes rewrites to specific bullet points — adding keywords from the job description, quantifying achievements, etc. You review each one:
+Proposals show their target, before/after text and source references. All proposals start unselected. Appends require explicit answer or user-text evidence. Unsupported paths, stale hashes and invalid references fail validation.
 
-```
-  Suggestion 1 of 4
-  Original:  Built a data pipeline for ETL processing
-  Suggested: Architected a high-throughput ETL pipeline processing 10M+ records/day,
-             reducing data latency by 40% — aligned with their "real-time data" requirement
+Choose the changes you want. Review the complete projection, including omitted display fields, before confirmation. The renderer uses that approved snapshot. It does not ask a model to rewrite approved text or repair factual content.
 
-  [a]pprove  [s]kip  [q]uit reviewing
-```
-
-Only approved suggestions make it into the final resume. You stay in control.
+After compilation, inspect the exact preview PDF. Approval binds its current review ID, content hash, render hash and PDF hash. Changed bytes invalidate that approval.
 
 ---
 
 ## Output
 
-```
-./output/
-└── techcorp/
-    └── jane-doe_techcorp_2026-04-15.pdf
-    └── jane-doe_techcorp_2026-04-15_v2.pdf   ← versioned if the file already exists
-```
+Released files go under the configured output directory. Filenames are reserved without overwriting an existing file. The released bytes match the approved canonical PDF.
 
-You're also prompted for a custom save location after each generation — press Enter to keep the default, or type a path.
+Canonical sources, attempts, logs and reviews stay under the application state directory. The default is `~/.resume_generator/`. Set `RESUME_GENERATOR_STATE_DIR` before imports to use isolated state.
 
-Failed generations are saved for debugging:
-```
-./output/_failed/20260415_143022/
-    resume.tex       ← last LaTeX attempt
-    errors.txt       ← error log
-```
+Interrupted work requires explicit recovery. Reexport copies previously approved canonical bytes and retains the original release record. Missing artifacts remain visibly missing.
 
 ---
 
 ## How the pipeline works (for the curious)
 
-```
-Input (text / URL)
-    │
-    ▼
-[Scraper]       — httpx + readability → Playwright fallback for JS-heavy sites
-    │
-    ▼
-[JD Extractor]  — LLM extracts: company, role, skills, keywords, requirements
-    │
-    ▼
-[Resume Loader] — reads your base resume YAML (parsed once on init)
-    │
-    ▼
-[Gap Analyzer]  — LLM cross-checks resume vs JD: matched skills, gaps, open questions
-    │
-    ├── (if questions) → [You answer questions] ← pauses and asks you
-    │
-    ▼
-[Suggestion Presenter] ← pauses so you can approve/reject bullet rewrites
-    │
-    ▼
-[Resume Generator] — Jinja2 template + LLM writing → LaTeX source
-    │
-    ▼
-[LaTeX Validator]  — checks brace/environment balance
-    │
-    ├── (fail) ──► retry Generator (up to 5 times)
-    ▼
-[PDF Compiler]     — Tectonic compiles LaTeX to PDF
-    │
-    ├── (fail) ──► retry Generator
-    ▼
-[PDF → Images]     — Poppler renders each page as PNG
-    │
-    ├── (fail) ──► retry Generator
-    ▼
-[Vision Validator] — Vision LLM checks layout, overflow, spacing
-    │
-    ├── (issues) ──► retry Generator with fix instructions
-    ▼
-[Output]           — PDF saved to ./output/<company>/
-```
+1. Freeze the complete job, reviewed profile and accepted memory.
+2. Extract role metadata and collect confirmed answers.
+3. Validate structured proposals against their fixed sources.
+4. Apply only explicitly selected changes.
+5. Freeze the complete approved display manifest.
+6. Render a fixed template and compile it with Tectonic.
+7. Check extracted PDF content, pages and layout limits.
+8. Show the exact PDF for a separate human decision.
+9. Export those approved bytes atomically.
+
+Standard and compact layouts keep approved text intact. Layout failure stops with remedies. Optional HR advice cannot rewrite content. Host mode disables optional HR and vision calls.
+
+Configured-provider and external-agent modes share this workflow. The latter pauses at durable model requests instead of calling the backend.
 
 ---
 
@@ -390,8 +345,8 @@ Input (text / URL)
 - Run: `resume-generator init --source path/to/your_resume.tex`
 
 **The PDF looks bad (text overflow, wrong layout)**
-- The vision validator should catch this and retry automatically.
-- If it keeps failing, try a stronger model: `--provider anthropic --model claude-sonnet-4-6`
+- The deterministic content/layout checks stop invalid output. Review the diagnostics and choose content or layout remedies.
+- If it keeps failing, try a stronger model: `--provider anthropic --model YOUR_MODEL_ID`
 
 **Job description gets cut off when pasting on macOS**
 - This was a known issue with libedit's ~1024-byte per-line buffer — fixed in v2.0.1.
@@ -414,13 +369,15 @@ If the `update` command can't find the repo (e.g., you moved the install folder)
 
 | What | Why you need it | How to install |
 |------|----------------|----------------|
-| **Python 3.12+** | Runs the tool | [python.org/downloads](https://python.org/downloads) |
+| **Python 3.12 or 3.13** | Runs the tool | [python.org/downloads](https://python.org/downloads) |
 | **Git** | Downloads and updates the project | [git-scm.com/downloads](https://git-scm.com/downloads) |
 | **uv** | Installs the CLI and Python dependencies | The installer adds it automatically if missing |
 | **Tectonic** | Converts the resume to PDF (a LaTeX compiler) | See below |
-| **Poppler** | Reads PDF pages as images so the AI can check the layout | See below |
+| **Poppler** | Extracts PDF text and renders pages for checks and review | See below |
 
-You also need an API key for at least one AI provider, unless you use local Ollama. The easiest free cloud options are **Google Gemini** (no credit card) and **NVIDIA NIM** (free tier, no credit card).
+Configured-provider mode needs the chosen provider's credentials, unless you use local Ollama. External-agent mode needs no backend key. Host subscription or API charges can still apply. Check provider terms directly; no universal free allowance is promised.
+
+Local macOS acceptance has passed. Linux and native Windows CI are configured but remain unverified for this candidate.
 
 ### Installing Tectonic and Poppler manually
 
@@ -488,7 +445,7 @@ After installation, `resume-generator` should be available in your terminal. If 
 
 | Component | Technology |
 |-----------|-----------|
-| Agent graph | [LangGraph](https://github.com/langchain-ai/langgraph) StateGraph |
+| Durable workflow | SQLite commands and ownership with LangGraph checkpoints |
 | LLM providers | LiteLLM SDK via `langchain-litellm`: Anthropic · OpenAI · Gemini · NVIDIA NIM · Ollama · OpenRouter · Command Code |
 | Structured output | Capability-aware function calling or schema-guided JSON, validated with Pydantic v2 |
 | Scraping | httpx + readability-lxml → Playwright fallback |
@@ -502,12 +459,17 @@ After installation, `resume-generator` should be available in your terminal. If 
 
 ## Exit codes
 
+The non-interactive `agent` commands use this contract:
+
 | Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | User error (bad input, missing config, missing API key) |
-| 2 | External tool missing (tectonic, poppler) |
-| 3 | Generation exhausted retry budget |
+| --- | --- |
+| 0 | Success or saved pause |
+| 1 | Invalid input or unknown resource |
+| 2 | Missing prerequisites |
+| 3 | Execution failure |
+| 4 | Conflict requiring current state inspection |
+
+Interactive commands retain their own usage exits. An unfinished human review on closed stdin exits instead of prompting. See the [JSON protocol](docs/agent-json.md).
 
 ---
 
@@ -522,8 +484,8 @@ uv run pytest -q
 uv run ruff check src/
 ```
 
-All model calls use the shared LiteLLM adapter in `src/resume_agent/llm.py`; no
-proxy server is required. Existing provider IDs, model names, API keys, and endpoint
+Configured-provider calls use the shared LiteLLM adapter in `src/resume_agent/llm.py`.
+External-agent mode instead returns durable model requests to the caller. No proxy server is required. Existing provider IDs, model names, API keys, and endpoint
 settings continue to work. Models with tool support use non-strict function calling
 so skill categories can keep arbitrary names. Other models receive the output schema
 in the prompt, use JSON mode when supported, and are validated locally with Pydantic.

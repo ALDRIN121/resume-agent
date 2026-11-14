@@ -1,8 +1,8 @@
 """Tests for the web scraping tool using respx to mock HTTP."""
 
+import httpx
 import pytest
 import respx
-import httpx
 
 from resume_agent.tools.scrape import _extract_text, _is_good_content, scrape_url
 
@@ -42,6 +42,7 @@ class TestIsGoodContent:
         assert _is_good_content(content)
 
 
+@pytest.mark.usefixtures("public_dns")
 class TestScrapeUrl:
     @pytest.mark.asyncio
     @respx.mock

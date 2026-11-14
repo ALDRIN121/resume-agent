@@ -1,0 +1,32 @@
+{
+  "version": "3.3.0",
+  "status": "unpublished local candidate; live fixes passed, external C4 open",
+  "artifact_source_revision": "1a0e6a92806d601ab8971bdf2eb6df6ab2e80d3e",
+  "runtime_fix_revision": "362a3b513af3a71d3578f584a9a3fd31e25e51ff",
+  "required_tests": {
+    "python312_passed": 943,
+    "failures": 0,
+    "skips": 0
+  },
+  "live_pdf_hash": "03e464149c993814aed913a7a164ea03d05995da3a511c3dd292186c9970e92a",
+  "artifacts": [
+    {
+      "filename": "resume_generator-3.3.0-py3-none-any.whl",
+      "bytes": 380969,
+      "sha256": "1dc8cfec5fec698719c6144773f8e84670e69744390824020bb7d7466f1b11c1"
+    },
+    {
+      "filename": "resume_generator-3.3.0.tar.gz",
+      "bytes": 1184295,
+      "sha256": "3c2b3628bc03034b1b9f7f5272c8a46ddf79b950740a6a13197037d3bf05d74f"
+    }
+  ],
+  "checks": [
+    "sdist UI present",
+    "skill parity and private/dependency-cache exclusions",
+    "retained wheel installed UI served outside checkout",
+    "retained wheel skill export outside checkout",
+    "both live fixes byte-identical to source",
+    "retained frontend assets byte-identical to source"
+  ]
+}

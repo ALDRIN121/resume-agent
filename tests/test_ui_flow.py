@@ -64,6 +64,14 @@ async def prepare(page, status='awaiting-input', resume_error=False):
                 body = saved[-1]
             else:
                 body = saved[-1] if saved else RESUME
+        elif path == 'profile':
+            body = {'profile': saved[-1] if saved else RESUME,
+                    'revision': f'fixture-profile-{len(saved)}', 'review_required': False}
+        elif path == 'readiness':
+            body = {'generation_ready': True, 'next_steps': [], 'contract_version': 2,
+                    'profile': {'status': 'ready'}, 'provider': {'status': 'configured_unverified'},
+                    'parser': {'status': 'ready'}, 'compiler': {'status': 'ready'},
+                    'renderer': {'status': 'ready'}}
         elif path == 'settings/doctor':
             body = {'ok': True, 'checks': []}
         elif path == 'settings/providers':
@@ -75,7 +83,14 @@ async def prepare(page, status='awaiting-input', resume_error=False):
         elif path in ['runs', 'library/resumes']:
             body = [run]
         elif path == 'library/companies':
-            body = [{'name': 'QA Company', 'count': 1}]
+            body = [{'name':'QA Company','total':1,'final':int(status=='complete'),'needs':int(status=='awaiting-input'),
+                     'failed':int(status=='failed'),'cancelled':int(status=='cancelled'),'jobs':0,'applications':0,
+                     'submitted':0,'positive':0,'responses':0,'latest_run_id':'test-run','latest_job_id':None}]
+        elif path == 'metrics':
+            body = {'generation':{'total':1,'completed':int(status=='complete'),'failed':int(status=='failed'),
+                    'cancelled':int(status=='cancelled'),'denominator':int(status in ('complete','failed')),
+                    'percent':100 if status=='complete' else 0 if status=='failed' else None},
+                    'applications':{'recorded':0,'submitted':0,'positive':0},'jobs':0,'companies':1}
         elif path.endswith('/resume'):
             code = 409 if resume_error else 200
             body = {'detail': 'Connection interrupted. Try again.'} if resume_error else run
@@ -98,6 +113,20 @@ async def prepare(page, status='awaiting-input', resume_error=False):
 async def open_run(page):
     await page.get_by_role('button', name='Library', exact=True).click()
     await page.get_by_text('QA Company — Test Engineer', exact=True).first.click()
+
+
+async def test_legacy_interrupted_run_offers_explicit_reviewed_recovery(browser_page):
+    page = browser_page
+    await prepare(page)
+    legacy = {'id':'test-run','thread_id':'test-run','company':'QA Company','role':'Test Engineer',
+              'contract_version':2,'legacy':True,'status':'interrupted','pending':None,
+              'created_at':1792231186,'events':[],'diagnostics':[],'artifact_status':'pending'}
+    await page.route('**/api/runs', lambda route: route.fulfill(json=[legacy]))
+    await page.route('**/api/runs/test-run', lambda route: route.fulfill(json=legacy))
+    await page.reload(wait_until='domcontentloaded')
+    await open_run(page)
+    await expect(page.get_by_role('button', name='Recover as a reviewed run', exact=True)).to_be_visible()
+    await expect(page.get_by_role('button', name='Continue run', exact=True)).to_have_count(0)
 
 
 async def test_skill_edits_are_saved(browser_page):
@@ -176,7 +205,7 @@ async def test_upload_parse_completion(browser_page):
     await prepare(page)
     async def upload(route):
         await route.fulfill(content_type='application/json', body=json.dumps({'job_id': 'parse-test'}))
-    await page.route('**/api/resume/upload', upload)
+    await page.route('**/api/resume/upload*', upload)
     parse_sockets = []
     async def parse_socket(ws):
         parse_sockets.append(ws)
@@ -197,7 +226,7 @@ async def test_resume_upload_can_be_minimized_reopened_and_replaced_again(browse
     hook_errors = []
     page.on('console', lambda msg: hook_errors.append(msg.text)
             if msg.type == 'error' and ('React' in msg.text or 'hook' in msg.text.lower()) else None)
-    await page.route('**/api/resume/upload', lambda route: route.fulfill(
+    await page.route('**/api/resume/upload*', lambda route: route.fulfill(
         content_type='application/json', body=json.dumps({'job_id': 'parse-lifecycle'})))
     sockets = []
     def parse_socket(ws):
@@ -219,8 +248,9 @@ async def test_resume_upload_can_be_minimized_reopened_and_replaced_again(browse
         await expect(page.get_by_role('dialog')).to_be_visible()
         await page.get_by_role('button', name='Minimize', exact=True).last.click()
         replacement = {**RESUME, 'personal': {'full_name': f'New Owner {attempt}', 'email': 'new@example.com'}}
-        await page.route('**/api/resume', lambda route: route.fulfill(
-            content_type='application/json', body=json.dumps(replacement)))
+        await page.route('**/api/profile', lambda route: route.fulfill(
+            content_type='application/json', body=json.dumps({
+                'profile': replacement, 'revision': f'replacement-{attempt}', 'review_required': False})))
         sockets[-1].send(json.dumps({'type': 'resume_parse', 'stage_id': 'write_yaml', 'status': 'done'}))
         await expect(page.get_by_text('Base resume parsed', exact=True)).to_be_visible()
         await page.get_by_role('button', name='Done', exact=True).click()
@@ -235,13 +265,14 @@ async def test_minimized_resume_failure_is_visible_and_can_be_retried(browser_pa
     await prepare(page)
     finish_upload = asyncio.Event()
     async def upload(route):
+        assert route.request.url.endswith('/api/resume/upload?defer_processing=true')
         if failure == 'upload':
             await finish_upload.wait()
             await route.fulfill(status=400, content_type='application/json',
                                 body=json.dumps({'detail': 'Only .pdf and .tex resumes are supported.'}))
         else:
             await route.fulfill(content_type='application/json', body=json.dumps({'job_id': 'failed-parse'}))
-    await page.route('**/api/resume/upload', upload)
+    await page.route('**/api/resume/upload*', upload)
     sockets = []
     def parse_socket(ws):
         sockets.append(ws)
@@ -286,7 +317,7 @@ async def test_resume_flow_shows_current_step_and_fits_window(browser_page, widt
     await picker.focus()
     async with page.expect_file_chooser() as chooser:
         await page.keyboard.press('Enter')
-    await page.route('**/api/resume/upload', lambda route: route.fulfill(
+    await page.route('**/api/resume/upload*', lambda route: route.fulfill(
         content_type='application/json', body=json.dumps({'job_id': 'progress-ui'})))
     sockets = []
     def socket(ws):
@@ -340,9 +371,9 @@ async def test_resume_dialog_keeps_keyboard_focus_and_restores_trigger(browser_p
 async def test_first_resume_import_cannot_overlap_another_upload(browser_page):
     page = browser_page
     await prepare(page)
-    await page.route('**/api/resume', lambda route: route.fulfill(
+    await page.route('**/api/profile', lambda route: route.fulfill(
         status=404, content_type='application/json', body='{"detail":"No base resume"}'))
-    await page.route('**/api/resume/upload', lambda route: route.fulfill(
+    await page.route('**/api/resume/upload*', lambda route: route.fulfill(
         content_type='application/json', body='{"job_id":"first-import"}'))
     await page.route_web_socket('**/ws/resume-parse/*', lambda ws: ws.send(
         json.dumps({'stage_id': 'parse', 'status': 'running'})))
@@ -394,7 +425,9 @@ async def test_job_context_is_sent_for_every_posting_input(browser_page, input_k
     else:
         await page.get_by_role('button', name='Upload file', exact=True).click()
         await page.route('**/api/runs/jd-file', lambda route: route.fulfill(
-            content_type='application/json', body='{"file_id":"test-file"}'))
+            content_type='application/json', body=json.dumps({
+                'file_id': 'test-file', 'chars': 52,
+                'text': 'Engineer at Example. Full extracted job requirements.'})))
         await page.locator('input[type=file]').set_input_files({
             'name': 'job.pdf', 'mimeType': 'application/pdf', 'buffer': b'PDF'})
     await page.get_by_role('button', name='Generate tailored resume', exact=True).click()
@@ -437,7 +470,7 @@ async def test_url_input_is_not_blocked_by_previous_long_paste(browser_page):
     page = browser_page
     await prepare(page)
     await page.get_by_role('button', name='Create resume', exact=True).click()
-    await page.get_by_placeholder('Paste the full job description here…').fill('Job details ' * 800)
+    await page.get_by_placeholder('Paste the full job description here…').fill('Job details ' * 4100)
     await expect(page.get_by_role('button', name='Generate tailored resume', exact=True)).to_be_disabled()
     await page.get_by_role('button', name='From URL', exact=True).click()
     await page.get_by_placeholder('https://jobs.example.com/staff-engineer').fill('https://example.com/job')

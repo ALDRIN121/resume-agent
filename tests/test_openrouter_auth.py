@@ -119,8 +119,10 @@ def test_llm_openrouter_routes_the_selected_model_and_key():
         ("429 Too Many Requests: rate limit exceeded", "Rate limited"),
         ("openai.RateLimitError: insufficient_quota", "Out of LLM credits"),
         ("Error code: 401 - invalid api key", "rejected the API key"),
-        ("Some unexpected boom", "Some unexpected boom"),
+        ("SECRET Some unexpected boom", "provider_unknown"),
     ],
 )
 def test_describe_llm_error_classifies(raw, expected_fragment):
-    assert expected_fragment in describe_llm_error(Exception(raw))
+    result = describe_llm_error(Exception(raw))
+    assert expected_fragment in result
+    assert "SECRET" not in result

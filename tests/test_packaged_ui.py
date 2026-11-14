@@ -1,5 +1,6 @@
 """Exercise the UI shipped to users, without relying on the source checkout."""
 
+import os
 import subprocess
 import sys
 import tarfile
@@ -16,6 +17,7 @@ def distributions(tmp_path_factory):
     result = subprocess.run(
         ["uv", "build", "--python", sys.executable, "--out-dir", str(output)],
         cwd=project,
+        env=os.environ.copy(),
         capture_output=True,
         text=True,
     )
@@ -36,6 +38,7 @@ def test_installed_wheel_serves_web_ui(distributions, tmp_path):
     wheel = next(distributions.glob("*.whl"))
     result = subprocess.run(
         ["uv", "pip", "install", "--no-deps", "--target", str(installed), str(wheel)],
+        env=os.environ.copy(),
         capture_output=True,
         text=True,
     )
@@ -45,6 +48,7 @@ def test_installed_wheel_serves_web_ui(distributions, tmp_path):
     # editable install and run outside the repository under isolated Python.
     result = subprocess.run(
         [sys.executable, "-I", "-c", r'''
+import os
 import re
 import sys
 from pathlib import Path
@@ -54,7 +58,7 @@ sys.path.insert(0, str(installed))
 import resume_agent
 from fastapi.testclient import TestClient
 from resume_agent.api.app import create_app
-from resume_agent.config import ResumeAgentSettings
+from resume_agent.config import CONFIG_DIR, ResumeAgentSettings
 from resume_agent.llm import get_chat_model
 
 model = get_chat_model(ResumeAgentSettings(_env_file=None, provider="ollama"))
@@ -62,6 +66,7 @@ assert model.custom_llm_provider == "ollama_chat"
 assert model.api_base == "http://localhost:11434"
 
 assert Path(resume_agent.__file__).resolve().is_relative_to(installed)
+assert CONFIG_DIR == Path(os.environ["RESUME_GENERATOR_STATE_DIR"]).resolve()
 with TestClient(create_app(), base_url="http://localhost") as client:
     root = client.get("/")
     assert root.status_code == 200, root.text
@@ -80,6 +85,7 @@ with TestClient(create_app(), base_url="http://localhost") as client:
     assert client.get("/api/health").json() == {"ok": True}
 ''', str(installed)],
         cwd=tmp_path,
+        env=os.environ.copy(),
         capture_output=True,
         text=True,
     )

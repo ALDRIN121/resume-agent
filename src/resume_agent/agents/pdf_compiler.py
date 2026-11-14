@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from ..config import CONFIG_DIR, ResumeAgentSettings
+from uuid import uuid4
+
+from ..artifacts import RunArtifacts, hash_file
+from ..config import ResumeAgentSettings
 from ..state import ResumeGenState
 from ..tools.tectonic_compile import check_tectonic_available, compile_latex
 from ..ui.panels import print_info, print_warning
-
-# Stable working directory — reused/overwritten on each run, never fills /tmp
-_WORK_DIR = CONFIG_DIR / "_working"
 
 
 def pdf_compiler_node(
@@ -19,8 +19,7 @@ def pdf_compiler_node(
     On success: sets pdf_path, clears pdf_errors.
     On failure: sets pdf_errors for the retry loop.
 
-    Uses a stable working directory (~/.resume_generator/_working/) so the PDF
-    path remains valid for downstream nodes without leaking temp directories.
+    Every compile has an immutable run-owned attempt directory.
     """
     settings = settings or ResumeAgentSettings.load()
     latex_source = state.get("latex_source", "")
@@ -41,23 +40,35 @@ def pdf_compiler_node(
 
     print_info("Compiling PDF with Tectonic…")
 
-    _WORK_DIR.mkdir(parents=True, exist_ok=True)
+    run = RunArtifacts.create(state.get("artifact_id") or str(uuid4()))
+    previous = state.get("attempt_number", 0)
+    if type(previous) is not int or previous < 0:
+        raise ValueError("Previous attempt number must be a nonnegative integer")
+    attempt = run.attempt(previous + 1)
+    with attempt.source_path.open("x", encoding="utf-8") as stream:
+        stream.write(latex_source)
+    owned = {"artifact_id": run.artifact_id, "attempt_number": attempt.number}
 
     result = compile_latex(
         latex_source,
         tectonic_path=settings.latex.tectonic_path,
         timeout=settings.latex.compile_timeout_seconds,
-        output_dir=_WORK_DIR,
+        output_dir=attempt.attempt_dir,
     )
 
     if result.ok:
+        attempt.write_manifest({
+            "artifact_id": run.artifact_id, "attempt_number": attempt.number,
+            "pdf_hash": hash_file(attempt.pdf_path), "page_count": result.page_count,
+            "overfull_boxes": result.overfull_boxes, "overflow": result.overflow,
+        })
         print_info(f"PDF compiled successfully → {result.pdf_path}")
-        return {"pdf_path": result.pdf_path, "pdf_errors": []}
+        return {**owned, "pdf_path": result.pdf_path, "pdf_errors": []}
 
     # Write the full raw log (stderr + TeX .log) to disk for debugging.
-    if result.raw_log:
-        _WORK_DIR.mkdir(parents=True, exist_ok=True)
-        (_WORK_DIR / "tectonic_raw.log").write_text(result.raw_log, encoding="utf-8", errors="replace")
+    if result.raw_log and not attempt.log_path.exists():
+        with attempt.log_path.open("x", encoding="utf-8", errors="replace") as stream:
+            stream.write(result.raw_log)
 
     if result.fatal:
         raise RuntimeError(
@@ -75,4 +86,4 @@ def pdf_compiler_node(
     for err in result.errors[:10]:
         print_warning(f"  {err}")
 
-    return {"pdf_path": None, "pdf_errors": result.errors}
+    return {**owned, "pdf_path": None, "pdf_errors": result.errors}

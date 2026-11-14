@@ -104,3 +104,24 @@ def test_resume_parser_still_rejects_invalid_model_output(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="email"):
         loader.parse_and_save_resume(source)
     assert not saved.exists()
+
+
+@pytest.mark.parametrize('raw', [
+    '```json\n{"personal":',
+    '```json\n{"personal":{"full_name":"Test","email":"test@example.com"}}',
+])
+def test_unclosed_json_fence_stops_without_automatic_retry(raw):
+    from resume_agent.model_tasks import invoke_bounded
+    from resume_agent.provider_errors import ModelTaskError
+
+    calls = []
+
+    def invoke(messages):
+        calls.append(messages)
+        return raw
+
+    with pytest.raises(ModelTaskError) as error:
+        invoke_bounded(invoke, ['complete input'], UserResume, sleep=lambda _: None)
+    assert error.value.code == 'truncated_output'
+    assert error.value.attempts == 1
+    assert len(calls) == 1

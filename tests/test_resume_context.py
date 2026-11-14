@@ -114,3 +114,53 @@ def test_hr_two_substantive_issues_still_trigger_rewrite(monkeypatch):
     result = hr_review.hr_review_node({"latex_source": "Source resume"}, settings=ResumeAgentSettings())
     assert result["validation_passed"] is False
     assert "Remove buzzwords" in result["validation_feedback"]
+
+
+def test_v2_collect_answers_keeps_base_profile_and_never_calls_model(long_resume, monkeypatch):
+    from resume_agent.agents import hitl
+    from resume_agent.contracts import content_hash
+    profile = long_resume.model_dump(mode='json')
+    monkeypatch.setattr(hitl, 'get_chat_model', lambda *a, **k: pytest.fail('answer collection called model'))
+    snapshot = hitl.collect_answers_v2(profile, content_hash(profile), {'q1': 'I built a system.'})
+    assert snapshot.profile == profile
+    assert snapshot.answers == {'q1': 'I built a system.'}
+    assert snapshot.proposals == []
+
+
+def test_v2_proposals_receive_full_profile_jd_and_answers(long_resume):
+    from resume_agent.agents.gap_analyzer import generate_proposals_v2
+    from resume_agent.agents.hitl import collect_answers_v2
+    from resume_agent.contracts import content_hash
+    profile = long_resume.model_dump(mode='json')
+    fixed = collect_answers_v2(profile, content_hash(profile), {'q1': 'FINAL_ANSWER_MARKER'})
+    inputs = []
+    result = generate_proposals_v2(fixed, JobDescription(company='Company', role_title='Engineer',
+                                   raw_text='FULL_JD_END_MARKER'), lambda prompt: inputs.append(prompt) or [])
+    assert result.profile == profile
+    assert 'PRESERVE_LAST_PROJECT' in inputs[0]
+    assert 'FULL_JD_END_MARKER' in inputs[0]
+    assert 'FINAL_ANSWER_MARKER' in inputs[0]
+
+
+@pytest.mark.parametrize('output', [{'summary': 'Silently replace the profile'}, [None], {'proposals': [], 'extra': 'bad'}, [{'id': 'bad'}]])
+def test_v2_malformed_model_proposals_fail_clearly(long_resume, output):
+    from resume_agent.agents.gap_analyzer import generate_proposals_v2
+    from resume_agent.agents.hitl import collect_answers_v2
+    from resume_agent.contracts import content_hash
+    profile = long_resume.model_dump(mode='json')
+    fixed = collect_answers_v2(profile, content_hash(profile), {})
+    with pytest.raises(ValueError):
+        generate_proposals_v2(fixed, JobDescription(company='Company', role_title='Engineer'), lambda _: output)
+
+
+def test_v2_prompt_provides_exact_before_and_evidence_hashes(long_resume):
+    from resume_agent.agents.gap_analyzer import generate_proposals_v2
+    from resume_agent.agents.hitl import collect_answers_v2
+    from resume_agent.contracts import content_hash
+    profile = long_resume.model_dump(mode='json')
+    fixed = collect_answers_v2(profile, content_hash(profile), {'q1': 'Answer text'})
+    inputs = []
+    generate_proposals_v2(fixed, {'raw_text': 'JD'}, lambda prompt: inputs.append(prompt) or [])
+    assert content_hash(profile['projects'][0]['bullets']) in inputs[0]
+    assert content_hash(profile['projects'][0]['bullets'][0]) in inputs[0]
+    assert content_hash('Answer text') in inputs[0]

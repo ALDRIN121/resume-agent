@@ -570,3 +570,10 @@ _LATEX_ESCAPE_MAP: dict[str, str] = {
 def _latex_escape(value: str) -> str:
     """Escape special LaTeX characters in user data."""
     return "".join(_LATEX_ESCAPE_MAP.get(c, c) for c in str(value))
+
+
+async def generate_approved_resume(manifest, artifacts, **kwargs):
+    """Private v2 entry: render the approved manifest with no model writer/repair."""
+    from ..approved_render import render_approved
+
+    return await render_approved(manifest, artifacts, **kwargs)

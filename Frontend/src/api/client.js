@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env?.VITE_API_BASE || "";
 
 async function request(path, options = {}) {
   const headers = options.body instanceof FormData
@@ -13,15 +13,17 @@ async function request(path, options = {}) {
     } catch {
       // Ignore non-JSON error bodies.
     }
-    throw new Error(Array.isArray(detail) ? detail.map(d => d.msg).join(", ") : detail);
+    const error = new Error(Array.isArray(detail) ? detail.map(d => d.msg).join(", ") : typeof detail === "string" ? detail : JSON.stringify(detail));
+    error.status = response.status;
+    throw error;
   }
   if (response.status === 204) return null;
   return response.json();
 }
 
-export const createRun = ({ jdText, jdUrl, jdFileId, jobLocation, workMode } = {}) => request("/api/runs", {
+export const createRun = ({ jdText, jdUrl, jdFileId, jobLocation, workMode, maxPages, jobId, evaluationId, evaluationOverride=false } = {}) => request("/api/runs", {
   method: "POST",
-  body: JSON.stringify({ jd_text: jdText, jd_url: jdUrl, jd_file_id: jdFileId, job_location: jobLocation, work_mode: workMode }),
+  body: JSON.stringify({ jd_text: jdText, jd_url: jdUrl, jd_file_id: jdFileId, job_location: jobLocation, work_mode: workMode, max_pages: maxPages,job_id:jobId,evaluation_id:evaluationId,evaluation_override:evaluationOverride }),
 });
 
 export const uploadJdFile = (file) => {
@@ -34,20 +36,21 @@ export const listRuns = () => request("/api/runs");
 export const getRun = (threadId) => request(`/api/runs/${threadId}`);
 export const resumeRun = (threadId, kind, payload) => request(`/api/runs/${threadId}/resume`, {
   method: "POST",
-  body: JSON.stringify({ kind, payload }),
+  body: JSON.stringify(typeof kind === "object" ? kind : { kind, ...payload }),
 });
 export const cancelRun = (threadId) => request(`/api/runs/${threadId}/cancel`, { method: "POST" });
 
 export const uploadResume = (file) => {
   const body = new FormData();
   body.append("file", file);
-  return request("/api/resume/upload", { method: "POST", body });
+  return request("/api/resume/upload?defer_processing=true", { method: "POST", body });
 };
 
 export const getResume = () => request("/api/resume");
 export const getResumeRaw = () => fetch(`${API_BASE}/api/resume/raw`).then(r => r.ok ? r.text() : Promise.reject(new Error(r.statusText)));
-export const updateResume = (resume) => request("/api/resume", {
+export const updateResume = (resume, expectedRevision) => request("/api/resume", {
   method: "PUT",
+  headers: expectedRevision ? { "If-Match": expectedRevision } : {},
   body: JSON.stringify(resume),
 });
 
@@ -85,3 +88,49 @@ export const listLibraryResumes = (company) =>
   request(`/api/library/resumes${company ? `?company=${encodeURIComponent(company)}` : ""}`);
 export const deleteLibraryResume = (threadId) =>
   request(`/api/library/resumes/${threadId}`, { method: "DELETE" });
+
+export const getReadiness = () => request("/api/readiness");
+export const getProfile = () => request("/api/profile");
+export const reviewProfile = expected_revision => request("/api/profile/review", {method:"POST",body:JSON.stringify({expected_revision})});
+export const getImport = id => request(`/api/profile/imports/${encodeURIComponent(id)}`);
+export const listImports = (offset=0) => request(`/api/profile/imports?limit=50&offset=${offset}`);
+export const continueImport = (id,body=null) => request(`/api/profile/imports/${encodeURIComponent(id)}/continue`,{method:'POST',body:JSON.stringify(body)});
+export const cancelImport = id => request(`/api/profile/imports/${encodeURIComponent(id)}/cancel`,{method:'POST'});
+export const importSourceUrl = id => `${API_BASE}/api/profile/imports/${encodeURIComponent(id)}/source`;
+export const decideImport = (id, decision, action) => request(`/api/profile/imports/${encodeURIComponent(id)}/${decision}`, {method:"POST",body:JSON.stringify(action)});
+export const contentPreview = (id, body) => request(`/api/runs/${id}/content-preview`, {method:"POST",body:JSON.stringify(body)});
+export const previewUrl = id => `${API_BASE}/api/runs/${id}/preview`;
+export const reexportRun = async (id, body) => {
+  await request(`/api/runs/${id}/reexport`, {method:"POST",body:JSON.stringify(body)});
+  return getRun(id);
+};
+export const recoverRun = id => request(`/api/runs/${id}/recover`, {method:"POST"});
+export const listMemory = () => request('/api/memory/proposals');
+export const proposeMemory = body => request('/api/memory/proposals',{method:'POST',body:JSON.stringify(body)});
+export const previewMemory = id => request(`/api/memory/${id}/preview`);
+export const memoryHistory = id => request(`/api/memory/${id}/history`);
+export const decideMemory = (id,body) => request(`/api/memory/${id}/decision`,{method:'POST',body:JSON.stringify(body)});
+export const listJobs = () => request('/api/jobs');
+export const captureJob = body => request('/api/jobs',{method:'POST',body:JSON.stringify(body)});
+export const getJob = id => request(`/api/jobs/${id}`);
+export const jobEvaluations = id => request(`/api/jobs/${id}/evaluations`);
+export const createEvaluation = (id,body={}) => request(`/api/jobs/${id}/evaluations`,{method:'POST',body:JSON.stringify(body)});
+export const getEvaluation = id => request(`/api/evaluations/${id}`);
+export const continueEvaluation = (id,body=null) => request(`/api/evaluations/${id}/continue`,{method:'POST',body:JSON.stringify(body)});
+export const cancelEvaluation = id => request(`/api/evaluations/${id}/cancel`,{method:'POST'});
+export const getMetrics = () => request('/api/metrics');
+export const getOutcomes = () => request('/api/outcomes');
+export const outcomesExportUrl = () => `${API_BASE}/api/outcomes/export`;
+export const getDiscoverySources = () => request('/api/discovery/sources');
+export const saveDiscoverySources = body => request('/api/discovery/sources',{method:'PUT',body:JSON.stringify(body)});
+export const listDiscoverySyncs = () => request('/api/discovery/syncs');
+export const createDiscoverySync = body => request('/api/discovery/syncs',{method:'POST',body:JSON.stringify(body)});
+export const getDiscoverySync = id => request(`/api/discovery/syncs/${encodeURIComponent(id)}`);
+export const continueDiscoverySync = (id,body=null) => request(`/api/discovery/syncs/${encodeURIComponent(id)}/continue`,{method:'POST',body:JSON.stringify(body)});
+export const cancelDiscoverySync = (id,body) => request(`/api/discovery/syncs/${encodeURIComponent(id)}/cancel`,{method:'POST',body:JSON.stringify(body)});
+export const discoveryPostings = ({offset=0,source_id='',state=''}={}) => request('/api/discovery/postings?'+new URLSearchParams({limit:50,offset,...(source_id?{source_id}:{}),...(state?{state}:{})}));
+export const getJobOrigin = id => request(`/api/jobs/${encodeURIComponent(id)}/origin`);
+export const listApplications = () => request('/api/applications');
+export const createApplication = body => request('/api/applications',{method:'POST',body:JSON.stringify(body)});
+export const getApplication = id => request(`/api/applications/${encodeURIComponent(id)}`);
+export const appendApplicationEvent = (id,body) => request(`/api/applications/${encodeURIComponent(id)}/events`,{method:'POST',body:JSON.stringify(body)});

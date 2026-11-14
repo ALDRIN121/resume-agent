@@ -2,6 +2,8 @@ import React from "react";
 import { Icon } from "./icons.jsx";
 import { Button, IconButton, StatusPill, Badge, Textarea, MonoTicker } from "./components.jsx";
 import { PipelineTimeline } from "./timeline.jsx";
+import { DurableTimeline } from "./durable-timeline.jsx";
+import { ReviewFlow, DurableRunState } from "./review-flow.jsx";
 import { WorkContextSummary } from "./work-context.jsx";
 import { resumeRun, getRun, cancelRun, pdfUrl, downloadPdf } from "./api/client.js";
 import { subscribeRun } from "./api/ws.js";
@@ -285,7 +287,7 @@ const SuggestionDiff = ({ before, after }) => {
 const normalizeSuggestion = (suggestion) => ({
   ...suggestion,
   title: suggestion.title || [suggestion.section, suggestion.role_company].filter(Boolean).join(" › ") || "Suggestion",
-  approved: suggestion.approved ?? true,
+  approved: suggestion.approved ?? false,
 });
 
 const SuggestionList = ({ suggestions = SAMPLE_SUGGESTIONS, onContinue }) => {
@@ -413,22 +415,20 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   React.useEffect(() => {
     if (!threadId) return;
     setApiEvents([]);
-    // getRun seeds metadata only. The WS replays the full event history (then
-    // live events), so it is the single source of truth for apiEvents — seeding
-    // events from getRun too would duplicate the replayed history.
-    getRun(threadId)
-      .then(setRunDetail)
-      .catch(() => {});
-    return subscribeRun(
-      threadId,
-      (event) => setApiEvents(items => {
-        // The server replays history on reconnect. Keep the mounted form and
-        // its draft, while ignoring events already received in this session.
+    let alive = true;
+    const refresh = () => getRun(threadId).then(run => { if (alive) setRunDetail(run); }).catch(error => { if (alive) setActionError(error.message); });
+    refresh();
+    const timer = setInterval(refresh, 3000);
+    window.addEventListener("focus", refresh);
+    const unsubscribe = subscribeRun(threadId, event => {
+      if (event.type === "run_state") { setRunDetail(event.run || event.view || event); return; }
+      setApiEvents(items => {
         const replayed = event.ts && items.some(item => item.ts === event.ts && item.type === event.type && item.node_id === event.node_id && item.kind === event.kind);
         return replayed ? items : [...items, event];
-      }),
-      setWsStatus,
-    );
+      });
+      if (["complete", "failed", "hitl_pending"].includes(event.type)) refresh();
+    }, status => { setWsStatus(status); if (status === "connected") refresh(); });
+    return () => { alive = false; clearInterval(timer); window.removeEventListener("focus", refresh); unsubscribe(); };
   }, [threadId]);
 
   // Autoplay advances manualIdx
@@ -444,7 +444,11 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   }, [autoplay]);
 
   const apiSim = React.useMemo(() => threadId ? computeEventsFromApi(apiEvents) : null, [threadId, apiEvents]);
-  const sim = apiSim || computeEventsForState(tweakRunState, manualIdx);
+  const eventSim = apiSim || computeEventsForState(tweakRunState, manualIdx);
+  const sim = runDetail?.contract_version === 2 ? { ...eventSim,
+    completed: runDetail.status === "complete", failed: ["failed","cancelled"].includes(runDetail.status),
+    isPaused: !!runDetail.pending, hitlState: runDetail.pending?.kind, hitlPayload: runDetail.pending,
+  } : eventSim;
   // Update once per second and stop when the run finishes.
   React.useEffect(() => {
     if (sim.completed || sim.failed) return;
@@ -479,7 +483,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
     : runDetail?.created_at
       ? `started ${new Date(runDetail.created_at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
       : "";
-  const viaModel = isDemo ? (ACTIVE_LLM.defaultModel || "claude-sonnet-4-6") : (settings?.defaultModel || "model");
+  const viaModel = isDemo ? (ACTIVE_LLM.defaultModel || "claude-sonnet-4-6") : (runDetail?.model || settings?.defaultModel || "Not recorded");
   const downloadUrl = completeEvent?.pdf_url || (isDemo ? null : (threadId ? pdfUrl(threadId) : null));
   const debugPath = failedEvent?.debug_path || (isDemo ? FAILED_DEBUG_PATH : null);
   const outputSlug = company.toLowerCase().replace(/[^a-z0-9]+/g, "") || "run";
@@ -489,7 +493,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   // we can actually know (questions asked/answered, rewrites suggested/approved).
   const hitlAskEvent = apiEvents.find(e => e.type === "hitl_pending" && e.kind === "ask_missing");
   const hitlSuggestEvent = apiEvents.find(e => e.type === "hitl_pending" && e.kind === "present_suggestions");
-  const gapStats = isDemo ? GAP_ANALYSIS_STATS : {
+  const gapStats = runDetail?.contract_version === 2 ? (runDetail.review_stats || {questions:null,answered:null,suggestions:null,approved:null}) : isDemo ? GAP_ANALYSIS_STATS : {
     questions: hitlAskEvent?.questions?.length ?? 0,
     answered: gapAnswered ? (hitlAskEvent?.questions?.length ?? 0) : 0,
     suggestions: hitlSuggestEvent?.suggestions?.length ?? 0,
@@ -500,7 +504,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
     if (!threadId) return;
     setCancelling(true);
     setActionError(null);
-    try { await cancelRun(threadId); }
+    try { const state = await cancelRun(threadId); setRunDetail(state); }
     catch (error) { setActionError(error.message || "Could not cancel the run. Try again."); }
     finally { setCancelling(false); }
   };
@@ -529,7 +533,18 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
   };
 
   // Activity panel content
+  const refreshState = state => {
+    if (state?.thread_id || state?.id) setRunDetail(state);
+    else getRun(threadId).then(setRunDetail).catch(e => setActionError(e.message));
+  };
   const renderActivity = () => {
+    if (threadId && !runDetail) return <div style={{padding:24}}>Loading saved run…</div>;
+    if (runDetail?.contract_version === 2) {
+      const pending = runDetail.pending;
+      if (pending && ["ask_missing","present_suggestions","review_pdf"].includes(pending.kind) && !runDetail.cancellation_requested)
+        return <ReviewFlow key={pending.request_id || pending.review_id || pending.review?.review_id} run={runDetail} onState={refreshState}/>;
+      return <DurableRunState run={runDetail} onState={refreshState} goto={goto}/>;
+    }
     if (sim.failed) {
       return (
         <div className="fade-in run-activity" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -859,7 +874,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
             </div>
           </div>
           <div style={{ flex: 1, overflow: "auto", padding: "4px 6px 6px" }}>
-            <PipelineTimeline
+            {runDetail?.contract_version === 2 ? <DurableTimeline run={runDetail}/> : <PipelineTimeline
               events={sim.events} currentNodeIdx={sim.currentNodeIdx}
               density={density}
               isPaused={sim.isPaused} completed={sim.completed} failed={sim.failed}
@@ -867,7 +882,7 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
               retryFor={sim.retryFor}
               retryCount={effectiveRetries.length}
               onNodeClick={(i) => setSelectedIdx(i === selectedIdx ? null : i)}
-            />
+            />}
           </div>
         </div>
 
@@ -893,8 +908,8 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
               ["Thread", threadId || "—"],
               ["Model", viaModel],
               ["Started", startedLabel || "—"],
-              ["Retries", `${effectiveRetries.length} / ${settings?.generatorMax || 5}`],
-              ["Output", `${outputSlug}/`],
+              ["Retries", runDetail?.contract_version === 2 ? runDetail.retries ?? 0 : `${effectiveRetries.length} / ${settings?.generatorMax || 5}`],
+              ["Output", runDetail?.contract_version === 2 ? runDetail.release?.destination || "Pending review" : `${outputSlug}/`],
             ].map(([k, v], i) => (
               <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderTop: i ? "1px dashed var(--border)" : "none", fontSize: 13 }}>
                 <span style={{ color: "var(--text-muted)" }}>{k}</span>
@@ -904,11 +919,11 @@ const LiveRunView = ({ threadId, density, runState: tweakRunState, setRunState, 
           </div>
 
           <div style={{ padding: 16, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>Gap analysis</div>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>{runDetail?.contract_version === 2 ? 'Review progress' : 'Gap analysis'}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {[["questions", gapStats.questions], ["answered", gapStats.answered], ["suggestions", gapStats.suggestions], ["approved", gapStats.approved]].map(([label, v]) => (
                 <div key={label} style={{ padding: "10px 12px", background: "var(--surface-2)", borderRadius: "var(--radius-md)" }}>
-                  <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{v}</div>
+                  <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{v ?? '—'}</div>
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</div>
                 </div>
               ))}

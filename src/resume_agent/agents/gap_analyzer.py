@@ -11,12 +11,13 @@ Produces:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import ResumeAgentSettings
 from ..llm import get_chat_model
-from ..schemas import GapAnalysis
+from ..schemas import ContentSnapshot, GapAnalysis, JobDescription
 from ..state import ResumeGenState
 from ..ui.panels import print_agent_step, print_info
 
@@ -139,3 +140,69 @@ def gap_analyzer_node(
         "gap_analysis": gap,
         "suggestions": gap.tailoring_ideas,
     }
+
+
+def build_proposal_prompt(snapshot: ContentSnapshot, jd: JobDescription | dict) -> str:
+    """Build the complete deterministic proposal input without invoking a model."""
+    from ..contracts import canonical_json, content_hash
+    from ..schemas import EditProposal
+
+    snapshot = ContentSnapshot.model_validate(snapshot.model_dump())
+    jd_data = jd.model_dump(mode='json') if hasattr(jd, 'model_dump') else jd
+    source_index = {}
+
+    def index_values(value, path=''):
+        if path:
+            source_index[path] = content_hash(value)
+        if isinstance(value, dict):
+            for key, child in value.items():
+                index_values(child, path + '/' + key.replace('~', '~0').replace('/', '~1'))
+        elif isinstance(value, list):
+            for i, child in enumerate(value):
+                index_values(child, f'{path}/{i}')
+
+    index_values(snapshot.profile)
+    return (
+        'Propose explicit resume edits AFTER considering the complete fixed profile, JD, '
+        'and user evidence below. Return only EditProposal objects; never return a rewritten '
+        'profile. Use source-index JSON pointers and exact before_hash values. Only summary, '
+        'experience/projects bullets, project descriptions and existing individual skills may '
+        'be replaced/omitted; append targets must be existing bullet/skill lists. Identity, '
+        'employer, title, dates, education and certifications are immutable. New facts require '
+        'explicit answer/user_text references; the JD is never candidate evidence. Preserve '
+        'source wording for anything not proposed. Profile references use source_revision as '
+        'input_hash; answer/user_text references use canonical JSON SHA-256 of their exact '
+        'string, with answer_id naming the fixed input. Quotes use Unicode character offsets.\n'
+        'EDIT_PROPOSAL_SCHEMA:\n' + canonical_json(EditProposal.model_json_schema()) +
+        '\nFIXED_INPUTS:\n' + canonical_json({
+            'profile': snapshot.profile, 'source_revision': snapshot.source_revision,
+            'jd': jd_data, 'answers': snapshot.answers, 'user_text': snapshot.user_text,
+            'before_hash_by_pointer': source_index,
+            'answer_hashes': {key: content_hash(value) for key, value in snapshot.answers.items()},
+            'user_text_hashes': {key: content_hash(value) for key, value in snapshot.user_text.items()},
+        })
+    )
+
+
+def apply_proposal_output(snapshot: ContentSnapshot, raw: object) -> ContentSnapshot:
+    """Validate every proposal against the exact source before presenting any."""
+    from ..content_review import validate_proposals
+    from ..schemas import EditProposal
+
+    if isinstance(raw, dict):
+        if set(raw) != {'proposals'}:
+            raise ValueError('model response must contain only proposals')
+        raw = raw['proposals']
+    if not isinstance(raw, list):
+        raise ValueError('model proposals must be a list')
+    proposals = [EditProposal.model_validate(p.model_dump() if isinstance(p, EditProposal) else p) for p in raw]
+    result = ContentSnapshot.model_validate({**snapshot.model_dump(), 'proposals': proposals})
+    validate_proposals(result)
+    return result.model_copy(deep=True)
+
+
+def generate_proposals_v2(
+    snapshot: ContentSnapshot, jd: JobDescription | dict, model: Callable[[str], object],
+) -> ContentSnapshot:
+    """Compatibility synchronous wrapper over the same pure prompt/output helpers."""
+    return apply_proposal_output(snapshot, model(build_proposal_prompt(snapshot, jd)))
