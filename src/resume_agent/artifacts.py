@@ -239,7 +239,7 @@ def _owner(plan: ExportPlan) -> dict:
     _validate_plan(plan)
     _safe(plan.ownership_path)
     try:
-        owner = json.loads(plan.ownership_path.read_text())
+        owner = json.loads(plan.ownership_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ValueError("Missing or invalid export ownership") from exc
     if owner.get("plan") != plan.to_dict():
